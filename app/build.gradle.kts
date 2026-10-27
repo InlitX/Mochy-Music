@@ -422,6 +422,7 @@ dependencies {
     implementation(project(":providers:applecanvas"))
     implementation(project(":providers:paxsenixlyrics"))
     implementation(project(":providers:directlyrics"))
+    implementation(project(":providers:musixmatch"))
     implementation(project(":modules:api"))
     implementation(project(":modules:applemusic"))
     implementation(project(":modules:monochrome"))
