@@ -131,24 +131,12 @@ Mochy is an independent, unofficial project made for personal and educational us
 - Importing music MAY need your own account with its password. WE'RE NEVER see your password.
 
 ---
-## Preview
+## Some Prview 
 
-<details>
-  <summary><b>Preview (click to expand)</b></summary>
-  <br>
-  <table>
-    <tr>
-      <td align="center"><img height="390" alt="Preview 1" src="https://github.com/user-attachments/assets/83f753b4-5dec-45f6-bf66-c00023b3b961" /></td>
-      <td align="center"><img height="390" alt="Preview 2" src="https://github.com/user-attachments/assets/bc2e001e-4b5e-421e-af96-b86c8d2a8bbb" /></td>
-      <td align="center"><img height="390" alt="Preview 3" src="https://github.com/user-attachments/assets/06499690-1168-477f-8924-d767c8216b5f" /></td>
-    </tr>
-    <tr>
-      <td align="center"><img height="390" alt="Preview 4" src="https://github.com/user-attachments/assets/ca84b924-8705-403c-83a5-e3a74e7d74c7" /></td>
-      <td align="center"><img height="390" alt="Preview 5" src="https://github.com/user-attachments/assets/a2ed32b6-2cbe-4b6e-8e1e-3bb82211f26d" /></td>
-      <td align="center"><img height="390" alt="Preview 6" src="https://github.com/user-attachments/assets/bbf05596-eb66-40ab-a1e1-32c51a8cd940" /></td>
-    </tr>
-  </table>
-</details>
+<img width="1799" height="927" alt="Frame 289" src="https://github.com/user-attachments/assets/c4c122ed-b86c-44e4-a618-417f5287bc98" />
+<img width="1799" height="927" alt="Frame 287" src="https://github.com/user-attachments/assets/186be8ac-ff3e-4e2a-ab7e-ae80bc9da7e7" />
+<img width="1799" height="927" alt="Frame 290" src="https://github.com/user-attachments/assets/c394603c-7aa7-4d78-8688-38a6c6e42232" />
+<img width="1799" height="927" alt="Frame 288" src="https://github.com/user-attachments/assets/06f5c13a-b8f1-4ecf-85aa-b17d020db5c8" />
 
 ---
 
