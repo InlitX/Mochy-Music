@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -69,6 +70,8 @@ fun CanvasArtworkPlayer(
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
     blurRadiusPx: Float = 0f,
+    // told when the first frame is up and when it's gone again, so a mirror of it knows when there's something to show
+    onReadyChange: ((Boolean) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val primary = primaryUrl?.takeIf { it.isNotBlank() }
@@ -77,6 +80,9 @@ fun CanvasArtworkPlayer(
     val initial = rememberSettled(primary ?: fallback ?: return, CanvasSettleMs) ?: return
     var currentUrl by remember(initial) { mutableStateOf(initial) }
     var isVideoReady by remember(initial) { mutableStateOf(false) }
+    val currentOnReadyChange by rememberUpdatedState(onReadyChange)
+    LaunchedEffect(isVideoReady) { currentOnReadyChange?.invoke(isVideoReady) }
+    DisposableEffect(Unit) { onDispose { currentOnReadyChange?.invoke(false) } }
 
     val okHttpClient =
         remember {

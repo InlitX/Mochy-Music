@@ -406,7 +406,8 @@ fun MorphingCover(
 
     // Without blur the seam can't soften the edge-to-edge cover's bottom into the backdrop, so the
     // cover fades its own bottom edge out instead - picture, canvas and video alike.
-    val fadeCoverEdge = !rememberCoverBlurAvailable() && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE
+    val coverBlur = rememberCoverBlurAvailable()
+    val fadeCoverEdge = !coverBlur && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE
 
     val playVideoPref by rememberPreference(PlayVideoBackgroundKey, defaultValue = false)
     val disableVideoAutoplay by rememberPreference(DisableVideoAutoplayKey, defaultValue = false)
@@ -628,6 +629,18 @@ fun MorphingCover(
 
     val videoGlassState = remember(trackInfo.mediaId) { GlassState() }
 
+    // the playing canvas mirrored into the backdrop under the edge-to-edge cover, like the youtube video is
+    val canvasMirror = remember { CanvasMirror() }
+    LaunchedEffect(trackInfo.mediaId) { canvasMirror.ready = false }
+    val canvasMirrorWanted = coverBlur && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE && !alternateStyle
+    val canvasMirrorOn = animateFloatAsState(
+        targetValue = if (canvasMirrorWanted && canvasMirror.ready && !isVideoActive) 1f else 0f,
+        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        label = "canvasMirror",
+    )
+    // it leaves with the canvas as the sheet closes, so the picture and its own mirror take over together
+    val canvasMirrorAlpha = remember(canvasMirrorOn) { { canvasMirrorOn.value * canvasSheetFade(progressProvider()) } }
+
     // (The mini player's press tilt is the sheet's own now - see BottomSheet - so it tilts the
     // pill's outline with what's in it, and eases out into the open instead of snapping off.)
     Box(
@@ -656,6 +669,8 @@ fun MorphingCover(
             playVideoBackground = playVideoBackground && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE,
             videoInfo = videoInfo,
             videoGlassState = videoGlassState,
+            canvasGlassState = canvasMirror.glass,
+            canvasMirrorAlpha = canvasMirrorAlpha,
             maxWidth = maxWidth,
             maxHeight = maxHeight,
             warpShader = warpShader,
@@ -694,7 +709,8 @@ fun MorphingCover(
         }
 
         // the cover mirrored under itself, blurred and fading into the moving backdrop; it rides the cover's morph and the song row, so it follows a close, a page opening and a swipe
-        if (isEdgeToEdge && !alternateStyle && trackInfo.thumbnailUrl != null) {
+        // without blur the cover fades its own bottom out instead, and a mirror starting right under that fade left a hard line
+        if (isEdgeToEdge && coverBlur && !alternateStyle && trackInfo.thumbnailUrl != null) {
             // a video plays over the cover with a reflection of its own, and the editor lifts the cover away
             val reflectionKept = animateFloatAsState(
                 targetValue = if (isVideoActive || editMode) 0f else 1f,
@@ -720,7 +736,8 @@ fun MorphingCover(
                         url = url,
                         coverHeight = { endpointsPx.artRect(progressProvider(), 0f, lyricsProgressProvider())[3] },
                         magnify = magnify,
-                        alpha = { reflectionFade(progressProvider(), lyricsProgressProvider()) * reflectionKept.value },
+                        // a playing canvas has its own moving mirror in the backdrop, the still picture's would sit on top of it
+                        alpha = { reflectionFade(progressProvider(), lyricsProgressProvider()) * reflectionKept.value * (1f - canvasMirrorAlpha()) },
                         modifier = pictureModifier,
                     )
                 }
@@ -905,9 +922,12 @@ fun MorphingCover(
                             // the mini player and the full player - none at either end, so it
                             // leaves the pill and lands as sharp as it sits there. Not on the way
                             // into the lyrics header, which is a thumbnail.
-                            sides = {
-                                coverMorphSideFade(progressProvider()) *
-                                    (1f - lyricsProgressProvider()).coerceIn(0f, 1f)
+                            // the squared card flies whole, its sides melting away just looked broken
+                            sides = if (coverStyle == PlayerCoverStyle.SQUARED) NoCoverFade else {
+                                {
+                                    coverMorphSideFade(progressProvider()) *
+                                        (1f - lyricsProgressProvider()).coerceIn(0f, 1f)
+                                }
                             },
                             bottom = if (fadeCoverEdge) {
                                 {
@@ -974,6 +994,7 @@ fun MorphingCover(
                                 progressProvider = progressProvider,
                                 // a squared card keeps its canvas the whole way down, it only fades as it lands in the mini player
                                 sheetFade = if (squaredCards) ::squaredCanvasSheetFade else ::canvasSheetFade,
+                                mirror = if (playing && canvasMirrorWanted) canvasMirror else null,
                             )
 
                             if (playing && !isDiscStyle && playVideoBackground && videoInfo != null) {
@@ -1243,6 +1264,8 @@ private fun PlayerBackdropCrossfade(
     playVideoBackground: Boolean,
     videoInfo: OfficialMusicVideo?,
     videoGlassState: GlassState,
+    canvasGlassState: GlassState,
+    canvasMirrorAlpha: () -> Float,
     maxWidth: Dp,
     maxHeight: Dp,
     warpShader: Any?,
@@ -1265,12 +1288,15 @@ private fun PlayerBackdropCrossfade(
     val currentLyricsProgress = androidx.compose.runtime.rememberUpdatedState(lyricsProgressProvider)
     val effectiveVideoAlpha = { (videoAlpha.value * (1f - currentLyricsProgress.value())).coerceIn(0f, 1f) }
     val videoShown by remember { derivedStateOf { effectiveVideoAlpha() > 0.005f } }
+    val currentCanvasAlpha = androidx.compose.runtime.rememberUpdatedState(canvasMirrorAlpha)
+    val effectiveCanvasAlpha = { (currentCanvasAlpha.value() * (1f - currentLyricsProgress.value())).coerceIn(0f, 1f) }
+    val canvasShown by remember { derivedStateOf { effectiveCanvasAlpha() > 0.005f } }
 
     Box(modifier = modifier) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = 1f - effectiveVideoAlpha() }
+                .graphicsLayer { alpha = (1f - effectiveVideoAlpha()) * (1f - effectiveCanvasAlpha()) }
         ) {
             if (backgroundStyle != PlayerBackgroundStyle.COVER_GRADIENT) {
                 // One instance for every song: these styles ease between songs themselves (the
@@ -1291,6 +1317,16 @@ private fun PlayerBackdropCrossfade(
                     warpTimeState = warpTimeState,
                 )
             }
+        }
+
+        // the animated cover's mirror, drawn just like the video's; a video playing over the canvas wins
+        if (canvasShown) {
+            VideoBackdropBlur(
+                glassState = canvasGlassState,
+                modifier = Modifier
+                    .requiredSize(maxWidth, maxHeight)
+                    .graphicsLayer { alpha = effectiveCanvasAlpha() }
+            )
         }
 
         // The video backdrop fades in on top when there is a video, and dissolves when lyrics open.
@@ -1470,6 +1506,8 @@ private object CoverFadeMask {
     }
 }
 
+private val NoCoverFade: () -> Float = { 0f }
+
 /** How much of the cover, from its bottom up, [coverMorphFade] fades without blur. */
 private const val CoverEdgeFadeFraction = 0.3f
 
@@ -1610,6 +1648,8 @@ private fun SheetBackdrop(
     playVideoBackground: Boolean,
     videoInfo: OfficialMusicVideo?,
     videoGlassState: GlassState,
+    canvasGlassState: GlassState,
+    canvasMirrorAlpha: () -> Float,
     maxWidth: Dp,
     maxHeight: Dp,
     warpShader: Any?,
@@ -1652,6 +1692,8 @@ private fun SheetBackdrop(
                 playVideoBackground = playVideoBackground,
                 videoInfo = videoInfo,
                 videoGlassState = videoGlassState,
+                canvasGlassState = canvasGlassState,
+                canvasMirrorAlpha = canvasMirrorAlpha,
                 maxWidth = maxWidth,
                 maxHeight = maxHeight,
                 warpShader = warpShader,
@@ -1680,6 +1722,13 @@ private fun canvasSheetFade(p: Float): Float = ((p - 0.6f) / 0.35f).coerceIn(0f,
 // the squared card carries its canvas through the close and only lets it go as it shrinks into the mini player
 private fun squaredCanvasSheetFade(p: Float): Float = ((p - 0.05f) / 0.25f).coerceIn(0f, 1f)
 
+// the playing canvas captured for the backdrop's mirror; one for the whole player, so a skip keeps the old frame up while it fades
+@Stable
+private class CanvasMirror {
+    val glass = GlassState()
+    var ready by mutableStateOf(false)
+}
+
 /**
  * The cover's canvas - an animated cover, with a video player of its own - over the picture.
  *
@@ -1696,6 +1745,7 @@ private fun CoverCanvasLayer(
     editMode: Boolean,
     progressProvider: () -> Float,
     sheetFade: (Float) -> Float = ::canvasSheetFade,
+    mirror: CanvasMirror? = null,
 ) {
     val context = LocalContext.current
     val playerConnection = LocalPlayerConnection.current
@@ -1764,9 +1814,12 @@ private fun CoverCanvasLayer(
             fallbackUrl = null,
 
             isPlaying = playing,
+            onReadyChange = mirror?.let { target -> { ready -> target.ready = ready } },
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = sheetFade(progressProvider()) }
+                // recorded only once it has a frame, until then the mirror keeps the last song's
+                .then(if (mirror != null) Modifier.glassRoot(mirror.glass, isActive = { playing && mirror.ready }) else Modifier)
         )
     }
 }
