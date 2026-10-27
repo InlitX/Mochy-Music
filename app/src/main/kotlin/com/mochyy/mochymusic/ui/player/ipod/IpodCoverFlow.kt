@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -190,7 +189,7 @@ private fun AlbumBack(state: IpodCoverFlowState, scale: IpodScale, coverPx: Floa
     val density = LocalDensity.current
     val width = scale.width * 0.74f
     val height = minOf(scale.content * 0.78f, width * 0.95f)
-    val backScale = remember(width, height, density.fontScale) { IpodScale(width, height, density.fontScale) }
+    val backScale = remember(width, height, density.fontScale) { ipodListScale(width, height, density.fontScale) }
     val widthPx = with(density) { width.toPx() }
     val heightPx = with(density) { height.toPx() }
     val left = (scale.width - width) / 2f
@@ -220,11 +219,9 @@ private fun AlbumBack(state: IpodCoverFlowState, scale: IpodScale, coverPx: Floa
             }
             .background(look.background),
     ) {
+        // just the tracks, the album's name is up in the screen's own header
         if (showBack) {
-            Column(Modifier.fillMaxSize()) {
-                IpodHeader(state.current?.title.orEmpty(), backScale)
-                IpodMenuList(state.back, backScale, marquee = false, onTapRow = onTapTrack, modifier = Modifier.fillMaxWidth().height(backScale.content))
-            }
+            IpodMenuList(state.back, backScale, marquee = false, onTapRow = onTapTrack, modifier = Modifier.fillMaxSize())
         }
     }
 }

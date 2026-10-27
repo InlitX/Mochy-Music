@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -108,14 +107,6 @@ fun DrawScope.drawCoverQuad(
 
 private fun Size.isUnspecifiedOrEmpty(): Boolean =
     this == Size.Unspecified || width <= 0f || height <= 0f || width.isInfinite() || height.isInfinite()
-
-// corners of an upright square at a spot, for a cover that isn't tilted
-fun squareCorners(topLeft: Offset, side: Float) = floatArrayOf(
-    topLeft.x, topLeft.y,
-    topLeft.x + side, topLeft.y,
-    topLeft.x + side, topLeft.y + side,
-    topLeft.x, topLeft.y + side,
-)
 
 private const val CoverCrossfadeMs = 220
 // how much of the background still covers the reflection right under the cover

@@ -37,7 +37,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,14 +62,14 @@ class IpodNowPlayingState {
     var touchedAt by mutableLongStateOf(0L)
 }
 
-// the classic's now playing: the cover tilted back beside the song, or on a tall screen the cover big on top of it
+// the classic's now playing: the cover tilted back beside the song and the time along the bottom, on any screen height
 @Composable
 fun IpodNowPlaying(state: IpodNowPlayingState, scale: IpodScale, marquee: Boolean) {
     val track = rememberTrack()
     val position = rememberLivePosition(animated = false)
     val duration = rememberDurationMs()
     Box(Modifier.fillMaxSize()) {
-        if (scale.tall) TallLayout(track, scale, marquee) else ClassicLayout(track, scale, marquee)
+        ClassicLayout(track, scale, marquee)
         Crossfade(
             targetState = state.bar == IpodBar.VOLUME,
             animationSpec = tween(160),
@@ -88,9 +87,10 @@ fun IpodNowPlaying(state: IpodNowPlayingState, scale: IpodScale, marquee: Boolea
 @Composable
 private fun ClassicLayout(track: TrackInfo, scale: IpodScale, marquee: Boolean) {
     val left = scale.dp(28f)
-    val top = scale.dp(35f)
     val width = scale.dp(174f)
     val height = scale.dp(205f)
+    // centred in the room above the time, which on the classic's glass is right where the mockup has it
+    val top = ((scale.content - scale.dp(45f) - height) / 2f).coerceAtLeast(scale.dp(20f))
     CoverWithReflection(track.thumbnailUrl, side = height, reflect = 0.17f) {
         // the cover's right edge further away, like the mockup's
         val l = left.toPx()
@@ -106,26 +106,7 @@ private fun ClassicLayout(track: TrackInfo, scale: IpodScale, marquee: Boolean) 
             .height(height),
         contentAlignment = Alignment.CenterStart,
     ) {
-        SongText(track, scale, marquee, centered = false)
-    }
-}
-
-@Composable
-private fun TallLayout(track: TrackInfo, scale: IpodScale, marquee: Boolean) {
-    val side = minOf(scale.width * 0.62f, scale.content * 0.42f)
-    val top = scale.content * 0.06f
-    val left = (scale.width - side) / 2f
-    CoverWithReflection(track.thumbnailUrl, side = side, reflect = 0.3f) {
-        squareCorners(Offset(left.toPx(), top.toPx()), side.toPx())
-    }
-    Box(
-        modifier = Modifier
-            .offset(y = top + side * 1.3f + scale.dp(6f))
-            .fillMaxWidth()
-            .padding(horizontal = scale.dp(20f)),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        SongText(track, scale, marquee, centered = true)
+        SongText(track, scale, marquee)
     }
 }
 
@@ -142,19 +123,14 @@ private fun CoverWithReflection(url: String?, side: Dp, reflect: Float, corners:
 }
 
 @Composable
-private fun SongText(track: TrackInfo, scale: IpodScale, marquee: Boolean, centered: Boolean) {
+private fun SongText(track: TrackInfo, scale: IpodScale, marquee: Boolean) {
     val colors = LocalIpodLook.current.screen
-    val align = if (centered) TextAlign.Center else TextAlign.Start
-    Column(
-        verticalArrangement = Arrangement.spacedBy(scale.dp(1f)),
-        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(scale.dp(1f))) {
         Text(
             text = track.title,
             color = colors.ink,
-            fontSize = scale.sp(if (centered) 22f else 20f),
+            fontSize = scale.sp(20f),
             fontWeight = FontWeight.Bold,
-            textAlign = align,
             maxLines = 1,
             softWrap = false,
             overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
@@ -165,20 +141,19 @@ private fun SongText(track: TrackInfo, scale: IpodScale, marquee: Boolean, cente
                     .basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 2000, repeatDelayMillis = 2000, velocity = 24.dp)
             } else Modifier,
         )
-        SongLine(track.artist, scale, align)
-        SongLine(track.album, scale, align)
+        SongLine(track.artist, scale)
+        SongLine(track.album, scale)
     }
 }
 
 @Composable
-private fun SongLine(text: String, scale: IpodScale, align: TextAlign) {
+private fun SongLine(text: String, scale: IpodScale) {
     if (text.isBlank()) return
     Text(
         text = text,
         color = LocalIpodLook.current.screen.softInk,
         fontSize = scale.sp(16.5f),
         fontWeight = FontWeight.SemiBold,
-        textAlign = align,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
