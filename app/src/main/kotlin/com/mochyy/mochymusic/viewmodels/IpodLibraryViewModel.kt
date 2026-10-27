@@ -1,5 +1,6 @@
 package com.mochyy.mochymusic.viewmodels
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
@@ -30,6 +31,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+// one album as cover flow shows it
+@Immutable
+class IpodAlbum(val id: String, val title: String, val artist: String, val cover: String?)
+
 // the library as the ipod player's menus see it, every list turned into rows off the main thread
 @HiltViewModel
 class IpodLibraryViewModel @Inject constructor(
@@ -42,23 +47,65 @@ class IpodLibraryViewModel @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    // every album with its cover, by name, for cover flow
+    val coverFlow: Flow<List<IpodAlbum>> = database.albums(AlbumSortType.NAME, false)
+        .map { albums ->
+            albums.map { IpodAlbum(it.id, it.album.title, it.artists.joinToString { a -> a.name }, it.album.thumbnailUrl?.resize(CoverPx, CoverPx)) }
+        }
+        .flowOn(Dispatchers.Default)
+
     fun list(page: IpodPage): Flow<IpodList> = when (page) {
         IpodPage.Main -> flowOf(IpodMainList)
-        IpodPage.NowPlaying -> flowOf(IpodList.Loading)
+        IpodPage.NowPlaying, IpodPage.CoverFlow -> flowOf(IpodList.Loading)
         IpodPage.Playlists -> database.playlists(PlaylistSortType.NAME, false).map { playlists ->
-            pages(playlists.map { IpodRow(it.id, it.playlist.name, IpodPick.Open(IpodPage.Playlist(it.id, it.playlist.name))) }, "No playlists yet")
+            withArt(
+                playlists.map {
+                    IpodRow(
+                        key = it.id,
+                        title = it.playlist.name,
+                        pick = IpodPick.Open(IpodPage.Playlist(it.id, it.playlist.name)),
+                        subtitle = songCount(it.songCount),
+                        art = it.thumbnails.firstOrNull()?.resize(RowPx, RowPx),
+                    )
+                },
+                "No playlists yet",
+            )
         }
         IpodPage.Artists -> database.artists(ArtistSortType.NAME, false).map { artists ->
-            pages(artists.map { IpodRow(it.id, it.artist.name, IpodPick.Open(IpodPage.Artist(it.id, it.artist.name))) }, "No artists yet")
+            withArt(
+                artists.map {
+                    IpodRow(
+                        key = it.id,
+                        title = it.artist.name,
+                        pick = IpodPick.Open(IpodPage.Artist(it.id, it.artist.name)),
+                        subtitle = songCount(it.songCount),
+                        art = it.artist.thumbnailUrl?.resize(RowPx, RowPx),
+                        roundArt = true,
+                    )
+                },
+                "No artists yet",
+            )
         }
         IpodPage.Albums -> database.albums(AlbumSortType.NAME, false).map { albums ->
-            pages(albums.map { IpodRow(it.id, it.album.title, IpodPick.Open(IpodPage.Album(it.id, it.album.title))) }, "No albums yet")
+            withArt(
+                albums.map {
+                    IpodRow(
+                        key = it.id,
+                        title = it.album.title,
+                        pick = IpodPick.Open(IpodPage.Album(it.id, it.album.title)),
+                        subtitle = it.artists.joinToString { a -> a.name }.ifBlank { null },
+                        art = it.album.thumbnailUrl?.resize(RowPx, RowPx),
+                    )
+                },
+                "No albums yet",
+            )
         }
-        IpodPage.Songs -> database.songs(SongSortType.NAME, false).map(::songs)
-        IpodPage.LikedSongs -> database.likedSongs(SongSortType.NAME, false).map(::songs)
-        is IpodPage.Playlist -> database.playlistSongs(page.id).map { list -> songs(list.map { it.song }) }
-        is IpodPage.Artist -> database.artistSongs(page.id, ArtistSongSortType.NAME, false).map(::songs)
-        is IpodPage.Album -> database.albumWithSongs(page.id).map { songs(it?.songs.orEmpty()) }
+        IpodPage.Songs -> database.songs(SongSortType.NAME, false).map { songs(it, art = true) }
+        IpodPage.LikedSongs -> database.likedSongs(SongSortType.NAME, false).map { songs(it, art = true) }
+        is IpodPage.Playlist -> database.playlistSongs(page.id).map { list -> songs(list.map { it.song }, art = true) }
+        is IpodPage.Artist -> database.artistSongs(page.id, ArtistSongSortType.NAME, false).map { songs(it, art = true) }
+        // an album's own tracks all share its cover, so they're a plain track list like on the classic
+        is IpodPage.Album -> database.albumWithSongs(page.id).map { songs(it?.songs.orEmpty(), art = false) }
     }.flowOn(Dispatchers.Default)
 
     // the whole library in a random order, ready to hand to the player
@@ -66,17 +113,28 @@ class IpodLibraryViewModel @Inject constructor(
         database.songs(SongSortType.NAME, false).first().shuffled().map { it.toMediaItem() }
     }
 
-    private fun pages(rows: List<IpodRow>, emptyText: String) =
-        IpodList(rows.ifEmpty { listOf(IpodRow("empty", emptyText, null)) })
+    private fun withArt(rows: List<IpodRow>, emptyText: String) =
+        if (rows.isEmpty()) IpodList(listOf(IpodRow("empty", emptyText, null))) else IpodList(rows, art = true)
 
-    private fun songs(songs: List<Song>): IpodList {
-        if (songs.isEmpty()) return pages(emptyList(), "No songs yet")
-        val rows = songs.mapIndexed { index, song -> IpodRow("${song.id}#$index", song.song.title, IpodPick.Play(index)) }
-        return IpodList(rows, songs)
+    private fun songs(songs: List<Song>, art: Boolean): IpodList {
+        if (songs.isEmpty()) return IpodList(listOf(IpodRow("empty", "No songs yet", null)))
+        val rows = songs.mapIndexed { index, song ->
+            IpodRow(
+                key = "${song.id}#$index",
+                title = song.song.title,
+                pick = IpodPick.Play(index),
+                subtitle = if (art) song.artists.joinToString { it.name }.ifBlank { null } else null,
+                art = if (art) song.song.thumbnailUrl?.resize(RowPx, RowPx) else null,
+            )
+        }
+        return IpodList(rows, songs, art = art)
     }
+
+    private fun songCount(count: Int) = if (count == 1) "1 song" else "$count songs"
 
     private companion object {
         const val CoverPx = 400
+        const val RowPx = 120
         const val MaxCovers = 24
     }
 }

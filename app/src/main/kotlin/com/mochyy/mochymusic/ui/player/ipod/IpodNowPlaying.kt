@@ -22,10 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -34,14 +34,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.ui.player.models.TrackInfo
 import com.mochyy.mochymusic.ui.player.styles.LivePosition
@@ -64,49 +63,20 @@ class IpodNowPlayingState {
     var touchedAt by mutableLongStateOf(0L)
 }
 
-// the classic's now playing: the cover tilted back, the song beside it, the time along the bottom
+// the classic's now playing: the cover tilted back beside the song, or on a tall screen the cover big on top of it
 @Composable
 fun IpodNowPlaying(state: IpodNowPlayingState, scale: IpodScale, marquee: Boolean) {
     val track = rememberTrack()
     val position = rememberLivePosition(animated = false)
     val duration = rememberDurationMs()
     Box(Modifier.fillMaxSize()) {
-        TiltedCover(
-            url = track.thumbnailUrl,
-            modifier = Modifier
-                .offset(scale.dp(28f), scale.dp(35f))
-                .size(scale.dp(174f), scale.dp(205f)),
-        )
-        Box(
-            modifier = Modifier
-                .offset(scale.dp(252f), scale.dp(35f))
-                .width(scale.dp(MockScreenWidth - 252f - 14f))
-                .height(scale.dp(205f)),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(scale.dp(1f))) {
-                Text(
-                    text = track.title,
-                    color = Color.Black,
-                    fontSize = scale.sp(20f),
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
-                    modifier = if (marquee) {
-                        Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 2000, repeatDelayMillis = 2000, velocity = 24.dp)
-                    } else Modifier,
-                )
-                SongLine(track.artist, scale)
-                SongLine(track.album, scale)
-            }
-        }
+        if (scale.tall) TallLayout(track, scale, marquee) else ClassicLayout(track, scale, marquee)
         Crossfade(
             targetState = state.bar == IpodBar.VOLUME,
             animationSpec = tween(160),
             label = "ipodBar",
             modifier = Modifier
-                .offset(y = scale.dp(297f - 15f))
+                .offset(y = scale.content - scale.dp(45f))
                 .fillMaxWidth()
                 .height(scale.dp(30f)),
         ) { volume ->
@@ -116,13 +86,99 @@ fun IpodNowPlaying(state: IpodNowPlayingState, scale: IpodScale, marquee: Boolea
 }
 
 @Composable
-private fun SongLine(text: String, scale: IpodScale) {
+private fun ClassicLayout(track: TrackInfo, scale: IpodScale, marquee: Boolean) {
+    val left = scale.dp(28f)
+    val top = scale.dp(35f)
+    val width = scale.dp(174f)
+    val height = scale.dp(205f)
+    CoverWithReflection(track.thumbnailUrl, side = height, reflect = 0.17f) {
+        // the cover's right edge further away, like the mockup's
+        val l = left.toPx()
+        val t = top.toPx()
+        val w = width.toPx()
+        val h = height.toPx()
+        floatArrayOf(l, t, l + w, t + h * TiltTop, l + w, t + h * TiltBottom, l, t + h)
+    }
+    Box(
+        modifier = Modifier
+            .offset(scale.dp(252f), top)
+            .width(scale.dp(MockScreenWidth - 252f - 14f))
+            .height(height),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        SongText(track, scale, marquee, centered = false)
+    }
+}
+
+@Composable
+private fun TallLayout(track: TrackInfo, scale: IpodScale, marquee: Boolean) {
+    val side = minOf(scale.width * 0.62f, scale.content * 0.42f)
+    val top = scale.content * 0.06f
+    val left = (scale.width - side) / 2f
+    CoverWithReflection(track.thumbnailUrl, side = side, reflect = 0.3f) {
+        squareCorners(Offset(left.toPx(), top.toPx()), side.toPx())
+    }
+    Box(
+        modifier = Modifier
+            .offset(y = top + side * 1.3f + scale.dp(6f))
+            .fillMaxWidth()
+            .padding(horizontal = scale.dp(20f)),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        SongText(track, scale, marquee, centered = true)
+    }
+}
+
+// the cover drawn by hand onto the corners it's given, its reflection under it, in a layer of its own
+@Composable
+private fun CoverWithReflection(url: String?, side: Dp, reflect: Float, corners: DrawScope.() -> FloatArray) {
+    val look = LocalIpodLook.current.screen
+    val sidePx = with(LocalDensity.current) { side.roundToPx() }
+    val painter = rememberCoverPainter(url, sidePx)
+    val matrix = remember { android.graphics.Matrix() }
+    Canvas(Modifier.fillMaxSize().graphicsLayer()) {
+        drawCoverQuad(painter, sidePx.toFloat(), corners(), look.artBlank, look.background, reflect, matrix)
+    }
+}
+
+@Composable
+private fun SongText(track: TrackInfo, scale: IpodScale, marquee: Boolean, centered: Boolean) {
+    val colors = LocalIpodLook.current.screen
+    val align = if (centered) TextAlign.Center else TextAlign.Start
+    Column(
+        verticalArrangement = Arrangement.spacedBy(scale.dp(1f)),
+        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
+    ) {
+        Text(
+            text = track.title,
+            color = colors.ink,
+            fontSize = scale.sp(if (centered) 22f else 20f),
+            fontWeight = FontWeight.Bold,
+            textAlign = align,
+            maxLines = 1,
+            softWrap = false,
+            overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
+            // scrolls in a layer of its own, so the marquee doesn't redraw the whole page every frame
+            modifier = if (marquee) {
+                Modifier
+                    .graphicsLayer()
+                    .basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 2000, repeatDelayMillis = 2000, velocity = 24.dp)
+            } else Modifier,
+        )
+        SongLine(track.artist, scale, align)
+        SongLine(track.album, scale, align)
+    }
+}
+
+@Composable
+private fun SongLine(text: String, scale: IpodScale, align: TextAlign) {
     if (text.isBlank()) return
     Text(
         text = text,
-        color = SoftInk,
+        color = LocalIpodLook.current.screen.softInk,
         fontSize = scale.sp(16.5f),
         fontWeight = FontWeight.SemiBold,
+        textAlign = align,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -135,62 +191,26 @@ private fun rememberTrack(): TrackInfo {
     return track
 }
 
-// the cover drawn onto a trapezoid, its right edge further away, like the mockup's
-@Composable
-private fun TiltedCover(url: String?, modifier: Modifier) {
-    Box(
-        modifier = modifier.drawWithCache {
-            val side = size.height
-            val matrix = android.graphics.Matrix().apply {
-                setPolyToPoly(
-                    floatArrayOf(0f, 0f, side, 0f, side, side, 0f, side), 0,
-                    floatArrayOf(0f, 0f, size.width, side * TiltTop, size.width, side * TiltBottom, 0f, side), 0,
-                    4,
-                )
-            }
-            onDrawWithContent {
-                drawContext.canvas.nativeCanvas.save()
-                drawContext.canvas.nativeCanvas.concat(matrix)
-                drawRect(CoverBlank, size = Size(side, side))
-                drawContent()
-                drawContext.canvas.nativeCanvas.restore()
-            }
-        },
-    ) {
-        // laid out square, wider than the box, and squeezed back into it by the tilt
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = SquareOfHeight,
-        )
-    }
-}
-
-// a square as tall as the box, left hanging out past its right edge rather than centred and cut
-private val SquareOfHeight = Modifier.layout { measurable, constraints ->
-    val side = constraints.maxHeight
-    val placeable = measurable.measure(Constraints.fixed(side, side))
-    layout(constraints.maxWidth, side) { placeable.place(0, 0) }
-}
-
 @Composable
 private fun TimeRow(state: IpodNowPlayingState, position: LivePosition, duration: Long, scale: IpodScale) {
     val playedSeconds = rememberPlayedSeconds(position)
     val scrubbing = state.bar == IpodBar.SCRUB
+    val colors = LocalIpodLook.current.screen
     // a scrub still waiting to land shows where it's going, even once the scrubber is put away
     val shownMs = if (state.scrubMs >= 0) state.scrubMs else playedSeconds * 1000L
     Box(Modifier.fillMaxSize()) {
         TimeText(clock(shownMs), scale, Modifier.align(Alignment.CenterStart).padding(start = scale.dp(30f)))
+        // its own layer: it redraws with the song's position, and alone that's cheap
         Canvas(
             Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = scale.dp(101f))
-                .size(scale.dp(268f), scale.dp(24f)),
+                .size(scale.dp(268f), scale.dp(24f))
+                .graphicsLayer(),
         ) {
             val ms = if (state.scrubMs >= 0) state.scrubMs else position.positionMs()
             val fraction = (ms.toFloat() / duration).coerceIn(0f, 1f)
-            drawTrack()
+            drawTrack(colors)
             drawFill(fraction)
             if (scrubbing) drawDiamond(fraction)
         }
@@ -200,20 +220,21 @@ private fun TimeRow(state: IpodNowPlayingState, position: LivePosition, duration
 
 @Composable
 private fun VolumeRow(state: IpodNowPlayingState, scale: IpodScale) {
+    val colors = LocalIpodLook.current.screen
     Box(Modifier.fillMaxSize()) {
         Canvas(
             Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = scale.dp(48f))
                 .size(scale.dp(40f), scale.dp(24f)),
-        ) { drawSpeaker(loud = false) }
+        ) { drawSpeaker(loud = false, ink = colors.ink) }
         Canvas(
             Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = scale.dp(101f))
                 .size(scale.dp(268f), scale.dp(24f)),
         ) {
-            drawTrack()
+            drawTrack(colors)
             drawFill(state.volume)
         }
         Canvas(
@@ -221,7 +242,7 @@ private fun VolumeRow(state: IpodNowPlayingState, scale: IpodScale) {
                 .align(Alignment.CenterEnd)
                 .padding(end = scale.dp(48f))
                 .size(scale.dp(40f), scale.dp(24f)),
-        ) { drawSpeaker(loud = true) }
+        ) { drawSpeaker(loud = true, ink = colors.ink) }
     }
 }
 
@@ -229,7 +250,7 @@ private fun VolumeRow(state: IpodNowPlayingState, scale: IpodScale) {
 private fun TimeText(text: String, scale: IpodScale, modifier: Modifier) {
     Text(
         text = text,
-        color = Color.Black,
+        color = LocalIpodLook.current.screen.ink,
         fontSize = scale.sp(17f),
         fontWeight = FontWeight.Bold,
         maxLines = 1,
@@ -248,9 +269,9 @@ private fun clock(ms: Long): String {
     else "${minutes.toString().padStart(2, '0')}:$seconds"
 }
 
-private fun DrawScope.drawTrack() {
-    drawRect(TrackBrush)
-    drawRect(TrackLine, style = Stroke(1f))
+private fun DrawScope.drawTrack(colors: IpodScreenColors) {
+    drawRect(colors.track)
+    drawRect(colors.trackLine, style = Stroke(1f))
 }
 
 private fun DrawScope.drawFill(fraction: Float) {
@@ -274,12 +295,12 @@ private fun DrawScope.drawDiamond(fraction: Float) {
     drawPath(path, DiamondEdge, style = Stroke(1.2f))
 }
 
-private fun DrawScope.drawSpeaker(loud: Boolean) {
+private fun DrawScope.drawSpeaker(loud: Boolean, ink: Color) {
     val h = size.height
     val cy = h / 2f
     val box = h * 0.26f
     val left = size.width * 0.12f
-    drawRect(SpeakerInk, topLeft = Offset(left, cy - box / 2f), size = Size(box * 0.8f, box))
+    drawRect(ink, topLeft = Offset(left, cy - box / 2f), size = Size(box * 0.8f, box))
     val cone = Path().apply {
         moveTo(left + box * 0.8f, cy - box / 2f)
         lineTo(left + box * 1.9f, cy - h * 0.34f)
@@ -287,12 +308,12 @@ private fun DrawScope.drawSpeaker(loud: Boolean) {
         lineTo(left + box * 0.8f, cy + box / 2f)
         close()
     }
-    drawPath(cone, SpeakerInk)
+    drawPath(cone, ink)
     val waves = if (loud) 3 else 1
     for (i in 1..waves) {
         val r = h * (0.16f + 0.12f * i)
         drawArc(
-            color = SpeakerInk,
+            color = ink,
             startAngle = -45f,
             sweepAngle = 90f,
             useCenter = false,
@@ -307,10 +328,6 @@ private fun DrawScope.drawSpeaker(loud: Boolean) {
 private const val TiltTop = 15f / 205f
 private const val TiltBottom = 197f / 205f
 
-private val SoftInk = Color(0xFF6F6F6F)
-private val CoverBlank = Color(0xFFD9D9D9)
-private val TrackBrush = Brush.verticalGradient(listOf(Color(0xFFFDFDFD), Color(0xFFE6E6E6), Color(0xFFD4D4D4), Color(0xFFF2F2F2)))
-private val TrackLine = Color(0xFFC4C4C4)
 private val FillBrush = Brush.verticalGradient(
     0f to Color(0xFF9FCBF4),
     0.48f to Color(0xFF5A9EE6),
@@ -319,4 +336,3 @@ private val FillBrush = Brush.verticalGradient(
 )
 private val DiamondBrush = Brush.verticalGradient(listOf(Color(0xFFF4F4F4), Color(0xFF9A9A9A)))
 private val DiamondEdge = Color(0xFF4A4A4A)
-private val SpeakerInk = Color(0xFF4F4F4F)

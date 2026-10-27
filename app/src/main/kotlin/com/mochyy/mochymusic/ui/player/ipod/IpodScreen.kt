@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,10 +16,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -29,6 +33,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -52,6 +57,7 @@ import com.mochyy.mochymusic.ui.component.damageBoundary
 import com.mochyy.mochymusic.ui.player.styles.LocalStyleInteractive
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
 import kotlinx.coroutines.flow.collectLatest
+import kotlin.math.roundToInt
 
 // sizes on the ipod's screen, written in pixels of the 474 px wide mockup and scaled to the real screen
 @Immutable
@@ -62,18 +68,27 @@ class IpodScale(val width: Dp, val height: Dp, private val fontScale: Float) {
     fun sp(mock: Float): TextUnit = (dp(mock).value / fontScale).sp
 
     val header: Dp get() = dp(MockHeader)
-    val row: Dp get() = (height - header) / VisibleRows
+    val content: Dp get() = height - header
+
+    // as many rows as fit the glass at about their mockup height, so a tall screen shows more of the list
+    fun rows(art: Boolean): Int = (content / dp(if (art) MockArtRow else MockRow)).roundToInt().coerceAtLeast(3)
+
+    fun rowHeight(art: Boolean): Dp = content / rows(art)
+
+    // the classic's glass is about three quarters as tall as it's wide, anything well past that is the tall screen
+    val tall: Boolean get() = content > width * 0.95f
 }
 
-const val VisibleRows = 7
 const val MockScreenWidth = 474f
-const val MockScreenHeight = 355f
 private const val MockHeader = 28f
+private const val MockRow = 46.6f
+private const val MockArtRow = 66f
 private const val MockScrollbar = 11f
 
 // the pages slide in from the right as you go deeper and back out as you press menu, under a header that stays put
 @Composable
 fun IpodPages(nav: IpodNavigator, modifier: Modifier = Modifier, page: @Composable (IpodEntry) -> Unit) {
+    val background = LocalIpodLook.current.screen.background
     Box(modifier.clipToBounds()) {
         val shown = nav.top
         for (entry in listOfNotNull(nav.leaving, shown)) {
@@ -87,7 +102,7 @@ fun IpodPages(nav: IpodNavigator, modifier: Modifier = Modifier, page: @Composab
                             val away = if (nav.forward) 1f else -1f
                             translationX = size.width * away * if (arriving) 1f - t else -t
                         }
-                        .background(Color.White),
+                        .background(background),
                 ) {
                     page(entry)
                 }
@@ -105,15 +120,24 @@ fun IpodMenuList(
     onTapRow: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rows = entry.list.rows
+    val list = entry.list
+    val rows = list.rows
+    val visible = scale.rows(list.art)
+    val rowHeight = scale.rowHeight(list.art)
+    SideEffect {
+        if (entry.visibleRows != visible) {
+            entry.visibleRows = visible
+            entry.clamp()
+        }
+    }
     val first = entry.first
     val selected = entry.selected
-    val scrolls = rows.size > VisibleRows
+    val scrolls = rows.size > visible
     val interactive = LocalStyleInteractive.current
     val tap by rememberUpdatedState(onTapRow)
+    val rowSize by rememberUpdatedState(rowHeight)
     Box(
-        modifier = modifier.pointerInput(entry, interactive, scale) {
-            val rowPx = scale.row.toPx()
+        modifier = modifier.pointerInput(entry, interactive) {
             whileStyleInteractive(interactive) {
                 // a plain tap picks a line; nothing is eaten, so a drag still pulls the player down and a hold still opens the styles
                 awaitEachGesture {
@@ -129,7 +153,7 @@ fun IpodMenuList(
                         still
                     }
                     if (lifted == true) {
-                        val index = entry.first + (down.position.y / rowPx).toInt()
+                        val index = entry.first + (down.position.y / rowSize.toPx()).toInt()
                         if (index in entry.list.rows.indices) tap(index)
                     }
                 }
@@ -137,10 +161,10 @@ fun IpodMenuList(
         },
     ) {
         Column(Modifier.fillMaxSize().padding(end = if (scrolls) scale.dp(MockScrollbar) else 0.dp)) {
-            for (index in first until minOf(first + VisibleRows, rows.size)) {
+            for (index in first until minOf(first + visible, rows.size)) {
                 val row = rows[index]
                 key(row.key) {
-                    IpodMenuRow(row, selected = index == selected, scale = scale, marquee = marquee && index == selected)
+                    IpodMenuRow(row, list.art, index == selected, rowHeight, scale, marquee && index == selected)
                 }
             }
         }
@@ -148,6 +172,7 @@ fun IpodMenuList(
             IpodScrollbar(
                 entry = entry,
                 count = rows.size,
+                visible = visible,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .fillMaxHeight()
@@ -158,33 +183,61 @@ fun IpodMenuList(
 }
 
 @Composable
-private fun IpodMenuRow(row: IpodRow, selected: Boolean, scale: IpodScale, marquee: Boolean) {
+private fun IpodMenuRow(row: IpodRow, art: Boolean, selected: Boolean, height: Dp, scale: IpodScale, marquee: Boolean) {
+    val colors = LocalIpodLook.current.screen
     val ink = when {
         selected -> Color.White
-        row.pick == null -> QuietInk
-        else -> Color.Black
+        row.pick == null -> colors.quietInk
+        else -> colors.ink
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(scale.row)
+            .height(height)
             .then(if (selected) Modifier.background(SelectionBrush) else Modifier)
-            .padding(start = scale.dp(10f), end = scale.dp(10f)),
+            .padding(start = scale.dp(if (art) 6f else 10f), end = scale.dp(10f)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = row.title,
-            color = ink,
-            fontSize = scale.sp(19f),
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            softWrap = false,
-            overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                // the highlighted line scrolls its name when it's too long, like the classic
-                .then(if (marquee) Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1200, repeatDelayMillis = 1500, velocity = 28.dp) else Modifier),
-        )
+        if (art && row.pick != null) {
+            val side = height - scale.dp(10f)
+            AsyncImage(
+                model = row.art,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(side)
+                    .clip(if (row.roundArt) CircleShape else RoundedCornerShape(scale.dp(3f)))
+                    .background(colors.artBlank),
+            )
+            Spacer(Modifier.width(scale.dp(10f)))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = row.title,
+                color = ink,
+                fontSize = scale.sp(if (art) 18f else 19f),
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = if (marquee) TextOverflow.Clip else TextOverflow.Ellipsis,
+                // the highlighted line scrolls its name when it's too long, in a layer of its own so only it redraws
+                modifier = if (marquee) {
+                    Modifier
+                        .graphicsLayer()
+                        .basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1200, repeatDelayMillis = 1500, velocity = 28.dp)
+                } else Modifier,
+            )
+            if (art && row.subtitle != null) {
+                Text(
+                    text = row.subtitle,
+                    color = if (selected) Color.White.copy(alpha = 0.85f) else colors.softInk,
+                    fontSize = scale.sp(15f),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         if (row.opensPage) {
             Canvas(
                 Modifier
@@ -203,12 +256,13 @@ private fun IpodMenuRow(row: IpodRow, selected: Boolean, scale: IpodScale, marqu
 }
 
 @Composable
-private fun IpodScrollbar(entry: IpodEntry, count: Int, modifier: Modifier) {
+private fun IpodScrollbar(entry: IpodEntry, count: Int, visible: Int, modifier: Modifier) {
+    val colors = LocalIpodLook.current.screen
     Canvas(modifier) {
-        drawRect(TrackBrush)
-        drawRect(TrackEdge, style = Stroke(1f))
-        val thumb = (size.height * VisibleRows / count).coerceAtLeast(size.width * 1.6f)
-        val maxFirst = (count - VisibleRows).coerceAtLeast(1)
+        drawRect(colors.scrollTrack)
+        drawRect(colors.trackLine, style = Stroke(1f))
+        val thumb = (size.height * visible / count).coerceAtLeast(size.width * 1.6f)
+        val maxFirst = (count - visible).coerceAtLeast(1)
         val top = (size.height - thumb) * entry.first / maxFirst
         drawRect(ThumbBrush, topLeft = Offset(1f, top), size = Size(size.width - 2f, thumb))
     }
@@ -217,8 +271,9 @@ private fun IpodScrollbar(entry: IpodEntry, count: Int, modifier: Modifier) {
 // the classic's slideshow beside the main menu: covers drifting slowly and fading into each other
 @Composable
 fun IpodCoverCycle(covers: List<String>, running: () -> Boolean, modifier: Modifier = Modifier) {
+    val blank = LocalIpodLook.current.screen.artBlank
     if (covers.isEmpty()) {
-        Box(modifier.background(CoverEmpty))
+        Box(modifier.background(blank))
         return
     }
     val clock = remember { mutableFloatStateOf(0f) }
@@ -236,7 +291,7 @@ fun IpodCoverCycle(covers: List<String>, running: () -> Boolean, modifier: Modif
         }
     }
     val slot by remember { derivedStateOf { (clock.floatValue / CoverSeconds).toInt() } }
-    Box(modifier.damageBoundary().clipToBounds().background(CoverEmpty)) {
+    Box(modifier.damageBoundary().clipToBounds().background(blank)) {
         for (n in slot..slot + 1) {
             key(n) {
                 AsyncImage(
@@ -267,9 +322,6 @@ private const val CoverSeconds = 6f
 // share of a cover's time spent fading in over the last one
 private const val CoverFade = 0.18f
 
-internal val SelectionBrush = Brush.verticalGradient(listOf(Color(0xFF3BB3EF), Color(0xFF1F7BC4)))
-private val QuietInk = Color(0xFF8A8A8A)
-private val TrackBrush = Brush.horizontalGradient(listOf(Color(0xFFDADADA), Color(0xFFF6F6F6), Color(0xFFDADADA)))
-private val TrackEdge = Color(0xFFB4B4B4)
+// ipod.js's highlight, a touch brighter at the top than the mockup's
+internal val SelectionBrush = Brush.verticalGradient(listOf(Color(0xFF3CB8FF), Color(0xFF347AB5)))
 private val ThumbBrush = Brush.horizontalGradient(listOf(Color(0xFF6F7B88), Color(0xFFA9B4BF), Color(0xFF5B6673)))
-private val CoverEmpty = Color(0xFFDDDDDD)
