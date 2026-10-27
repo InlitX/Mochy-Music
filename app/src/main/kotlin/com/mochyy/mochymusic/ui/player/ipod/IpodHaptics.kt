@@ -15,7 +15,7 @@ import com.mochyy.mochymusic.ui.player.studio.vibrator
 @Stable
 class IpodHaptics(context: Context) {
     private val vibrator: Vibrator? = context.vibrator()?.takeIf { it.hasVibrator() }
-    // effects are held as Any so android 7 never loads VibrationEffect, which only came in android 8
+    // effects are held as plain objects so android 7 never loads the vibration effect class, it only came in android 8
     private val tickEffect = effect(Primitive.TICK, 0.55f, predefined = VibrationEffect.EFFECT_TICK, oneShotMs = 8, amplitude = 90)
     private val pressEffect = effect(Primitive.CLICK, 0.85f, predefined = VibrationEffect.EFFECT_CLICK, oneShotMs = 16, amplitude = 200)
     private val releaseEffect = effect(Primitive.TICK, 0.35f, predefined = VibrationEffect.EFFECT_TICK, oneShotMs = 6, amplitude = 60)
