@@ -167,6 +167,9 @@ private val MiniSwipeFling = 500.dp
  */
 private val PlayerCloseStrip = 64.dp
 
+// the sheet's content is fully faded out up to here, see BottomSheet
+private const val StyleHiddenBelow = 0.25f
+
 /** The old gap from the seek bar down to the buttons (24dp plus the bar's lift). */
 private val TransportGapAboveRow = 24.dp + SeekBarLift
 
@@ -852,6 +855,14 @@ private fun PlayerSheet(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        // not placed while the sheet is a pill: it's invisible there anyway, and placed it sat
+                        // over the mini player and took the taps meant for its play and skip buttons
+                        .layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            layout(placeable.width, placeable.height) {
+                                if (state.progress > StyleHiddenBelow) placeable.place(0, 0)
+                            }
+                        }
                         .pointerInput(styleOpen) {
                             if (!styleOpen) return@pointerInput
                             val closePx = 8.dp.toPx()
@@ -1505,6 +1516,13 @@ private fun PlayerSheet(
                     studio.settleOn(focused, restyled) {
                         studio.openSheet(com.mochyy.mochymusic.ui.player.studio.StudioSheet.POSTER)
                     }
+                } else if (playerStyles.getOrNull(focused) == PlayerStyle.IPOD) {
+                    // the ipod's colours, wheel, screen and shadow, in a sheet over the ipod itself
+                    val restyled = playerStyle != PlayerStyle.IPOD
+                    if (restyled) onPlayerStyleChange(PlayerStyle.IPOD)
+                    studio.settleOn(focused, restyled) {
+                        studio.openSheet(com.mochyy.mochymusic.ui.player.studio.StudioSheet.IPOD)
+                    }
                 } else if (playerStyles.getOrNull(focused) == PlayerStyle.TURNTABLE) {
                     // its one edit is the disc label: back to the player, with the label's sheet
                     val restyled = playerStyle != PlayerStyle.TURNTABLE
@@ -1521,7 +1539,7 @@ private fun PlayerSheet(
             },
         )
         // the Poster's sheet, over the poster itself
-        if (playerStyle == PlayerStyle.POSTER) {
+        if (playerStyle == PlayerStyle.POSTER || playerStyle == PlayerStyle.IPOD) {
             com.mochyy.mochymusic.ui.player.studio.StyleSheets(studio)
         }
         if (playerStyle.flagshipFamily) {
