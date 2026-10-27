@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
@@ -78,6 +79,8 @@ fun IpodClickWheel(
     val dim: () -> Unit = { scope.launch { glow.animateTo(0f, GlowFade) } }
     Box(
         modifier = modifier
+            // its own layer, so the press glow repaints only the wheel and not the body under it
+            .graphicsLayer()
             .pointerInput(enabled, interactive, haptics) {
                 if (!enabled) return@pointerInput
                 val spinner = Spinner()
