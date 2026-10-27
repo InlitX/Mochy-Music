@@ -38,7 +38,7 @@ internal fun Context.playHoldRamp() {
     }
 }
 
-private fun Context.vibrator(): Vibrator? =
+internal fun Context.vibrator(): Vibrator? =
     if (Build.VERSION.SDK_INT >= 31) managerVibrator() else {
         @Suppress("DEPRECATION")
         getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
