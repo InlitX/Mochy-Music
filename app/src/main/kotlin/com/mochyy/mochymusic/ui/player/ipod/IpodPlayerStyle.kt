@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -40,9 +42,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.ui.component.BottomSheetState
@@ -51,7 +56,6 @@ import com.mochyy.mochymusic.ui.player.findActivity
 import com.mochyy.mochymusic.ui.player.styles.LocalStyleInteractive
 import com.mochyy.mochymusic.ui.player.styles.rememberStyleShowing
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
-import com.mochyy.mochymusic.ui.theme.ForceDarkTheme
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
@@ -79,7 +83,7 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
             if (wholeDevice) deviceGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
             else phoneGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
         }
-        if (!wholeDevice && !preview && look.body.light) DarkStatusIcons()
+        if (!preview) HideStatusBar()
         Box(
             Modifier
                 .fillMaxSize()
@@ -124,6 +128,11 @@ private fun IpodFace(geometry: IpodGeometry, preview: Boolean, density: Density)
     val innerW = with(density) { (geometry.screen.width - geometry.bezel * 2f).toDp() }
     val innerH = with(density) { (geometry.screen.height - geometry.bezel * 2f).toDp() }
     val scale = remember(innerW, innerH, density.fontScale) { IpodScale(innerW, innerH, density.fontScale) }
+    val covers by produceState(library?.cachedCovers.orEmpty(), library) {
+        library?.let { value = it.covers() }
+    }
+    val fallback = rememberArtwork()
+    val slideshowCovers = remember(covers, fallback) { covers.ifEmpty { listOfNotNull(fallback) } }
     Box(
         modifier = Modifier
             .place(geometry.screen, density)
@@ -139,8 +148,19 @@ private fun IpodFace(geometry: IpodGeometry, preview: Boolean, density: Density)
         ) {
             Column(Modifier.fillMaxSize()) {
                 TitleBar(nav, coverFlow, scale)
-                IpodPages(nav, Modifier.fillMaxWidth().weight(1f)) { entry, slideX ->
-                    IpodPageContent(entry, slideX, controller, library, scale, marquee, showing)
+                IpodPages(nav, Modifier.fillMaxWidth().weight(1f)) { entry, slideX, sidebarOnly, curtainOpen, showCoverCycle ->
+                    IpodPageContent(
+                        entry = entry,
+                        slideX = slideX,
+                        sidebarOnly = sidebarOnly,
+                        curtainOpen = curtainOpen,
+                        showCoverCycle = showCoverCycle,
+                        covers = slideshowCovers,
+                        controller = controller,
+                        scale = scale,
+                        marquee = marquee,
+                        showing = showing,
+                    )
                 }
             }
         }
@@ -172,40 +192,73 @@ private fun TitleBar(nav: IpodNavigator, coverFlow: IpodCoverFlowState, scale: I
     IpodHeader(title, scale)
 }
 
-// one page of the menu tree: a list, the main menu with its slideshow, cover flow or now playing
+// one page of the menu tree: a list, a split-screen sidebar with its cover slideshow, cover flow or now playing
 @Composable
 private fun IpodPageContent(
     entry: IpodEntry,
     slideX: () -> Float,
+    sidebarOnly: Boolean,
+    curtainOpen: (() -> Float)?,
+    showCoverCycle: Boolean,
+    covers: List<String>,
     controller: IpodController,
-    library: IpodLibraryViewModel?,
     scale: IpodScale,
     marquee: Boolean,
     showing: () -> Boolean,
 ) {
-    when (entry.page) {
-        IpodPage.NowPlaying -> IpodNowPlaying(controller.nowPlaying, scale, marquee)
-        IpodPage.CoverFlow -> IpodCoverFlow(controller.coverFlow, scale, controller::tapCoverFlow, controller::tapTrack)
-        IpodPage.Main -> Box(Modifier.fillMaxSize()) {
-            // read once each time the main menu comes up, not kept live while music plays
-            val covers by produceState(emptyList<String>(), library) { library?.let { value = it.covers() } }
-            val fallback = rememberArtwork()
-            IpodCoverCycle(
-                covers = covers.ifEmpty { listOfNotNull(fallback) },
-                running = showing,
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.5f).fillMaxHeight(),
-            )
-            // only the menu slides, a whole page width, while the covers beside it hold still like on the classic
-            IpodMenuList(
-                entry = entry,
-                scale = scale,
-                marquee = marquee,
-                onTapRow = { controller.tapRow(entry, it) },
+    val background = LocalIpodLook.current.screen.background
+    when {
+        entry.page == IpodPage.NowPlaying -> IpodNowPlaying(controller.nowPlaying, scale, marquee)
+        entry.page == IpodPage.CoverFlow -> IpodCoverFlow(controller.coverFlow, scale, controller::tapCoverFlow, controller::tapTrack)
+        entry.page.isSidebar -> Box(Modifier.fillMaxSize()) {
+            if (showCoverCycle) {
+                IpodCoverCycle(
+                    covers = covers,
+                    running = showing,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxWidth(0.5f)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            if (curtainOpen != null) translationX = size.width * curtainOpen()
+                        },
+                )
+            }
+            // the left half holds the menu and its white backing, clipped when two sidebar pages push each other
+            val halfWidthPx = with(LocalDensity.current) { (scale.width * 0.5f).toPx() }
+            Box(
                 modifier = Modifier
                     .fillMaxWidth(0.5f)
                     .fillMaxHeight()
-                    .graphicsLayer { translationX = size.width * 2f * slideX() },
-            )
+                    .then(if (sidebarOnly) Modifier.clipToBounds() else Modifier),
+            ) {
+                IpodMenuList(
+                    entry = entry,
+                    scale = scale,
+                    marquee = marquee,
+                    onTapRow = { controller.tapRow(entry, it) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = when {
+                                curtainOpen != null -> -size.width * curtainOpen()
+                                sidebarOnly -> size.width * slideX()
+                                else -> 0f
+                            }
+                        }
+                        .background(background),
+                )
+            }
+            if (showCoverCycle) {
+                IpodSidebarShadow(
+                    scale = scale,
+                    modifier = Modifier
+                        .offset(x = scale.width * 0.5f)
+                        .graphicsLayer {
+                            if (curtainOpen != null) translationX = -halfWidthPx * curtainOpen()
+                        },
+                )
+            }
         }
         else -> {
             IpodMenuList(entry, scale, marquee, { controller.tapRow(entry, it) }, Modifier.fillMaxSize())
@@ -249,20 +302,28 @@ private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: B
     )
 }
 
-// dark status bar icons over the light body, back to white once the player is mostly closed or the style changes
+// the ipod has its own battery and status header, so the android status bar hides while the player is open
 @Composable
-private fun DarkStatusIcons() {
+private fun HideStatusBar() {
     val view = LocalView.current
     val sheet = LocalPlayerBottomSheetState.current
-    LaunchedEffect(view, sheet) {
+    val focused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(view, sheet, focused) {
         val window = view.context.findActivity()?.window ?: return@LaunchedEffect
-        val controller = WindowCompat.getInsetsController(window, view)
+        val controller = WindowCompat.getInsetsController(window, window.decorView.rootView)
         try {
-            snapshotFlow { sheet == null || sheet.progress > 0.5f }
+            snapshotFlow { sheet == null || sheet.isExpanded }
                 .distinctUntilChanged()
-                .collect { light -> controller.isAppearanceLightStatusBars = light || !ForceDarkTheme }
+                .collect { open ->
+                    if (open) {
+                        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        controller.hide(WindowInsetsCompat.Type.statusBars())
+                    } else {
+                        controller.show(WindowInsetsCompat.Type.statusBars())
+                    }
+                }
         } finally {
-            controller.isAppearanceLightStatusBars = !ForceDarkTheme
+            controller.show(WindowInsetsCompat.Type.statusBars())
         }
     }
 }

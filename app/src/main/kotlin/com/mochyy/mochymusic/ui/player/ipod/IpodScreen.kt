@@ -27,14 +27,17 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -46,6 +49,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -53,9 +58,13 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.size.Size as CoilSize
 import com.mochyy.mochymusic.ui.component.damageBoundary
 import com.mochyy.mochymusic.ui.player.styles.LocalStyleInteractive
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
@@ -86,50 +95,76 @@ private const val MockRow = 46.6f
 private const val MockArtRow = 66f
 private const val MockScrollbar = 11f
 
-// the pages slide in from the right as you go deeper and back out as you press menu, cover flow rises from the bottom like a sheet
+// pages push each other across, sidebar submenus push inside the left pane, and cover flow parts the two halves like a curtain
 @Composable
-fun IpodPages(nav: IpodNavigator, modifier: Modifier = Modifier, page: @Composable (entry: IpodEntry, slideX: () -> Float) -> Unit) {
+fun IpodPages(
+    nav: IpodNavigator,
+    modifier: Modifier = Modifier,
+    page: @Composable (
+        entry: IpodEntry,
+        slideX: () -> Float,
+        sidebarOnly: Boolean,
+        curtainOpen: (() -> Float)?,
+        showCoverCycle: Boolean,
+    ) -> Unit,
+) {
     val background = LocalIpodLook.current.screen.background
     Box(modifier.clipToBounds()) {
         val shown = nav.top
         val leaving = nav.leaving
-        // the deeper page is always on top: the one coming in, or the one going back out
+        val moving = leaving != null
         val deeper = if (nav.forward) shown else leaving
-        val order = if (nav.forward) listOfNotNull(leaving, shown) else listOfNotNull(shown, leaving)
-        val sheet = deeper?.page == IpodPage.CoverFlow
-        for (entry in order) {
+        val curtain = moving && deeper?.page == IpodPage.CoverFlow
+        val sidebarOnly = moving && shown.page.isSidebar && leaving.page.isSidebar
+        // cover flow stays underneath while the sidebar and cover cycle part over it like curtains
+        val order = when {
+            curtain && shown.page == IpodPage.CoverFlow -> listOfNotNull(shown, leaving)
+            else -> listOfNotNull(leaving, shown)
+        }
+        for ((idx, entry) in order.withIndex()) {
             key(entry.id) {
                 val arriving = entry === shown
-                val moving = leaving != null
-                // how far across the page sits, as a share of the width: under a sheet nothing moves sideways
                 val slideX: () -> Float = {
                     val t = nav.slide.value
                     when {
-                        !moving || sheet -> 0f
+                        !moving || curtain -> 0f
                         nav.forward -> if (arriving) 1f - t else -t
                         else -> if (arriving) t - 1f else t
                     }
                 }
-                val rise = moving && sheet && entry === deeper
-                // the main menu moves only its list, so its covers hold still and get covered over
-                val holdsStill = entry.page == IpodPage.Main
+                val curtainOpen: (() -> Float)? = if (curtain && entry.page.isSidebar) {
+                    { if (nav.forward) nav.slide.value else 1f - nav.slide.value }
+                } else null
+                val fullSlide = !curtain && !sidebarOnly
+                val transparentBox = curtainOpen != null || (sidebarOnly && idx > 0)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            if (!holdsStill) translationX = size.width * slideX()
-                            if (rise) {
-                                val t = nav.slide.value
-                                translationY = size.height * if (nav.forward) 1f - t else t
-                            }
+                            if (fullSlide) translationX = size.width * slideX()
                         }
-                        .background(background),
+                        .then(if (transparentBox) Modifier else Modifier.background(background)),
                 ) {
-                    page(entry, slideX)
+                    page(entry, slideX, sidebarOnly, curtainOpen, !sidebarOnly || idx == 0)
                 }
             }
         }
     }
+}
+
+// the soft drop shadow and divider line cast by the left sidebar onto the covers beside it
+@Composable
+fun IpodSidebarShadow(scale: IpodScale, modifier: Modifier = Modifier) {
+    val line = LocalIpodLook.current.screen.headerLine
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(scale.dp(16f))
+            .drawBehind {
+                drawRect(SidebarShadowBrush)
+                drawRect(line, size = Size(1.dp.toPx(), size.height))
+            },
+    )
 }
 
 // a menu's lines, the highlighted one in that glossy blue, with a scrollbar once there's more than fits
@@ -153,6 +188,12 @@ fun IpodMenuList(
     }
     val first = entry.first
     val selected = entry.selected
+    // wait until the wheel rests on a line before attaching marquee so fast spins don't rebuild layers every notch
+    var settledSelected by remember(entry) { mutableIntStateOf(selected) }
+    LaunchedEffect(selected) {
+        delay(220L)
+        settledSelected = selected
+    }
     val scrolls = rows.size > visible
     val interactive = LocalStyleInteractive.current
     val tap by rememberUpdatedState(onTapRow)
@@ -181,12 +222,21 @@ fun IpodMenuList(
             }
         },
     ) {
+        val count = (rows.size - first).coerceIn(0, visible)
         Column(Modifier.fillMaxSize().padding(end = if (scrolls) scale.dp(MockScrollbar) else 0.dp)) {
-            for (index in first until minOf(first + visible, rows.size)) {
+            // reuse the visible row slots in place rather than tearing down compositions on every scroll notch
+            for (slot in 0 until count) {
+                val index = first + slot
                 val row = rows[index]
-                key(row.key) {
-                    IpodMenuRow(row, list.art, index == selected, rowHeight, scale, marquee && index == selected)
-                }
+                val isSelected = index == selected
+                IpodMenuRow(
+                    row = row,
+                    art = list.art,
+                    selected = isSelected,
+                    height = rowHeight,
+                    scale = scale,
+                    marquee = marquee && isSelected && settledSelected == selected,
+                )
             }
         }
         if (scrolls) {
@@ -221,8 +271,17 @@ private fun IpodMenuRow(row: IpodRow, art: Boolean, selected: Boolean, height: D
     ) {
         if (art && row.pick != null) {
             val side = height - scale.dp(10f)
+            val context = LocalContext.current
+            val sidePx = with(LocalDensity.current) { side.roundToPx().coerceAtLeast(1) }
+            val request = remember(context, row.art, sidePx) {
+                ImageRequest.Builder(context)
+                    .data(row.art)
+                    .size(CoilSize(sidePx, sidePx))
+                    .crossfade(false)
+                    .build()
+            }
             AsyncImage(
-                model = row.art,
+                model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -346,3 +405,4 @@ private const val CoverFade = 0.18f
 // ipod.js's highlight, a touch brighter at the top than the mockup's
 internal val SelectionBrush = Brush.verticalGradient(listOf(Color(0xFF3CB8FF), Color(0xFF347AB5)))
 private val ThumbBrush = Brush.horizontalGradient(listOf(Color(0xFF6F7B88), Color(0xFFA9B4BF), Color(0xFF5B6673)))
+private val SidebarShadowBrush = Brush.horizontalGradient(listOf(Color(0x52000000), Color(0x1E000000), Color.Transparent))

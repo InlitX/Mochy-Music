@@ -3,6 +3,7 @@ package com.mochyy.mochymusic.ui.player.ipod
 import android.media.AudioManager
 import android.os.SystemClock
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.snapshotFlow
 import androidx.media3.common.Player
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.extensions.toMediaItem
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -131,13 +133,29 @@ internal class IpodController(
         }
     }
 
-    // loads the page's list first, so it slides in already filled rather than filling up halfway across
+    // loads the page's list first, or opens straight away when it's already warmed in memory
     private fun open(target: IpodPage) {
         val source = library
         if (opening) return
-        if (source == null || target == IpodPage.NowPlaying) {
+        if (source == null || target == IpodPage.NowPlaying || target.isSidebar) {
             nav.push(target)
             return
+        }
+        if (target == IpodPage.CoverFlow) {
+            val ready = source.cachedCoverFlow
+            if (ready != null) {
+                coverFlow.show(ready)
+                nav.push(target)
+                scope.launch { coverFlow.show(source.coverFlow()) }
+                return
+            }
+        } else {
+            val ready = source.cached(target)
+            if (ready != null) {
+                nav.push(target, ready)
+                source.refreshAsync(target)
+                return
+            }
         }
         opening = true
         scope.launch {
@@ -152,9 +170,11 @@ internal class IpodController(
                     val list = scope.async { source.load(target) }
                     val entry = nav.push(target, withTimeoutOrNull(PrepareMs) { list.await() } ?: IpodLoadingList)
                     opening = false
-                    // a slow list (a saved album fetching its tracks) fills in once it's here
+                    // wait until the slide settles before swapping in a slow list so it doesn't hitch mid-motion
                     if (entry.list === IpodLoadingList) {
-                        entry.list = list.await()
+                        val loaded = list.await()
+                        snapshotFlow { nav.leaving == null }.first { it }
+                        entry.list = loaded
                         entry.clamp()
                     }
                 }
@@ -169,8 +189,14 @@ internal class IpodController(
         val album = coverFlow.current ?: return
         val source = library ?: return
         if (coverFlow.flipped) return
+        val target = IpodPage.Album(album.id, album.title)
+        val ready = source.cached(target)
+        if (ready != null) {
+            coverFlow.turnOver(ready)
+            return
+        }
         scope.launch {
-            val tracks = scope.async { source.load(IpodPage.Album(album.id, album.title)) }
+            val tracks = scope.async { source.load(target) }
             coverFlow.turnOver(withTimeoutOrNull(PrepareMs) { tracks.await() } ?: IpodLoadingList)
             if (coverFlow.back.list === IpodLoadingList) {
                 val loaded = tracks.await()
@@ -193,6 +219,8 @@ internal class IpodController(
         nav.showNowPlaying()
         scope.launch {
             val items = withContext(Dispatchers.Default) { songs.map { it.toMediaItem() } }
+            // let the slide to now playing finish before handing a big queue to exoplayer on the main thread
+            snapshotFlow { nav.leaving == null }.first { it }
             connection?.playQueue(ListQueue(title = title, items = items, startIndex = index))
         }
     }
@@ -238,5 +266,5 @@ internal class IpodController(
 
 private const val ScrubSettleMs = 300L
 private const val ScanStepMs = 4_000L
-// how long a page waits for its list before sliding in anyway
-private const val PrepareMs = 250L
+// how long a page waits for an uncached list before sliding in anyway
+private const val PrepareMs = 70L

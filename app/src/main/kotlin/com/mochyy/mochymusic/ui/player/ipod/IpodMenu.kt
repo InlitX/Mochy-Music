@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 @Immutable
 sealed class IpodPage(val title: String) {
     data object Main : IpodPage("Mochy")
+    data object Music : IpodPage("Music")
     data object NowPlaying : IpodPage("Now Playing")
     data object CoverFlow : IpodPage("Cover Flow")
     data object Playlists : IpodPage("Playlists")
@@ -26,9 +27,11 @@ sealed class IpodPage(val title: String) {
     data object Albums : IpodPage("Albums")
     data object Songs : IpodPage("Songs")
     data object LikedSongs : IpodPage("Liked Songs")
-    class Playlist(val id: String, name: String) : IpodPage(name)
-    class Artist(val id: String, name: String) : IpodPage(name)
-    class Album(val id: String, name: String) : IpodPage(name)
+    data class Playlist(val id: String, val name: String) : IpodPage(name)
+    data class Artist(val id: String, val name: String) : IpodPage(name)
+    data class Album(val id: String, val name: String) : IpodPage(name)
+
+    val isSidebar: Boolean get() = this == Main || this == Music
 }
 
 // what picking a row does: open a page, play a song from the list, or shuffle everything
@@ -63,24 +66,38 @@ class IpodList(val rows: List<IpodRow>, val songs: List<Song> = emptyList(), val
 // shown for the moment a list takes longer than the slide to read
 val IpodLoadingList = IpodList(listOf(IpodRow("loading", "Loading…", null)))
 
-// the main menu never changes, so it's built once
+// the home sidebar: cover flow, the music menu and now playing
 val IpodMainList = IpodList(
     listOf(
         IpodRow("coverflow", "Cover Flow", IpodPick.Open(IpodPage.CoverFlow)),
+        IpodRow("music", "Music", IpodPick.Open(IpodPage.Music)),
+        IpodRow("now", "Now Playing", IpodPick.Open(IpodPage.NowPlaying)),
+    )
+)
+
+// the music submenu, also shown in the left half of the screen beside the covers
+val IpodMusicList = IpodList(
+    listOf(
         IpodRow("playlists", "Playlists", IpodPick.Open(IpodPage.Playlists)),
         IpodRow("artists", "Artists", IpodPick.Open(IpodPage.Artists)),
         IpodRow("albums", "Albums", IpodPick.Open(IpodPage.Albums)),
         IpodRow("songs", "Songs", IpodPick.Open(IpodPage.Songs)),
         IpodRow("liked", "Liked Songs", IpodPick.Open(IpodPage.LikedSongs)),
         IpodRow("shuffle", "Shuffle Songs", IpodPick.Shuffle),
-        IpodRow("now", "Now Playing", IpodPick.Open(IpodPage.NowPlaying)),
+        IpodRow("coverflow", "Cover Flow", IpodPick.Open(IpodPage.CoverFlow)),
     )
 )
 
 // a page in the stack, keeping its own highlighted row so going back lands where you left it
 @Stable
 class IpodEntry(val page: IpodPage, val id: Long) {
-    var list by mutableStateOf(if (page == IpodPage.Main) IpodMainList else IpodList.Loading)
+    var list by mutableStateOf(
+        when (page) {
+            IpodPage.Main -> IpodMainList
+            IpodPage.Music -> IpodMusicList
+            else -> IpodList.Loading
+        }
+    )
     var selected by mutableIntStateOf(0)
     var first by mutableIntStateOf(0)
 
