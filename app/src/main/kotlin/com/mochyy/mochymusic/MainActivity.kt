@@ -460,6 +460,13 @@ class MainActivity : ComponentActivity() {
         // "Keep screen on" (the player's menu, or a chevron button): the phone doesn't sleep while
         // Mochy is on screen. A window flag only holds while the app is in front, which is the point.
         val keepScreenOn by rememberPreference(com.mochyy.mochymusic.constants.KeepScreenOn, defaultValue = false)
+        val coverCornerRadius by rememberPreference(com.mochyy.mochymusic.constants.ThumbnailCornerRadiusKey, defaultValue = 25f)
+        SideEffect {
+            val r = coverCornerRadius.coerceIn(0f, 45f)
+            com.mochyy.mochymusic.ui.component.HomeCardCornerRadius = r.dp
+            com.mochyy.mochymusic.constants.GridThumbnailCornerRadius = (r * 0.6f).coerceIn(0f, 28f).dp
+            com.mochyy.mochymusic.constants.ThumbnailCornerRadius = (r * 0.35f).coerceIn(0f, 16f).dp
+        }
         val rootView = androidx.compose.ui.platform.LocalView.current
         DisposableEffect(keepScreenOn) {
             rootView.keepScreenOn = keepScreenOn
@@ -1485,6 +1492,7 @@ val SubSettingsRoutes = setOf(
     "developer_playground",
     "storage_settings",
     "gesture_settings",
+    "customisation_settings",
     // Audio Lab keeps the bar, as in its designs
     "audio_lab",
     "equalizer",

@@ -58,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -69,17 +70,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -94,6 +98,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.lerp
@@ -105,6 +110,8 @@ import coil3.request.transformations
 import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.LocalDetailAccentColor
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.constants.PlaylistStyle
+import com.mochyy.mochymusic.constants.PlaylistStyleKey
 import com.mochyy.mochymusic.db.entities.ArtistEntity
 import com.mochyy.mochymusic.ui.component.BlurDirection
 import com.mochyy.mochymusic.ui.component.BoneColor
@@ -112,6 +119,7 @@ import com.mochyy.mochymusic.ui.component.Bone
 import com.mochyy.mochymusic.ui.component.BonesHost
 import com.mochyy.mochymusic.ui.component.GlassPillBackground
 import com.mochyy.mochymusic.ui.component.GlassState
+import com.mochyy.mochymusic.ui.component.HomeCardCornerRadius
 import com.mochyy.mochymusic.ui.component.ItemThumbnail
 import com.mochyy.mochymusic.ui.component.ProgressiveGlassBackground
 import com.mochyy.mochymusic.ui.component.RoundedHighlight
@@ -122,10 +130,12 @@ import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.component.rememberCoverBlurAvailable
 import com.mochyy.mochymusic.ui.component.smoothstep
+import com.mochyy.mochymusic.ui.player.BackdropBlurTransformation
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.theme.rememberCoverThemeColor
 import com.mochyy.mochymusic.ui.utils.SoftBlurTransformation
 import com.mochyy.mochymusic.ui.utils.resize
+import com.mochyy.mochymusic.utils.rememberEnumPreference
 import com.music.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -236,6 +246,9 @@ fun <A> featuredArtistsOf(
         .take(limit)
         .map { (artistId, names) -> FeaturedArtistUi(id = artistId, name = names.first()) }
 
+// passes the scaffold's cover composable down to PlaylistHeader when classic or minimal style draws a framed cover
+private val LocalPlaylistFramedCover = staticCompositionLocalOf<(@Composable (Modifier) -> Unit)?> { null }
+
 /** the cover band at the top of a playlist, shared by the header item and the backdrop behind it */
 @Composable
 fun playlistCoverHeight(): Dp = (LocalConfiguration.current.screenHeightDp * 0.6f).dp
@@ -284,6 +297,24 @@ fun PlaylistDetailScaffold(
     // there from the first frame, and keeping it means the cover never swaps mid-way
     val handedCover = remember(sharedElementKey) { containerTransformCover(sharedElementKey) }
     val coverUrl = handedCover ?: coverUrl
+    val playlistStyle by rememberEnumPreference(PlaylistStyleKey, defaultValue = PlaylistStyle.FLOW)
+    val effectiveShowCover = showCover && (roundCapsule || playlistStyle == PlaylistStyle.FLOW)
+    val effectiveRoundCapsule = roundCapsule || (showCover && playlistStyle == PlaylistStyle.MINIMAL)
+    val classicBackdrop = showCover && !roundCapsule && playlistStyle == PlaylistStyle.CLASSIC
+    val framedCover: (@Composable (Modifier) -> Unit)? = remember(cover, coverUrl) {
+        when {
+            cover != null -> cover
+            !coverUrl.isNullOrEmpty() -> { mod ->
+                AsyncImage(
+                    model = coverUrl.resize(544, 544),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = mod,
+                )
+            }
+            else -> null
+        }
+    }
 
     val sampledThemeColor by rememberCoverThemeColor(if (cover != null) null else coverUrl)
     val themeColor = if (cover != null) coverThemeColor else sampledThemeColor
@@ -296,11 +327,18 @@ fun PlaylistDetailScaffold(
     // the bottom nav scrim picks this up, so the whole screen reads as one colour. a page that
     // sinks to black hands it black, or the nav would sit in a band of the theme colour
     val accent = LocalDetailAccentColor.current
-    SideEffect { accent.value = if (roundCapsule) Color.Black else themeColor }
+    SideEffect { accent.value = if (effectiveRoundCapsule) Color.Black else themeColor }
     DisposableEffect(Unit) { onDispose { accent.value = null } }
 
     val coverHeight = playlistCoverHeight()
-    val collapseHeightPx = with(LocalDensity.current) { (headerHeight ?: coverHeight).toPx() }
+    val classicHeaderHeight = playlistClassicHeaderHeight()
+    val effectiveHeaderHeight = when {
+        headerHeight != null -> headerHeight
+        classicBackdrop -> classicHeaderHeight
+        !effectiveShowCover -> playlistCompactHeaderHeight()
+        else -> coverHeight
+    }
+    val collapseHeightPx = with(LocalDensity.current) { effectiveHeaderHeight.toPx() }
     val scrollProgress = remember(lazyListState, collapseHeightPx) {
         derivedStateOf {
             if (lazyListState.firstVisibleItemIndex > 0) {
@@ -327,12 +365,13 @@ fun PlaylistDetailScaffold(
     // before the bar collapses
     val pillNeedsGlass = rememberUpdatedState(modeBar is PlaylistModeBar.EditOrder)
 
+    CompositionLocalProvider(LocalPlaylistFramedCover provides framedCover) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .containerTransformTarget(sharedElementKey)
             .then(
-                if (roundCapsule) {
+                if (effectiveRoundCapsule) {
                     // pinned to the screen, not the list: the colour holds at the top and settles
                     // into black over the lower half, wherever the rows have scrolled to
                     Modifier.drawBehind {
@@ -359,11 +398,19 @@ fun PlaylistDetailScaffold(
                 .fillMaxSize()
                 .glassRoot(glassState, isActive = { morph.value > 0.01f || pillNeedsGlass.value })
         ) {
-            if (showCover) {
+            if (effectiveShowCover) {
                 PlaylistCoverBackdrop(
                     coverUrl = coverUrl,
                     cover = cover,
                     coverHeight = coverHeight,
+                    scrollProgress = { scrollProgress.value },
+                    background = background,
+                )
+            } else if (classicBackdrop) {
+                PlaylistClassicBackdrop(
+                    coverUrl = coverUrl,
+                    cover = cover,
+                    height = classicHeaderHeight,
                     scrollProgress = { scrollProgress.value },
                     background = background,
                 )
@@ -390,12 +437,13 @@ fun PlaylistDetailScaffold(
                 onBackLongClick = onBackLongClick,
                 onMoreClick = onMoreClick,
                 onMiniCoverClick = { scope.launch { lazyListState.animateScrollToItem(0) } },
-                roundCapsule = roundCapsule,
+                roundCapsule = effectiveRoundCapsule,
                 mode = modeBar,
             )
         }
 
         overlay()
+    }
     }
 }
 
@@ -493,6 +541,86 @@ private fun PlaylistCoverBackdrop(
                     onDrawBehind {
                         drawRect(top, size = Size(size.width, size.height * 0.24f))
                         drawRect(bottom)
+                    }
+                }
+        )
+    }
+}
+
+// a little closer when the page opens, settling back as it lands
+private const val ClassicBackdropOpenZoom = 1.12f
+private const val ClassicBackdropScrollZoom = 0.22f
+
+// the squared style's backdrop: its own cover blurred big behind the square, fading down into the page colour and zooming as it scrolls away
+@Composable
+private fun PlaylistClassicBackdrop(
+    coverUrl: String?,
+    cover: (@Composable (Modifier) -> Unit)?,
+    height: Dp,
+    scrollProgress: () -> Float,
+    background: State<Color>,
+) {
+    val context = LocalContext.current
+    // blurred once, tiny and off the main thread; stretched over the band it's a heavy blur for almost nothing, on every android version
+    val request = remember(coverUrl) {
+        ImageRequest.Builder(context)
+            .data(coverUrl?.resize(544, 544))
+            .size(96)
+            .transformations(BackdropBlurTransformation(radiusPx = 6))
+            .build()
+    }
+    val settle = remember { Animatable(ClassicBackdropOpenZoom) }
+    LaunchedEffect(Unit) { settle.animateTo(1f, tween(1100, easing = FastOutSlowInEasing)) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .graphicsLayer {
+                val p = scrollProgress()
+                translationY = -p * size.height * CoverFollow
+                val zoom = settle.value + p * ClassicBackdropScrollZoom
+                scaleX = zoom
+                scaleY = zoom
+                transformOrigin = TransformOrigin(0.5f, 0.35f)
+            }
+            .drawWithContent {
+                drawContent()
+                // fading it by laying the page's own colour over it keeps it one layer, no offscreen pass while scrolling
+                val fade = smoothstep(0.2f, 0.85f, scrollProgress())
+                if (fade > 0f) drawRect(background.value.copy(alpha = fade))
+            },
+    ) {
+        if (cover != null) {
+            cover(Modifier.fillMaxSize())
+        } else {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .drawWithCache {
+                    val bg = background.value
+                    val top = Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.3f),
+                        1f to Color.Transparent,
+                        endY = size.height * 0.25f,
+                    )
+                    // tinted a touch all the way down so the sharp square stands off it, then sinking into the page
+                    val bottom = Brush.verticalGradient(
+                        0f to bg.copy(alpha = 0.18f),
+                        0.5f to bg.copy(alpha = 0.4f),
+                        0.85f to bg.copy(alpha = 0.92f),
+                        1f to bg,
+                    )
+                    onDrawBehind {
+                        drawRect(bottom)
+                        drawRect(top, size = Size(size.width, size.height * 0.25f))
                     }
                 }
         )
@@ -779,6 +907,11 @@ fun PlaylistHeader(
     compact: Boolean = false,
     below: (@Composable () -> Unit)? = null,
 ) {
+    val playlistStyle by rememberEnumPreference(PlaylistStyleKey, defaultValue = PlaylistStyle.FLOW)
+    val framedCover = LocalPlaylistFramedCover.current
+    val useMinimal = compact || playlistStyle == PlaylistStyle.MINIMAL
+    val useClassic = !compact && playlistStyle == PlaylistStyle.CLASSIC
+
     val body: @Composable () -> Unit = {
         Column(
             modifier = Modifier.padding(
@@ -787,9 +920,27 @@ fun PlaylistHeader(
                 bottom = 14.dp,
             )
         ) {
+            if (useClassic && framedCover != null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 22.dp),
+                ) {
+                    val shape = RoundedCornerShape(HomeCardCornerRadius)
+                    Box(
+                        modifier = Modifier
+                            .size(playlistClassicCoverSize())
+                            .clip(shape)
+                            .background(BoneColor),
+                    ) {
+                        framedCover(Modifier.fillMaxSize())
+                    }
+                }
+            }
             Text(
                 text = title,
-                style = if (compact) PlaylistCompactTitleStyle else PlaylistTitleStyle,
+                style = if (useMinimal) PlaylistCompactTitleStyle else PlaylistTitleStyle,
                 color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -843,7 +994,7 @@ fun PlaylistHeader(
         }
     }
 
-    if (compact) {
+    if (useMinimal || useClassic) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
@@ -872,6 +1023,14 @@ fun playlistCompactHeaderTop(): Dp =
 /** a compact header's rough height, for [PlaylistDetailScaffold]'s headerHeight */
 @Composable
 fun playlistCompactHeaderHeight(): Dp = playlistCompactHeaderTop() + 120.dp
+
+// the squared style's cover, most of the screen's width so it reads as the page's picture and not a thumbnail
+@Composable
+private fun playlistClassicCoverSize(): Dp = (LocalConfiguration.current.screenWidthDp * 0.72f).dp.coerceAtMost(340.dp)
+
+// the squared style's header: the cover, the gap under it and the title block
+@Composable
+private fun playlistClassicHeaderHeight(): Dp = playlistCompactHeaderTop() + playlistClassicCoverSize() + 22.dp + 120.dp
 
 internal val PlaylistCompactTitleStyle = TextStyle(
     fontFamily = InterFontFamily,

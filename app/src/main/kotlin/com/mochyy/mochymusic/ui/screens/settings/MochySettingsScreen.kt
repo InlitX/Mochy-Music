@@ -87,10 +87,15 @@ private val SettingsIndex = listOf(
     SettingsEntry("Blur", "Appearance", "appearance_settings", "blur glass performance lag strength"),
     SettingsEntry("Animation", "Appearance", "appearance_settings", "element blur animator transition animation"),
 
-    // Gesture
-    SettingsEntry("Gesture", "Gesture", "gesture_settings", "swipe slide song list left right queue library add remove"),
-    SettingsEntry("Swipe right", "Gesture", "gesture_settings", "slide song list queue library add remove action"),
-    SettingsEntry("Swipe left", "Gesture", "gesture_settings", "slide song list queue library add remove action"),
+    // Customisation
+    SettingsEntry("Customisation", "Customisation", "customisation_settings", "customize cover rounding playlist player home styles gesture swipe"),
+    SettingsEntry("Cover rounding", "Customisation", "customisation_settings", "square rounded corner radius px thumbnail art"),
+    SettingsEntry("Playlist styles", "Customisation", "customisation_settings", "flow classic minimal header layout"),
+    SettingsEntry("Player styles", "Customisation", "customisation_settings", "flagship turntable ipod poster timeline lyrics studio"),
+    SettingsEntry("Home styles", "Customisation", "customisation_settings", "mochyy listen now hop in hero layout grid"),
+    SettingsEntry("Gesture", "Customisation", "customisation_settings", "swipe slide song list left right queue library download play next playlist details"),
+    SettingsEntry("Swipe right", "Customisation", "customisation_settings", "slide song list queue library download play next playlist details action"),
+    SettingsEntry("Swipe left", "Customisation", "customisation_settings", "slide song list queue library download play next playlist details action"),
 
     // Audio Lab
     SettingsEntry("Audio Lab", "Audio Lab", "audio_lab", "sound effects equalizer fx quality"),
@@ -430,9 +435,9 @@ fun MochySettingsScreen(navController: NavController) {
                         )
 
                         CategoryBubble(
-                            title = "Gesture",
-                            iconRes = R.drawable.swipe,
-                            onClick = { navController.navigate("gesture_settings") }
+                            title = "Customisation",
+                            iconRes = R.drawable.palette,
+                            onClick = { navController.navigate("customisation_settings") }
                         )
 
                         CategoryBubble(

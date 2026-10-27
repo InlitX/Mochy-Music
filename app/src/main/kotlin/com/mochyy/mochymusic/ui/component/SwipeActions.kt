@@ -71,14 +71,22 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.offline.DownloadService
 import com.mochyy.mochymusic.LocalDatabase
+import com.mochyy.mochymusic.LocalDownloadUtil
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.db.entities.SongEntity
+import com.mochyy.mochymusic.extensions.metadata
 import com.mochyy.mochymusic.importer.ImportSource
 import com.mochyy.mochymusic.models.toMediaMetadata
+import com.mochyy.mochymusic.playback.ExoDownloadService
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
+import com.mochyy.mochymusic.ui.utils.ShowMediaInfo
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
 import kotlinx.coroutines.CoroutineScope
@@ -99,12 +107,18 @@ class SwipeAction(
     @DrawableRes val icon: Int,
     val color: Color,
     val label: String,
+    val mediaItem: (() -> MediaItem)? = null,
     val onTrigger: () -> Unit,
 )
 
 /** queueing a song is green, saving it or taking it out of your playlist is purple (whichever side it's on) */
 val SwipeQueueColor = Color(0xFF34C759)
 val SwipeSaveColor = Color(0xFF9B72F2)
+// each extra gesture option gets its own colour so you can tell what you armed before letting go
+val SwipeDownloadColor = Color(0xFF0A84FF)
+val SwipePlayNextColor = Color(0xFFFF9F0A)
+val SwipePlaylistColor = Color(0xFFFF375F)
+val SwipeDetailsColor = Color(0xFF5AC8FA)
 
 /** for a swipe that takes music out of the library for good, like removing an import */
 val SwipeRemoveColor = Color(0xFFFF453A)
@@ -436,15 +450,104 @@ internal fun BoxScope.SwipePill(
 /** the queue swipe on a song: straight onto the end of the queue */
 @Composable
 fun queueSwipeAction(mediaItem: () -> MediaItem): SwipeAction {
-    val context = LocalContext.current
     val playerConnection = LocalPlayerConnection.current
     return SwipeAction(
         icon = SongSwipeAction.Queue.icon,
         color = SongSwipeAction.Queue.color,
         label = stringResource(SongSwipeAction.Queue.pillLabel),
+        mediaItem = mediaItem,
     ) {
         // PlayerConnection says "Added to Queue" itself
         playerConnection?.addToQueue(mediaItem())
+    }
+}
+
+// download or remove download when swiping a song row
+@Composable
+fun downloadSwipeAction(mediaItem: (() -> MediaItem)?): SwipeAction {
+    val context = LocalContext.current
+    val database = LocalDatabase.current
+    val downloadUtil = LocalDownloadUtil.current
+    val item = remember(mediaItem) { mediaItem?.invoke() }
+    val download by remember(downloadUtil, item?.mediaId) {
+        if (item != null) downloadUtil.getDownload(item.mediaId) else kotlinx.coroutines.flow.flowOf(null)
+    }.collectAsState(initial = null)
+    val isDownloaded = download?.state == Download.STATE_COMPLETED || download?.state == Download.STATE_DOWNLOADING
+    return SwipeAction(
+        icon = if (isDownloaded) R.drawable.offline else SongSwipeAction.Download.icon,
+        color = SongSwipeAction.Download.color,
+        label = stringResource(if (isDownloaded) R.string.remove_download else SongSwipeAction.Download.pillLabel),
+        mediaItem = mediaItem,
+    ) {
+        val target = mediaItem?.invoke() ?: return@SwipeAction
+        val title = target.mediaMetadata.title?.toString().orEmpty()
+        val thumb = target.mediaMetadata.artworkUri?.toString()
+        if (isDownloaded) {
+            DownloadService.sendRemoveDownload(context, ExoDownloadService::class.java, target.mediaId, false)
+            TopToaster.show(text = context.getString(R.string.remove_download), thumbnail = thumb, iconRes = R.drawable.offline)
+        } else {
+            target.metadata?.let { meta -> database.query { insert(meta) } }
+            val request = DownloadRequest.Builder(target.mediaId, target.mediaId.toUri())
+                .setCustomCacheKey(target.mediaId)
+                .setData(title.toByteArray())
+                .build()
+            DownloadService.sendAddDownload(context, ExoDownloadService::class.java, request, false)
+            TopToaster.show(text = "${context.getString(R.string.downloading)} ${title.ifBlank { "song" }}", thumbnail = thumb, iconRes = R.drawable.download)
+        }
+    }
+}
+
+// line the song up right after whatever is playing now
+@Composable
+fun playNextSwipeAction(mediaItem: (() -> MediaItem)?): SwipeAction {
+    val playerConnection = LocalPlayerConnection.current
+    return SwipeAction(
+        icon = SongSwipeAction.PlayNext.icon,
+        color = SongSwipeAction.PlayNext.color,
+        label = stringResource(SongSwipeAction.PlayNext.pillLabel),
+        mediaItem = mediaItem,
+    ) {
+        val target = mediaItem?.invoke() ?: return@SwipeAction
+        playerConnection?.playNext(target)
+        TopToaster.show(
+            text = "Playing ${target.mediaMetadata.title ?: "song"} next",
+            thumbnail = target.mediaMetadata.artworkUri?.toString(),
+            iconRes = R.drawable.playlist_play,
+        )
+    }
+}
+
+// open the playlist picker sheet for the swiped song
+@Composable
+fun addToPlaylistSwipeAction(
+    mediaItem: (() -> MediaItem)?,
+    onOpenDialog: (MediaItem) -> Unit,
+): SwipeAction = SwipeAction(
+    icon = SongSwipeAction.AddToPlaylist.icon,
+    color = SongSwipeAction.AddToPlaylist.color,
+    label = stringResource(SongSwipeAction.AddToPlaylist.pillLabel),
+    mediaItem = mediaItem,
+) {
+    val target = mediaItem?.invoke() ?: return@SwipeAction
+    onOpenDialog(target)
+}
+
+// open the media details sheet for the swiped song
+@Composable
+fun detailsSwipeAction(mediaItem: (() -> MediaItem)?): SwipeAction {
+    val database = LocalDatabase.current
+    val bottomSheetPageState = LocalBottomSheetPageState.current
+    return SwipeAction(
+        icon = SongSwipeAction.Details.icon,
+        color = SongSwipeAction.Details.color,
+        label = stringResource(SongSwipeAction.Details.pillLabel),
+        mediaItem = mediaItem,
+    ) {
+        val target = mediaItem?.invoke() ?: return@SwipeAction
+        target.metadata?.let { meta -> database.query { insert(meta) } }
+        bottomSheetPageState.show {
+            ShowMediaInfo(target.mediaId)
+        }
     }
 }
 

@@ -5,19 +5,27 @@ package com.mochyy.mochymusic.ui.component
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
+import androidx.media3.common.MediaItem
+import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.SwipeLeftActionKey
 import com.mochyy.mochymusic.constants.SwipeRightActionKey
+import com.mochyy.mochymusic.extensions.metadata
+import com.mochyy.mochymusic.ui.menu.AddToPlaylistDialog
 import com.mochyy.mochymusic.utils.rememberEnumPreference
+import com.music.innertube.YouTube
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
-/**
- * What sliding a song can do. Settings > Gesture picks one for each side. [title] names it in
- * that page; the rest is how its pill looks while you slide ([pillLabel] is the "add" wording,
- * since the library one flips to "remove" for a song that's already saved).
- */
+// what sliding a song row can do, picked per side in Settings > Customisation
 enum class SongSwipeAction(
     val title: String,
     @DrawableRes val icon: Int,
@@ -26,20 +34,15 @@ enum class SongSwipeAction(
 ) {
     Library("Add or remove from library", R.drawable.library_add, SwipeSaveColor, R.string.add_to_library),
     Queue("Add to queue", R.drawable.queue_music, SwipeQueueColor, R.string.add_to_queue),
+    Download("Download", R.drawable.download, SwipeDownloadColor, R.string.action_download),
+    PlayNext("Play next", R.drawable.playlist_play, SwipePlayNextColor, R.string.play_next),
+    AddToPlaylist("Add to playlist", R.drawable.playlist_add, SwipePlaylistColor, R.string.add_to_playlist),
+    Details("View details", R.drawable.info, SwipeDetailsColor, R.string.details),
 }
 
-/** Out of the box, sliding right saves the song and sliding left queues it. */
 val DefaultSwipeRight = SongSwipeAction.Library
 val DefaultSwipeLeft = SongSwipeAction.Queue
 
-/**
- * A song row you can slide, with the action on each side taken from Settings > Gesture.
- *
- * Callers say what each action means for their row: [library] may be "add to library", "take out
- * of this playlist" or "remove this import", and [queue] puts the song on the queue. This picks
- * which of the two shows on which side. Nothing is read from settings until a side is actually
- * pulled out, so a long list pays nothing for it.
- */
 @Composable
 fun SongSwipeBox(
     modifier: Modifier = Modifier,
@@ -49,12 +52,53 @@ fun SongSwipeBox(
     queue: @Composable () -> SwipeAction,
     content: @Composable () -> Unit,
 ) {
+    var playlistTarget by remember { mutableStateOf<MediaItem?>(null) }
+
+    if (playlistTarget != null) {
+        val target = playlistTarget!!
+        val database = LocalDatabase.current
+        val scope = rememberCoroutineScope()
+        AddToPlaylistDialog(
+            isVisible = true,
+            onGetSong = { playlist ->
+                target.metadata?.let { meta ->
+                    database.withTransaction { insert(meta) }
+                }
+                scope.launch(Dispatchers.IO) {
+                    playlist.playlist.browseId?.let { browseId ->
+                        YouTube.addToPlaylist(browseId, target.mediaId)
+                    }
+                }
+                listOf(target.mediaId)
+            },
+            onDismiss = { playlistTarget = null },
+            topSongId = target.mediaId,
+            topSongArtworkUrl = target.mediaMetadata.artworkUri?.toString(),
+        )
+    }
+
     SwipeActionsBox(
         modifier = modifier,
         enabled = enabled,
         slab = slab,
-        start = { chosenSwipeAction(SwipeRightActionKey, DefaultSwipeRight, library, queue) },
-        end = { chosenSwipeAction(SwipeLeftActionKey, DefaultSwipeLeft, library, queue) },
+        start = {
+            chosenSwipeAction(
+                key = SwipeRightActionKey,
+                default = DefaultSwipeRight,
+                library = library,
+                queue = queue,
+                onOpenPlaylistDialog = { playlistTarget = it },
+            )
+        },
+        end = {
+            chosenSwipeAction(
+                key = SwipeLeftActionKey,
+                default = DefaultSwipeLeft,
+                library = library,
+                queue = queue,
+                onOpenPlaylistDialog = { playlistTarget = it },
+            )
+        },
         content = content,
     )
 }
@@ -65,10 +109,15 @@ private fun chosenSwipeAction(
     default: SongSwipeAction,
     library: @Composable () -> SwipeAction,
     queue: @Composable () -> SwipeAction,
+    onOpenPlaylistDialog: (MediaItem) -> Unit,
 ): SwipeAction {
     val (chosen) = rememberEnumPreference(key, defaultValue = default)
     return when (chosen) {
         SongSwipeAction.Library -> library()
         SongSwipeAction.Queue -> queue()
+        SongSwipeAction.Download -> downloadSwipeAction(queue().mediaItem)
+        SongSwipeAction.PlayNext -> playNextSwipeAction(queue().mediaItem)
+        SongSwipeAction.AddToPlaylist -> addToPlaylistSwipeAction(queue().mediaItem, onOpenPlaylistDialog)
+        SongSwipeAction.Details -> detailsSwipeAction(queue().mediaItem)
     }
 }

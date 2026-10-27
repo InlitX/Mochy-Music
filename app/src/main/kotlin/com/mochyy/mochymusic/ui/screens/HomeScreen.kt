@@ -122,6 +122,8 @@ import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.models.YTItem
+import com.mochyy.mochymusic.constants.HomeStyle
+import com.mochyy.mochymusic.constants.HomeStyleKey
 import com.mochyy.mochymusic.constants.ProfilePicUriKey
 import com.mochyy.mochymusic.constants.ThumbnailCornerRadius
 import com.mochyy.mochymusic.db.entities.Album
@@ -145,7 +147,9 @@ import com.mochyy.mochymusic.ui.component.HomeCardCornerRadius
 import com.mochyy.mochymusic.ui.component.HomeCardSpacing
 import com.mochyy.mochymusic.ui.component.HomeContentInset
 import com.mochyy.mochymusic.ui.component.HomeCardHighlight
+import com.mochyy.mochymusic.ui.component.HomeCompactTopBones
 import com.mochyy.mochymusic.ui.component.HomeCoverCard
+import com.mochyy.mochymusic.ui.component.HomeHopInCard
 import com.mochyy.mochymusic.ui.component.homeRowHeight
 import com.mochyy.mochymusic.ui.component.HomeSectionBones
 import com.mochyy.mochymusic.ui.component.HeroCarouselBones
@@ -159,6 +163,7 @@ import com.mochyy.mochymusic.ui.component.HomeVideoCard
 import com.mochyy.mochymusic.utils.ArtistVideos
 import com.mochyy.mochymusic.utils.FeedVideoKind
 import com.mochyy.mochymusic.utils.HomeVideo
+import com.mochyy.mochymusic.utils.rememberEnumPreference
 import com.mochyy.mochymusic.viewmodels.HomeCategory
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -539,6 +544,7 @@ private val HomeTopBarRise = 16.dp
  */
 @Composable
 private fun HomeShell() {
+    val homeStyle by rememberEnumPreference(HomeStyleKey, defaultValue = HomeStyle.MOCHYY)
     val profilePicUri by rememberPreference(ProfilePicUriKey, "")
     val profileImageUrl = profilePicUri
         .takeIf { it.isNotBlank() }
@@ -546,7 +552,15 @@ private fun HomeShell() {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            HeroCarouselBones(modifier = Modifier.launchRise(order = 1))
+            if (homeStyle == HomeStyle.MOCHYY) {
+                HeroCarouselBones(modifier = Modifier.launchRise(order = 1))
+            } else {
+                Spacer(Modifier.height(WindowInsets.stableSystemBars.asPaddingValues().calculateTopPadding() + 82.dp))
+                BonesHost(modifier = Modifier.launchRise(order = 1)) {
+                    HomeCompactTopBones(isHopIn = homeStyle == HomeStyle.HOP_IN)
+                }
+                Spacer(Modifier.height(34.dp))
+            }
             BonesHost(modifier = Modifier.launchRise(order = 2)) {
                 repeat(2) {
                     HomeSectionBones()
@@ -744,8 +758,32 @@ fun HomeScreen(
             .distinctBy { it.id }
     }
 
+    val startListeningGridState = rememberTrackGridState()
     val quickPicksLazyGridState = rememberTrackGridState()
     val forgottenFavoritesLazyGridState = rememberTrackGridState()
+    val homeStyle by rememberEnumPreference(HomeStyleKey, defaultValue = HomeStyle.MOCHYY)
+
+    val startListeningSongs = remember(keepListening, recentHistorySongs, mostPlayedSongsForHome, forgottenFavorites) {
+        buildList<Song> {
+            keepListening?.filterIsInstance<Song>()?.forEach { add(it) }
+            recentHistorySongs?.forEach { add(it) }
+            mostPlayedSongsForHome?.forEach { add(it) }
+            forgottenFavorites?.forEach { add(it) }
+        }
+            .distinctBy { it.id }
+            .take(18)
+    }
+
+    val hopInLocalItems = remember(recentlyPlayed, keepListening, localPlaylists, mostPlayedSongsForHome) {
+        buildList<LocalItem> {
+            recentlyPlayed?.forEach { add(it) }
+            keepListening?.forEach { add(it) }
+            localPlaylists?.filter { it.songCount > 0 }?.forEach { add(it) }
+            mostPlayedSongsForHome?.forEach { add(it) }
+        }
+            .distinctBy { "${it.javaClass.simpleName}_${it.id}" }
+            .take(6)
+    }
 
     val accountName by viewModel.accountName.collectAsState()
     val accountImageUrl by viewModel.accountImageUrl.collectAsState()
@@ -773,20 +811,22 @@ fun HomeScreen(
 
     val configuration = LocalConfiguration.current
     val carouselHeightDp = (configuration.screenHeightDp * HeroHeightFraction).dp
-    val carouselHeightPx = with(LocalDensity.current) { carouselHeightDp.toPx() }
+    val collapseDistancePx = with(LocalDensity.current) {
+        if (homeStyle == HomeStyle.MOCHYY) carouselHeightDp.toPx() else 140.dp.toPx()
+    }
 
-    val firstItemScrollOffset by remember {
+    val firstItemScrollOffset by remember(collapseDistancePx) {
         derivedStateOf {
             if (lazylistState.firstVisibleItemIndex == 0) {
                 lazylistState.firstVisibleItemScrollOffset.toFloat()
             } else {
-                carouselHeightPx
+                collapseDistancePx
             }
         }
     }
-    val heroScrollProgress by remember {
+    val heroScrollProgress by remember(collapseDistancePx) {
         derivedStateOf {
-            (firstItemScrollOffset / carouselHeightPx).coerceIn(0f, 1f)
+            (firstItemScrollOffset / collapseDistancePx).coerceIn(0f, 1f)
         }
     }
 
@@ -1229,6 +1269,81 @@ fun HomeScreen(
             // a video banner is 314 of 402, so the next one peeks in the same way
             val videoCardWidth = minOf(maxWidth * 0.78f, 340.dp)
             val videoRowCard: @Composable (HomeVideo) -> Unit = { video -> videoCard(video, videoCardWidth) }
+            val hopInColumns = if (maxWidth >= 600.dp) 3 else 2
+
+            val hopInCard: @Composable (LocalItem, Modifier) -> Unit = { localItem, cardModifier ->
+                val (onClick, onLongClick) = when (localItem) {
+                    is Song -> Pair<() -> Unit, () -> Unit>({ playSong(localItem) }, { showSongMenu(localItem) })
+                    is Album -> Pair<() -> Unit, () -> Unit>(
+                        { navController.navigate("album/${localItem.id}") },
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                AlbumMenu(originalAlbum = localItem, navController = navController, onDismiss = menuState::dismiss)
+                            }
+                        }
+                    )
+                    is Artist -> Pair<() -> Unit, () -> Unit>(
+                        { navController.navigate("artist/${localItem.id}") },
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                ArtistMenu(originalArtist = localItem, coroutineScope = scope, onDismiss = menuState::dismiss)
+                            }
+                        }
+                    )
+                    is Playlist -> Pair<() -> Unit, () -> Unit>(
+                        { openLocalPlaylist(localItem.id) },
+                        { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+                    )
+                }
+                val playlist = localItem as? Playlist
+                HomeHopInCard(
+                    title = localItem.title,
+                    subtitle = when (localItem) {
+                        is Song -> localItem.artists.joinToString(", ") { it.name }
+                        is Album -> localItem.artists.joinToString(", ") { it.name }
+                        is Playlist -> pluralStringResource(R.plurals.n_song, localItem.songCount, localItem.songCount)
+                        is Artist -> null
+                    },
+                    thumbnailUrl = playlist?.thumbnails?.firstOrNull() ?: localItem.thumbnailUrl,
+                    isActive = when (localItem) {
+                        is Song -> localItem.id == mediaMetadataState.value?.id
+                        is Album -> localItem.id == mediaMetadataState.value?.album?.id
+                        else -> false
+                    },
+                    isPlaying = isPlayingNow,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    sharedElementKey = when (localItem) {
+                        is Album -> "album-${localItem.id}"
+                        is Playlist -> "playlist-${localItem.id}"
+                        else -> null
+                    },
+                    cover = when {
+                        playlist == null -> null
+                        playlist.id == "liked" -> { size, shape ->
+                            LikedSongsThumbnail(size = size, shape = shape)
+                        }
+                        else -> { size, shape ->
+                            PlaylistThumbnail(
+                                thumbnails = playlist.thumbnails,
+                                size = size,
+                                shape = shape,
+                                placeHolder = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.queue_music),
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(size / 3)
+                                    )
+                                },
+                            )
+                        }
+                    },
+                    modifier = cardModifier,
+                )
+            }
 
             val homeGlassState = remember { GlassState() }
 
@@ -1250,24 +1365,87 @@ fun HomeScreen(
                             bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
                         )
                     ) {
-                item(key = "hero", contentType = "hero") {
-                    HeroCarousel(
-                        keepListening = keepListening,
-                        lastPlayedSong = mediaMetadataState.value ?: lastPlayedSong,
-                        dailyDiscover = dailyDiscover,
-                        playerConnection = playerConnection,
-                        navController = navController,
-                        heroScrollProgressProvider = heroScrollProgressProvider,
-                        isLoading = isFirstLoad || starterSongs == null,
-                        hold = launchHold,
-                        gachaPool = gachaPool,
-                        starterItems = starterItems,
-                        playlistPicks = playlistPicks,
-                        similarRecommendations = similarRecommendations,
-                        onRepeat = mostPlayedSongsForHome,
-                        forgottenFavorites = forgottenFavorites,
-                        modifier = Modifier.launchRise(order = 1),
-                    )
+                when (homeStyle) {
+                    HomeStyle.MOCHYY -> {
+                        item(key = "hero", contentType = "hero") {
+                            HeroCarousel(
+                                keepListening = keepListening,
+                                lastPlayedSong = mediaMetadataState.value ?: lastPlayedSong,
+                                dailyDiscover = dailyDiscover,
+                                playerConnection = playerConnection,
+                                navController = navController,
+                                heroScrollProgressProvider = heroScrollProgressProvider,
+                                isLoading = isFirstLoad || starterSongs == null,
+                                hold = launchHold,
+                                gachaPool = gachaPool,
+                                starterItems = starterItems,
+                                playlistPicks = playlistPicks,
+                                similarRecommendations = similarRecommendations,
+                                onRepeat = mostPlayedSongsForHome,
+                                forgottenFavorites = forgottenFavorites,
+                                modifier = Modifier.launchRise(order = 1),
+                            )
+                        }
+                    }
+                    HomeStyle.LISTEN_NOW -> {
+                        item(key = "hero_listen_now", contentType = "hero_compact") {
+                            Column(modifier = Modifier.launchRise(order = 1)) {
+                                Spacer(Modifier.height(WindowInsets.stableSystemBars.asPaddingValues().calculateTopPadding() + 78.dp))
+                                if (launchHold || (isFirstLoad && startListeningSongs.isEmpty())) {
+                                    BonesHost {
+                                        HomeCompactTopBones(isHopIn = false)
+                                    }
+                                } else if (startListeningSongs.isNotEmpty()) {
+                                    HomeSectionTitle(title = "Start listening now")
+                                    HomeTrackGrid(
+                                        items = startListeningSongs,
+                                        state = startListeningGridState,
+                                        rowSpacing = 6.dp,
+                                        columnWidth = trackColumnWidth,
+                                        key = { _, song -> "listen_now_${song.id}" },
+                                        content = trackRow,
+                                    )
+                                }
+                                Spacer(Modifier.height(34.dp))
+                            }
+                        }
+                    }
+                    HomeStyle.HOP_IN -> {
+                        item(key = "hero_hop_in", contentType = "hero_compact") {
+                            Column(modifier = Modifier.launchRise(order = 1)) {
+                                Spacer(Modifier.height(WindowInsets.stableSystemBars.asPaddingValues().calculateTopPadding() + 78.dp))
+                                if (launchHold || (isFirstLoad && hopInLocalItems.isEmpty())) {
+                                    BonesHost {
+                                        HomeCompactTopBones(isHopIn = true)
+                                    }
+                                } else if (hopInLocalItems.isNotEmpty()) {
+                                    HomeSectionTitle(title = "Hop in")
+                                    val visibleItems = hopInLocalItems.take(hopInColumns * 2)
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = HomeContentInset),
+                                    ) {
+                                        visibleItems.chunked(hopInColumns).forEach { rowItems ->
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                rowItems.forEach { item ->
+                                                    hopInCard(item, Modifier.weight(1f))
+                                                }
+                                                repeat(hopInColumns - rowItems.size) {
+                                                    Spacer(Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(34.dp))
+                            }
+                        }
+                    }
                 }
 
                 // nothing but bones while the launch intro plays; the rows reveal once it lands

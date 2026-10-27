@@ -404,7 +404,7 @@ fun HomeTrackRow(
     modifier: Modifier = Modifier,
     rank: Int? = null,
     /** The cover's outline: Home's rounded square, or a circle for an artist. */
-    coverShape: Shape = HomeRowShape,
+    coverShape: Shape = RoundedCornerShape((HomeCardCornerRadius * 0.56f).coerceIn(0.dp, 20.dp)),
     /** Applied to the cover itself, e.g. to open a playlist growing out of it. */
     coverModifier: Modifier = Modifier,
     /** A song's id: marks the row when the song is downloaded or an imported file. */
@@ -428,7 +428,7 @@ fun HomeTrackRow(
     onMoreClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     rank: Int? = null,
-    coverShape: Shape = HomeRowShape,
+    coverShape: Shape = RoundedCornerShape((HomeCardCornerRadius * 0.56f).coerceIn(0.dp, 20.dp)),
     coverModifier: Modifier = Modifier,
     songId: String? = null,
 ) {
@@ -538,6 +538,140 @@ fun HomeSectionBones(modifier: Modifier = Modifier) {
                     Bone(width = size * 0.62f, height = 15.dp)
                     Spacer(Modifier.height(3.dp))
                     Bone(width = size * 0.28f, height = 11.dp)
+                }
+            }
+        }
+    }
+}
+
+private val HopInCardBg = Color(0xFF1A1A1C)
+val HopInCardHeight = 60.dp
+
+// compact horizontal pill card used in the hop in 2x2 speed-dial grid at the top of home
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun HomeHopInCard(
+    title: String,
+    subtitle: String?,
+    thumbnailUrl: String?,
+    isActive: Boolean,
+    isPlaying: () -> Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    sharedElementKey: String? = null,
+    cover: (@Composable (Dp, Shape) -> Unit)? = null,
+) {
+    val radius = (HomeCardCornerRadius * 0.65f).coerceIn(0.dp, 18.dp)
+    val shape = RoundedCornerShape(radius)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .height(HopInCardHeight)
+            .clip(shape)
+            .background(HopInCardBg)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(HopInCardHeight)
+                .homeSharedElement(sharedElementKey, coverUrl = thumbnailUrl)
+                .clip(shape)
+                .background(BoneColor),
+        ) {
+            if (cover != null) {
+                cover(HopInCardHeight, shape)
+            } else {
+                ItemThumbnail(
+                    thumbnailUrl = thumbnailUrl,
+                    isActive = isActive,
+                    isPlaying = isPlaying,
+                    shape = shape,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 11.dp),
+        ) {
+            Text(
+                text = title,
+                style = HomeCardTitleStyle.copy(fontSize = 13.5.sp, lineHeight = 16.sp),
+                color = Color.White.copy(alpha = 0.94f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!subtitle.isNullOrEmpty()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = HomeCardSubtitleStyle.copy(fontSize = 11.sp, lineHeight = 13.sp),
+                    color = Color.White.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+// skeleton bones for the compact listen-now or hop-in top section while home loads
+@Composable
+fun HomeCompactTopBones(
+    isHopIn: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val radius = (HomeCardCornerRadius * 0.65f).coerceIn(0.dp, 18.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = HomeContentInset),
+    ) {
+        Bone(width = 148.dp, height = 16.dp)
+        Spacer(Modifier.height(14.dp))
+        if (isHopIn) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                repeat(2) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        repeat(2) {
+                            Bone(
+                                width = 154.dp,
+                                height = HopInCardHeight,
+                                shape = RoundedCornerShape(radius),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(3) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.height(HomeRowHeight),
+                    ) {
+                        Bone(
+                            width = HomeRowHeight,
+                            height = HomeRowHeight,
+                            shape = RoundedCornerShape(radius),
+                        )
+                        Spacer(Modifier.width(13.dp))
+                        Column {
+                            Bone(width = 140.dp, height = 14.dp)
+                            Spacer(Modifier.height(6.dp))
+                            Bone(width = 88.dp, height = 11.dp)
+                        }
+                    }
                 }
             }
         }

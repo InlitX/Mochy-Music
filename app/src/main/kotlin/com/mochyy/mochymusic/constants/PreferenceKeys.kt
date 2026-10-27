@@ -49,9 +49,27 @@ val SliderStyleKey = stringPreferencesKey("sliderStyle")
 val SquigglySliderKey = booleanPreferencesKey("squigglySlider")
 val SwipeToSongKey = booleanPreferencesKey("SwipeToSong")
 val SwipeToRemoveSongKey = booleanPreferencesKey("SwipeToRemoveSong")
-// what sliding a song does, per side (Settings > Gesture); the names are SongSwipeAction values
+// what sliding a song does, per side (Settings > Customisation); the names are SongSwipeAction values
 val SwipeRightActionKey = stringPreferencesKey("swipeRightAction")
 val SwipeLeftActionKey = stringPreferencesKey("swipeLeftAction")
+
+// the top layout of the home tab, picked in customisation settings
+enum class HomeStyle(val displayName: String) {
+    MOCHYY("Mochyy"),
+    LISTEN_NOW("Listen now"),
+    HOP_IN("Hop in"),
+}
+
+val HomeStyleKey = stringPreferencesKey("homeStyle")
+
+// how playlist and album headers are laid out at the top of the page
+enum class PlaylistStyle(val displayName: String) {
+    FLOW("Flow"),
+    CLASSIC("Classic"),
+    MINIMAL("Minimal"),
+}
+
+val PlaylistStyleKey = stringPreferencesKey("playlistStyle")
 val UseNewPlayerDesignKey= booleanPreferencesKey("useNewPlayerDesign")
 val UseNewMiniPlayerDesignKey = booleanPreferencesKey("useNewMiniPlayerDesign")
 val AppleMusicDarkChromeKey = booleanPreferencesKey("appleMusicDarkChrome")
