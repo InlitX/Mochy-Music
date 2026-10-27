@@ -545,7 +545,9 @@ enum class PlayerStyle(val displayName: String, val selectorName: String) {
     TURNTABLE("Turntable", "Turntable"),
     POSTER("Poster", "Poster"),
     TIMELINE("Timeline", "Timeline"),
-    LYRICS("Lyrics", "Lyrics stage");
+    LYRICS("Lyrics", "Lyrics stage"),
+    // the ipod classic, click wheel and all, browsing the library from inside the player
+    IPOD("iPod", "iPod");
 
     val editable: Boolean get() = this == DEFAULT || this == TURNTABLE || this == POSTER
 

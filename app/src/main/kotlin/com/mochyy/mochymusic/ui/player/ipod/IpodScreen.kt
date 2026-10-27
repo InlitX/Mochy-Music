@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -232,6 +233,7 @@ fun IpodMenuList(
     val selected = entry.selected
     val scrolls = rows.size > VisibleRows
     val interactive = LocalStyleInteractive.current
+    val tap by rememberUpdatedState(onTapRow)
     Box(
         modifier = modifier.pointerInput(entry, interactive, scale) {
             val rowPx = scale.row.toPx()
@@ -251,7 +253,7 @@ fun IpodMenuList(
                     }
                     if (lifted == true) {
                         val index = entry.first + (down.position.y / rowPx).toInt()
-                        if (index in entry.list.rows.indices) onTapRow(index)
+                        if (index in entry.list.rows.indices) tap(index)
                     }
                 }
             }

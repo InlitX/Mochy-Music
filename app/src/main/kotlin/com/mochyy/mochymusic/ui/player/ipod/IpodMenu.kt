@@ -120,6 +120,15 @@ class IpodNavigator(private val scope: CoroutineScope) {
         return true
     }
 
+    // holding menu goes all the way back to the top in one slide
+    fun backToMain() {
+        if (stack.size <= 1) return
+        leaving = top
+        while (stack.size > 1) stack.removeAt(stack.lastIndex)
+        forward = false
+        play()
+    }
+
     // a song just started, so its screen comes up wherever you picked it from
     fun showNowPlaying() {
         if (top.page != IpodPage.NowPlaying) push(IpodPage.NowPlaying)

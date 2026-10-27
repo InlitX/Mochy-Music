@@ -904,7 +904,8 @@ private fun PlayerSheet(
                     onCoveredChange = { styleCovered = it },
                     onSwitchSource = { showLyricsSource = true },
                 )
-                PlayerHandle(
+                // the ipod has its own chevron on its body, a bar over it would just be in the way
+                if (playerStyle != PlayerStyle.IPOD) PlayerHandle(
                     state = handleState,
                     sheet = state,
                     statusBarTop = statusBarTopInset,
