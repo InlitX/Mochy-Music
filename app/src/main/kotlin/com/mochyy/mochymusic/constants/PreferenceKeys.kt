@@ -178,6 +178,14 @@ enum class DownloadQuality(val title: String, val description: String) {
 
 val AudioOffload = booleanPreferencesKey("enableOffload")
 
+// where the sound goes: a plugged-in usb dac first, its own rate (or bit-perfect) on android 14+, 24-bit kept as float
+val PreferUsbDacKey = booleanPreferencesKey("preferUsbDac")
+val UsbPassthroughKey = booleanPreferencesKey("usbDacPassthrough")
+val HiResOutputKey = booleanPreferencesKey("hiResFloatOutput")
+
+// which service the about sheet's "about" text comes from: "musixmatch" or "youtube"
+val AboutSongSourceKey = stringPreferencesKey("aboutSongSource")
+
 val PersistentQueueKey = booleanPreferencesKey("persistentQueue")
 val PersistentShuffleAcrossQueuesKey = booleanPreferencesKey("persistentShuffleAcrossQueues")
 val RememberShuffleAndRepeatKey = booleanPreferencesKey("rememberShuffleAndRepeat")
