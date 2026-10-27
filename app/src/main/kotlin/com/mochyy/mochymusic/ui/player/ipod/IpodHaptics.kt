@@ -2,6 +2,8 @@ package com.mochyy.mochymusic.ui.player.ipod
 
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.annotation.RequiresApi
@@ -29,14 +31,17 @@ class IpodHaptics(context: Context) {
     // a whole button click in one go, for the ring's buttons that only know they were tapped once the finger lifts
     fun click() = play(pressEffect, 16L)
 
+    // handed to a thread of its own: each buzz is a call into the system, and on miui a fast spin of them stuttered the list
     private fun play(effect: Any?, fallbackMs: Long) {
         val motor = vibrator ?: return
-        runCatching {
-            if (Build.VERSION.SDK_INT >= 26 && effect is VibrationEffect) {
-                motor.vibrate(effect)
-            } else {
-                @Suppress("DEPRECATION")
-                motor.vibrate(fallbackMs)
+        HapticsThread.handler.post {
+            runCatching {
+                if (Build.VERSION.SDK_INT >= 26 && effect is VibrationEffect) {
+                    motor.vibrate(effect)
+                } else {
+                    @Suppress("DEPRECATION")
+                    motor.vibrate(fallbackMs)
+                }
             }
         }
     }
@@ -64,6 +69,14 @@ class IpodHaptics(context: Context) {
     }
 
     private enum class Primitive { TICK, CLICK }
+}
+
+// one small thread for the whole app, started the first time the wheel buzzes
+private object HapticsThread {
+    val handler: Handler by lazy {
+        val thread = HandlerThread("IpodHaptics").apply { start() }
+        Handler(thread.looper)
+    }
 }
 
 @Composable

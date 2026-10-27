@@ -12,12 +12,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -27,13 +26,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -45,7 +42,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -63,7 +59,6 @@ import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlin.math.roundToInt
 
 // the ipod classic as a player: fills a phone edge to edge, sits whole on black on a big screen
 @Composable
@@ -72,6 +67,7 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
     val bars = WindowInsets.stableSystemBars
     val topInset = bars.getTop(density)
     val bottomInset = bars.getBottom(density)
+    val look = rememberIpodLook()
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -81,13 +77,23 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
         val h = constraints.maxHeight.toFloat()
         // a tablet, or a phone on its side, has no room for a full-height ipod, so it gets the whole device instead
         val wholeDevice = minOf(maxWidth, maxHeight) >= 600.dp || maxWidth > maxHeight * 0.62f
-        val geometry = remember(w, h, topInset, bottomInset, wholeDevice) {
-            if (wholeDevice) deviceGeometry(w, h, topInset.toFloat(), bottomInset.toFloat())
-            else phoneGeometry(w, h, topInset.toFloat(), bottomInset.toFloat())
+        val geometry = remember(w, h, topInset, bottomInset, wholeDevice, look.tall) {
+            if (wholeDevice) deviceGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
+            else phoneGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
         }
-        if (!wholeDevice && !preview) DarkStatusIcons()
-        Box(Modifier.fillMaxSize().drawWithCache { onDrawBehind { drawBody(geometry, wholeDevice) } })
-        androidx.compose.material3.ProvideTextStyle(androidx.compose.ui.text.TextStyle(fontFamily = InterFontFamily)) {
+        if (!wholeDevice && !preview && look.body.light) DarkStatusIcons()
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawWithCache {
+                    val paint = IpodBodyPaint(geometry, look)
+                    onDrawBehind { with(paint) { draw(onBlack = wholeDevice) } }
+                },
+        )
+        CompositionLocalProvider(
+            LocalIpodLook provides look,
+            androidx.compose.material3.LocalTextStyle provides androidx.compose.ui.text.TextStyle(fontFamily = InterFontFamily),
+        ) {
             IpodFace(geometry, preview, density)
         }
     }
@@ -97,14 +103,16 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
 private fun IpodFace(geometry: IpodGeometry, preview: Boolean, density: Density) {
     val connection = LocalPlayerConnection.current
     val sheet = LocalPlayerBottomSheetState.current
+    val look = LocalIpodLook.current
     val library: IpodLibraryViewModel? = if (preview) null else hiltViewModel()
     val scope = rememberCoroutineScope()
     val nav = remember(scope) { IpodNavigator(scope) }
     val nowPlaying = remember { IpodNowPlayingState() }
+    val coverFlow = remember(scope) { IpodCoverFlowState(scope) }
     val haptics = rememberIpodHaptics()
     val context = LocalContext.current
-    val controller = remember(nav, nowPlaying, scope, connection, library, haptics, context) {
-        IpodController(nav, nowPlaying, scope, connection, library, context.getSystemService(Context.AUDIO_SERVICE) as AudioManager, haptics)
+    val controller = remember(nav, nowPlaying, coverFlow, scope, connection, library, haptics, context) {
+        IpodController(nav, nowPlaying, coverFlow, scope, connection, library, context.getSystemService(Context.AUDIO_SERVICE) as AudioManager, haptics)
     }
     val showing = rememberStyleShowing()
     val open by remember(sheet) { derivedStateOf { sheet == null || sheet.isExpanded } }
@@ -113,37 +121,41 @@ private fun IpodFace(geometry: IpodGeometry, preview: Boolean, density: Density)
     BarTimeout(nowPlaying)
     Chevron(geometry, sheet, preview, density)
 
-    val screen = geometry.screen
-    val bezel = screen.width * BezelShare
-    val innerW = with(density) { (screen.width - bezel * 2f).toDp() }
-    val innerH = with(density) { (screen.height - bezel * 2f).toDp() }
+    val bezel = with(density) { geometry.bezel.toDp() }
+    val outerCorner = with(density) { geometry.screenCorner.toDp() }
+    val innerW = with(density) { (geometry.screen.width - geometry.bezel * 2f).toDp() }
+    val innerH = with(density) { (geometry.screen.height - geometry.bezel * 2f).toDp() }
     val scale = remember(innerW, innerH, density.fontScale) { IpodScale(innerW, innerH, density.fontScale) }
     Box(
         modifier = Modifier
-            .place(screen, density)
-            .drawBehind { drawRect(Bezel) },
+            .place(geometry.screen, density)
+            .clip(RoundedCornerShape(outerCorner))
+            .background(look.body.bezel),
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .padding(with(density) { bezel.toDp() })
+                .padding(bezel)
                 .fillMaxSize()
-                .background(Color.White)
-                .clipToBounds(),
+                .clip(RoundedCornerShape((outerCorner - bezel).coerceAtLeast(0.dp)))
+                .background(look.screen.background),
         ) {
-            TitleBar(nav, scale)
-            IpodPages(nav, Modifier.fillMaxWidth().weight(1f)) { entry ->
-                IpodPageContent(entry, controller, library, scale, marquee, showing)
+            Column(Modifier.fillMaxSize()) {
+                TitleBar(nav, scale)
+                IpodPages(nav, Modifier.fillMaxWidth().weight(1f)) { entry ->
+                    IpodPageContent(entry, controller, library, scale, marquee, showing)
+                }
+            }
+            // the thin dark edge down the right of the glass, as on the mockup, gone with the shadow
+            if (look.shadow) {
+                Box(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .width(scale.dp(3f))
+                        .background(GlassEdge),
+                )
             }
         }
-        // the thin dark edge down the right of the glass, as on the mockup
-        Box(
-            Modifier
-                .align(Alignment.CenterEnd)
-                .padding(vertical = with(density) { bezel.toDp() }, horizontal = with(density) { bezel.toDp() })
-                .fillMaxHeight()
-                .width(scale.dp(3.5f))
-                .background(GlassEdge),
-        )
     }
 
     IpodClickWheel(
@@ -168,7 +180,7 @@ private fun BarTimeout(nowPlaying: IpodNowPlayingState) {
 @Composable
 private fun TitleBar(nav: IpodNavigator, scale: IpodScale) = IpodHeader(nav.top.page.title, scale)
 
-// one page of the menu tree: its list, the main menu with its slideshow, or now playing
+// one page of the menu tree: a list, the main menu with its slideshow, cover flow or now playing
 @Composable
 private fun IpodPageContent(
     entry: IpodEntry,
@@ -180,6 +192,7 @@ private fun IpodPageContent(
 ) {
     when (entry.page) {
         IpodPage.NowPlaying -> IpodNowPlaying(controller.nowPlaying, scale, marquee)
+        IpodPage.CoverFlow -> IpodCoverFlow(controller.coverFlow, library, scale, showing, controller::tapCoverFlow, controller::tapTrack)
         IpodPage.Main -> Row(Modifier.fillMaxSize()) {
             IpodMenuList(entry, scale, marquee, { controller.tapRow(entry, it) }, Modifier.weight(1f).fillMaxHeight())
             val covers by (library?.covers ?: NoCovers).collectAsState()
@@ -198,7 +211,7 @@ private fun IpodPageContent(
                     if (!shown) return@collectLatest
                     source.list(entry.page).collect {
                         entry.list = it
-                        entry.clamp(VisibleRows)
+                        entry.clamp()
                     }
                 }
             }
@@ -218,7 +231,8 @@ private fun rememberArtwork(): String? {
 @Composable
 private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: Boolean, density: Density) {
     val interactive = LocalStyleInteractive.current
-    val target = with(density) { Rect(Offset(geometry.chevron.x - 32.dp.toPx(), geometry.chevron.y - 24.dp.toPx()), androidx.compose.ui.geometry.Size(64.dp.toPx(), 48.dp.toPx())) }
+    val ink = LocalIpodLook.current.body.chevron
+    val target = with(density) { Rect(Offset(geometry.chevron.x - 32.dp.toPx(), geometry.chevron.y - 24.dp.toPx()), Size(64.dp.toPx(), 48.dp.toPx())) }
     Box(
         modifier = Modifier
             .place(target, density)
@@ -236,7 +250,7 @@ private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: B
                     lineTo(size.width / 2f + half, size.height / 2f - depth / 2f)
                 }
                 val stroke = Stroke(width = geometry.unit * 0.0075f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                onDrawBehind { drawPath(path, ChevronInk, style = stroke) }
+                onDrawBehind { drawPath(path, ink, style = stroke) }
             },
     )
 }
@@ -259,75 +273,6 @@ private fun DarkStatusIcons() {
     }
 }
 
-// where everything sits, in pixels: the body, the chevron, the screen's outer edge and the wheel
-@Immutable
-private class IpodGeometry(
-    val body: Rect,
-    val corner: Float,
-    val unit: Float,
-    val chevron: Offset,
-    val screen: Rect,
-    val wheel: Rect,
-)
-
-// a phone: the body is the whole screen and the wheel takes whatever height is left under the glass
-private fun phoneGeometry(w: Float, h: Float, top: Float, bottom: Float): IpodGeometry {
-    val chevron = Offset(w / 2f, top + w * 0.064f)
-    val screenTop = chevron.y + w * 0.091f
-    val screen = Rect(w * ScreenLeft, screenTop, w * (ScreenLeft + ScreenWidth), screenTop + w * ScreenWidth * ScreenAspect)
-    val floor = h - bottom
-    val diameter = minOf(w * WheelShare, (floor - screen.bottom) * 0.84f)
-    // the mockup's wheel sits a little past halfway down what's left under the glass
-    val cy = (screen.bottom + (h - screen.bottom) * 0.548f).coerceAtMost(floor - diameter / 2f - w * 0.04f)
-    return IpodGeometry(
-        body = Rect(0f, 0f, w, h),
-        corner = 0f,
-        unit = w,
-        chevron = chevron,
-        screen = screen,
-        wheel = Rect(Offset(w / 2f, cy), diameter / 2f),
-    )
-}
-
-// a big screen: the whole ipod at the mockup's proportions, as large as fits, on black
-private fun deviceGeometry(w: Float, h: Float, top: Float, bottom: Float): IpodGeometry {
-    val room = h - top - bottom
-    val bodyW = minOf(w * 0.88f, room * 0.94f / BodyAspect)
-    val bodyH = bodyW * BodyAspect
-    val body = Rect(Offset((w - bodyW) / 2f, top + (room - bodyH) / 2f), androidx.compose.ui.geometry.Size(bodyW, bodyH))
-    val screenTop = body.top + bodyW * 0.1976f
-    val screenLeft = body.left + bodyW * ScreenLeft
-    return IpodGeometry(
-        body = body,
-        corner = bodyW * 0.1224f,
-        unit = bodyW,
-        chevron = Offset(body.center.x, body.top + bodyW * 0.1066f),
-        screen = Rect(screenLeft, screenTop, screenLeft + bodyW * ScreenWidth, screenTop + bodyW * ScreenWidth * ScreenAspect),
-        wheel = Rect(Offset(body.center.x, body.top + bodyW * 1.5752f), bodyW * WheelShare / 2f),
-    )
-}
-
-// the light grey shell, darker along its edges and toward the bottom like the mockup's
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBody(geometry: IpodGeometry, wholeDevice: Boolean) {
-    if (wholeDevice) drawRect(Color.Black)
-    val body = geometry.body
-    val corner = CornerRadius(geometry.corner)
-    drawRoundRect(IpodBody, body.topLeft, body.size, corner)
-    drawRoundRect(
-        Brush.verticalGradient(0f to Color(0x0D000000), 0.03f to Color.Transparent, 0.86f to Color.Transparent, 1f to Color(0x3A000000), startY = body.top, endY = body.bottom),
-        body.topLeft, body.size, corner,
-    )
-    drawRoundRect(
-        Brush.horizontalGradient(0f to Color(0x1C000000), 0.045f to Color.Transparent, 0.955f to Color.Transparent, 1f to Color(0x1C000000), startX = body.left, endX = body.right),
-        body.topLeft, body.size, corner,
-    )
-}
-
-private fun Modifier.place(rect: Rect, density: Density): Modifier = with(density) {
-    offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
-        .size(rect.width.toDp(), rect.height.toDp())
-}
-
 // a style card in the picker shows the ipod, it doesn't work it
 private val SwallowTouches = Modifier.pointerInput(Unit) {
     awaitPointerEventScope {
@@ -337,18 +282,7 @@ private val SwallowTouches = Modifier.pointerInput(Unit) {
 
 private val NoCovers = kotlinx.coroutines.flow.MutableStateFlow(emptyList<String>())
 
-// the mockup's body is 572 px wide, its screen 486 x 367 starting 43 px in, its wheel 375 px across
-private const val ScreenLeft = 43f / 572f
-private const val ScreenWidth = 486f / 572f
-private const val ScreenAspect = 367f / 486f
-private const val WheelShare = 375f / 572f
-private const val BodyAspect = 1248f / 572f
-private const val BezelShare = 6f / 486f
-
 private const val VolumeShownMs = 1_600L
 private const val ScrubShownMs = 4_000L
 
-internal val IpodBody = Color(0xFFE6E6E6)
-private val Bezel = Color(0xFF8A8A8A)
 private val GlassEdge = Color(0xE6111111)
-private val ChevronInk = Color(0xFF555555)

@@ -40,18 +40,19 @@ import com.mochyy.mochymusic.LocalPlayerConnection
 fun IpodHeader(title: String, scale: IpodScale, modifier: Modifier = Modifier) {
     val playing = rememberIsPlaying()
     val battery = rememberBatteryLevel()
+    val colors = LocalIpodLook.current.screen
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(scale.header)
             .drawBehind {
-                drawRect(HeaderBrush)
-                drawRect(HeaderLine, topLeft = Offset(0f, size.height - 1.dp.toPx()), size = Size(size.width, 1.dp.toPx()))
+                drawRect(colors.header)
+                drawRect(colors.headerLine, topLeft = Offset(0f, size.height - 1.dp.toPx()), size = Size(size.width, 1.dp.toPx()))
             },
     ) {
         Text(
             text = title,
-            color = Color.Black,
+            color = colors.ink,
             fontSize = scale.sp(18f),
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -145,8 +146,6 @@ private fun Intent.batteryFraction(): Float? {
     return if (level < 0 || scale <= 0) null else level.toFloat() / scale
 }
 
-private val HeaderBrush = Brush.verticalGradient(listOf(Color(0xFFFDFDFD), Color(0xFFE2E4E6), Color(0xFFA9AEB3)))
-private val HeaderLine = Color(0xFF8C8C8C)
 private val PlayBrush = Brush.verticalGradient(listOf(Color(0xFF9AD6FF), Color(0xFF2A8BDD)))
 private val BatteryShell = Color(0xFF6E6E6E)
 private val BatteryFull = Brush.verticalGradient(listOf(Color(0xFFD9F5B6), Color(0xFF9BD563), Color(0xFF6DAE34)))

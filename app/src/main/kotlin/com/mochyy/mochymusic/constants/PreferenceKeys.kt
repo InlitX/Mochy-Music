@@ -543,13 +543,13 @@ enum class PlayerStyle(val displayName: String, val selectorName: String) {
     DEFAULT("Flagship", "Default"),
     /** the flagship with a record player for its cover, whose arm is the seek bar */
     TURNTABLE("Turntable", "Turntable"),
+    // the ipod classic, click wheel and all, browsing the library from inside the player
+    IPOD("iPod", "iPod"),
     POSTER("Poster", "Poster"),
     TIMELINE("Timeline", "Timeline"),
-    LYRICS("Lyrics", "Lyrics stage"),
-    // the ipod classic, click wheel and all, browsing the library from inside the player
-    IPOD("iPod", "iPod");
+    LYRICS("Lyrics", "Lyrics stage");
 
-    val editable: Boolean get() = this == DEFAULT || this == TURNTABLE || this == POSTER
+    val editable: Boolean get() = this == DEFAULT || this == TURNTABLE || this == POSTER || this == IPOD
 
     /** drawn by the flagship's own player (cover, controls, card), not a design of its own */
     val flagshipFamily: Boolean get() = this == DEFAULT || this == TURNTABLE
@@ -565,6 +565,22 @@ enum class PlayerStyle(val displayName: String, val selectorName: String) {
 }
 
 val PlayerStyleKey = stringPreferencesKey("playerStyle")
+
+// the ipod player's body colours, ipod.js's three plus a pitch black one with a dark screen
+enum class IpodTheme { SILVER, BLACK, U2, TRUE_DARK }
+
+val IpodThemeKey = stringPreferencesKey("ipodTheme")
+
+// the click wheel's own colour, or whatever the body's theme comes with
+enum class IpodWheelColor { THEME, WHITE, BLACK, RED }
+
+val IpodWheelColorKey = stringPreferencesKey("ipodWheelColor")
+
+// the screen grows down to the wheel on tall phones instead of keeping the classic's shape
+val IpodTallScreenKey = booleanPreferencesKey("ipodTallScreen")
+
+// the soft shading round the edges of the body
+val IpodShadowKey = booleanPreferencesKey("ipodShadow")
 
 /** the Poster's bars round its cover, moving with the music; off until turned on in its editor */
 val PosterVisualizerKey = booleanPreferencesKey("posterVisualizer")
