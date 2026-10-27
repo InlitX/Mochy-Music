@@ -40,6 +40,7 @@ class MonochromeModule : SourceModule {
         name = "Monochrome",
         version = "2.0",
         description = "Lossless FLAC for every song Monochrome has, no account needed, with every Audio Lab effect",
+        sourceUrl = "https://github.com/monochrome-music/monochrome",
     )
 
     private lateinit var host: ModuleHost

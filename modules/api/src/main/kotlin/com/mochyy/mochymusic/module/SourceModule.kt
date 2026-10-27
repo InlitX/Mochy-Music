@@ -10,7 +10,7 @@
 
 package com.mochyy.mochymusic.module
 
-const val MODULE_API_VERSION = 1
+const val MODULE_API_VERSION = 2
 
 data class ModuleInfo(
     /** stable, lowercase: "applemusic" */
@@ -19,6 +19,8 @@ data class ModuleInfo(
     val version: String,
     val description: String,
     val apiVersion: Int = MODULE_API_VERSION,
+    /** where the module's own code lives, for the player's "star on github"; null when it isn't public */
+    val sourceUrl: String? = null,
 )
 
 /** What Mochy gives a module. */
