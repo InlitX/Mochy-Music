@@ -72,8 +72,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
-import androidx.navigation.compose.composable
+import androidx.navigation.compose.composable as navigationComposable
 import androidx.navigation.compose.dialog
+import com.mochyy.mochymusic.ui.utils.motionEnter
+import com.mochyy.mochymusic.ui.utils.motionExit
 import androidx.navigation.navArgument
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.LocalDatabase
@@ -171,6 +173,35 @@ private fun libraryReturnFrom(route: String?): androidx.compose.animation.EnterT
     } else {
         fadeIn(tween(150))
     }
+
+private typealias NavEnter =
+    androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.() -> androidx.compose.animation.EnterTransition?
+private typealias NavExit =
+    androidx.compose.animation.AnimatedContentTransitionScope<androidx.navigation.NavBackStackEntry>.() -> androidx.compose.animation.ExitTransition?
+
+/**
+ * Every page of this graph goes through here rather than straight to navigation's composable(), so
+ * its own transitions answer Settings > Appearance > Animation (#10): off, the page swaps in place.
+ * Same parameters and defaults as navigation's (a pop transition falls back to the push one, and a
+ * transition that isn't given, or gives null, falls back to the NavHost's).
+ */
+private fun NavGraphBuilder.composable(
+    route: String,
+    arguments: List<androidx.navigation.NamedNavArgument> = emptyList(),
+    enterTransition: NavEnter? = null,
+    exitTransition: NavExit? = null,
+    popEnterTransition: NavEnter? = enterTransition,
+    popExitTransition: NavExit? = exitTransition,
+    content: @Composable androidx.compose.animation.AnimatedContentScope.(androidx.navigation.NavBackStackEntry) -> Unit,
+) = navigationComposable(
+    route = route,
+    arguments = arguments,
+    enterTransition = { motionEnter { enterTransition?.invoke(this) } },
+    exitTransition = { motionExit { exitTransition?.invoke(this) } },
+    popEnterTransition = { motionEnter { popEnterTransition?.invoke(this) } },
+    popExitTransition = { motionExit { popExitTransition?.invoke(this) } },
+    content = content,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 fun NavGraphBuilder.navigationBuilder(
