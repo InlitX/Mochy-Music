@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -21,17 +20,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -57,7 +55,6 @@ import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 // the ipod classic as a player: fills a phone edge to edge, sits whole on black on a big screen
@@ -145,16 +142,6 @@ private fun IpodFace(geometry: IpodGeometry, preview: Boolean, density: Density)
                     IpodPageContent(entry, controller, library, scale, marquee, showing)
                 }
             }
-            // the thin dark edge down the right of the glass, as on the mockup, gone with the shadow
-            if (look.shadow) {
-                Box(
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .width(scale.dp(3f))
-                        .background(GlassEdge),
-                )
-            }
         }
     }
 
@@ -192,10 +179,11 @@ private fun IpodPageContent(
 ) {
     when (entry.page) {
         IpodPage.NowPlaying -> IpodNowPlaying(controller.nowPlaying, scale, marquee)
-        IpodPage.CoverFlow -> IpodCoverFlow(controller.coverFlow, library, scale, showing, controller::tapCoverFlow, controller::tapTrack)
+        IpodPage.CoverFlow -> IpodCoverFlow(controller.coverFlow, scale, controller::tapCoverFlow, controller::tapTrack)
         IpodPage.Main -> Row(Modifier.fillMaxSize()) {
             IpodMenuList(entry, scale, marquee, { controller.tapRow(entry, it) }, Modifier.weight(1f).fillMaxHeight())
-            val covers by (library?.covers ?: NoCovers).collectAsState()
+            // read once each time the main menu comes up, not kept live while music plays
+            val covers by produceState(emptyList<String>(), library) { library?.let { value = it.covers() } }
             val fallback = rememberArtwork()
             IpodCoverCycle(
                 covers = covers.ifEmpty { listOfNotNull(fallback) },
@@ -204,17 +192,6 @@ private fun IpodPageContent(
             )
         }
         else -> {
-            // the list stays as it was while the player is closed, and catches up when it opens again
-            LaunchedEffect(entry, library) {
-                val source = library ?: return@LaunchedEffect
-                snapshotFlow { showing() }.distinctUntilChanged().collectLatest { shown ->
-                    if (!shown) return@collectLatest
-                    source.list(entry.page).collect {
-                        entry.list = it
-                        entry.clamp()
-                    }
-                }
-            }
             IpodMenuList(entry, scale, marquee, { controller.tapRow(entry, it) }, Modifier.fillMaxSize())
         }
     }
@@ -232,7 +209,8 @@ private fun rememberArtwork(): String? {
 private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: Boolean, density: Density) {
     val interactive = LocalStyleInteractive.current
     val ink = LocalIpodLook.current.body.chevron
-    val target = with(density) { Rect(Offset(geometry.chevron.x - 32.dp.toPx(), geometry.chevron.y - 24.dp.toPx()), Size(64.dp.toPx(), 48.dp.toPx())) }
+    val chevron = geometry.chevron ?: return
+    val target = with(density) { Rect(Offset(chevron.x - 32.dp.toPx(), chevron.y - 24.dp.toPx()), Size(64.dp.toPx(), 48.dp.toPx())) }
     Box(
         modifier = Modifier
             .place(target, density)
@@ -280,9 +258,5 @@ private val SwallowTouches = Modifier.pointerInput(Unit) {
     }
 }
 
-private val NoCovers = kotlinx.coroutines.flow.MutableStateFlow(emptyList<String>())
-
 private const val VolumeShownMs = 1_600L
 private const val ScrubShownMs = 4_000L
-
-private val GlassEdge = Color(0xE6111111)

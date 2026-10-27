@@ -21,7 +21,8 @@ class IpodGeometry(
     val body: Rect,
     val corner: Float,
     val unit: Float,
-    val chevron: Offset,
+    // null on the tall screen, which goes right up under the status bar like the reference
+    val chevron: Offset?,
     val screen: Rect,
     val wheel: Rect,
 ) {
@@ -33,7 +34,7 @@ class IpodGeometry(
 fun phoneGeometry(w: Float, h: Float, top: Float, bottom: Float, tall: Boolean): IpodGeometry {
     val chevron = Offset(w / 2f, top + w * 0.064f)
     val floor = h - bottom
-    if (tall) tallPhone(w, h, chevron, floor)?.let { return it }
+    if (tall) tallPhone(w, h, top, floor)?.let { return it }
     val screenTop = chevron.y + w * 0.091f
     val screen = Rect(w * ScreenLeft, screenTop, w * (ScreenLeft + ScreenWidth), screenTop + w * ScreenWidth * ScreenAspect)
     val diameter = minOf(w * WheelShare, (floor - screen.bottom) * 0.84f)
@@ -42,15 +43,17 @@ fun phoneGeometry(w: Float, h: Float, top: Float, bottom: Float, tall: Boolean):
     return IpodGeometry(Rect(0f, 0f, w, h), 0f, w, chevron, screen, Rect(Offset(w / 2f, cy), diameter / 2f))
 }
 
-// the tall screen: the wheel settles near the bottom and the glass stretches down to meet it, null when that wouldn't be taller than the classic
-private fun tallPhone(w: Float, h: Float, chevron: Offset, floor: Float): IpodGeometry? {
-    val diameter = w * 0.62f
-    val cy = floor - w * 0.08f - diameter / 2f
-    val screenTop = chevron.y + w * 0.075f
-    val screenBottom = cy - diameter / 2f - w * 0.075f
-    if (screenBottom - screenTop < w * ScreenWidth * ScreenAspect) return null
-    val screen = Rect(w * ScreenLeft, screenTop, w * (ScreenLeft + ScreenWidth), screenBottom)
-    return IpodGeometry(Rect(0f, 0f, w, h), 0f, w, chevron, screen, Rect(Offset(w / 2f, cy), diameter / 2f))
+// the tall screen: thin edges, a big wheel low down and the glass filling everything above it, null when there's no room for that
+private fun tallPhone(w: Float, h: Float, top: Float, floor: Float): IpodGeometry? {
+    val edge = w * TallEdge
+    val diameter = w * TallWheel
+    val wheelBottom = floor - w * 0.08f
+    val cy = wheelBottom - diameter / 2f
+    val screenTop = top + w * 0.04f
+    val screenBottom = cy - diameter / 2f - w * 0.09f
+    if (screenBottom - screenTop < (w - edge * 2f) * 0.75f) return null
+    val screen = Rect(edge, screenTop, w - edge, screenBottom)
+    return IpodGeometry(Rect(0f, 0f, w, h), 0f, w, null, screen, Rect(Offset(w / 2f, cy), diameter / 2f))
 }
 
 // a big screen: the whole ipod at the mockup's proportions, as large as fits, on black
@@ -108,5 +111,8 @@ private const val ScreenAspect = 367f / 486f
 private const val WheelShare = 375f / 572f
 private const val BodyAspect = 1248f / 572f
 private const val BezelShare = 6f / 486f
+// the tall screen's reference: about 5% of the width at each edge, a wheel almost three quarters as wide
+private const val TallEdge = 0.049f
+private const val TallWheel = 0.727f
 // a little rounding on the glass, softer than the mockup's square corners
 private const val ScreenCornerShare = 0.045f
