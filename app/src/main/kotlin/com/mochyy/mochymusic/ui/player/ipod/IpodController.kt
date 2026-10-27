@@ -12,8 +12,8 @@ import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -143,10 +143,20 @@ internal class IpodController(
         scope.launch {
             try {
                 if (target == IpodPage.CoverFlow) {
-                    withTimeoutOrNull(PrepareMs) { source.coverFlow.first() }?.let(coverFlow::show)
+                    val albums = scope.async { source.coverFlow() }
+                    withTimeoutOrNull(PrepareMs) { albums.await() }?.let(coverFlow::show)
                     nav.push(target)
+                    opening = false
+                    coverFlow.show(albums.await())
                 } else {
-                    nav.push(target, withTimeoutOrNull(PrepareMs) { source.list(target).first() })
+                    val list = scope.async { source.load(target) }
+                    val entry = nav.push(target, withTimeoutOrNull(PrepareMs) { list.await() } ?: IpodLoadingList)
+                    opening = false
+                    // a slow list (a saved album fetching its tracks) fills in once it's here
+                    if (entry.list === IpodLoadingList) {
+                        entry.list = list.await()
+                        entry.clamp()
+                    }
                 }
             } finally {
                 opening = false
@@ -154,17 +164,20 @@ internal class IpodController(
         }
     }
 
+    // the album turns over straight away, its tracks fill in as soon as they're read
     private fun turnOver() {
         val album = coverFlow.current ?: return
         val source = library ?: return
-        if (opening) return
-        opening = true
+        if (coverFlow.flipped) return
         scope.launch {
-            try {
-                val tracks = withTimeoutOrNull(PrepareMs * 2) { source.list(IpodPage.Album(album.id, album.title)).first() }
-                if (tracks != null) coverFlow.turnOver(tracks)
-            } finally {
-                opening = false
+            val tracks = scope.async { source.load(IpodPage.Album(album.id, album.title)) }
+            coverFlow.turnOver(withTimeoutOrNull(PrepareMs) { tracks.await() } ?: IpodLoadingList)
+            if (coverFlow.back.list === IpodLoadingList) {
+                val loaded = tracks.await()
+                if (coverFlow.flipped && coverFlow.current?.id == album.id) {
+                    coverFlow.back.list = loaded
+                    coverFlow.back.clamp()
+                }
             }
         }
     }

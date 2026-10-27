@@ -60,6 +60,9 @@ class IpodList(val rows: List<IpodRow>, val songs: List<Song> = emptyList(), val
     }
 }
 
+// shown for the moment a list takes longer than the slide to read
+val IpodLoadingList = IpodList(listOf(IpodRow("loading", "Loading…", null)))
+
 // the main menu never changes, so it's built once
 val IpodMainList = IpodList(
     listOf(
@@ -118,13 +121,14 @@ class IpodNavigator(private val scope: CoroutineScope) {
     val top: IpodEntry get() = stack.last()
 
     // a list that's already loaded comes in full instead of filling up mid slide
-    fun push(page: IpodPage, list: IpodList? = null) {
+    fun push(page: IpodPage, list: IpodList? = null): IpodEntry {
         val entry = entry(page)
         if (list != null) entry.list = list
         leaving = top
         stack.add(entry)
         forward = true
         play()
+        return entry
     }
 
     // false at the main menu, where menu has nowhere left to go

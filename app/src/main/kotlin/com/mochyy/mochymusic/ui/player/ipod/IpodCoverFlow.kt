@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -24,7 +23,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -41,10 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.mochyy.mochymusic.ui.player.styles.LocalStyleInteractive
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
 import com.mochyy.mochymusic.viewmodels.IpodAlbum
-import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.cos
@@ -108,19 +103,10 @@ class IpodCoverFlowState(private val scope: CoroutineScope) {
 @Composable
 fun IpodCoverFlow(
     state: IpodCoverFlowState,
-    library: IpodLibraryViewModel?,
     scale: IpodScale,
-    showing: () -> Boolean,
     onTapSide: (Int) -> Unit,
     onTapTrack: (Int) -> Unit,
 ) {
-    // new albums turn up while it's open, the rest of the time it keeps what it had
-    LaunchedEffect(state, library) {
-        val source = library ?: return@LaunchedEffect
-        snapshotFlow { showing() }.distinctUntilChanged().collectLatest { shown ->
-            if (shown) source.coverFlow.collect { state.show(it) }
-        }
-    }
     val density = LocalDensity.current
     val side = minOf(scale.width * 0.42f, scale.content * 0.56f)
     val sidePx = with(density) { side.toPx() }
