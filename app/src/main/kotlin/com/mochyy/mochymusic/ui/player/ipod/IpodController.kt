@@ -55,7 +55,6 @@ internal class IpodController(
         }
         // the middle button on now playing brings up the scrubber, and puts it away again
         nowPlaying.bar = if (nowPlaying.bar == IpodBar.SCRUB) IpodBar.PROGRESS else IpodBar.SCRUB
-        nowPlaying.scrubMs = -1L
         touch()
     }
 
@@ -142,7 +141,7 @@ internal class IpodController(
         seekJob?.cancel()
         seekJob = scope.launch {
             delay(ScrubSettleMs)
-            player.seekTo(nowPlaying.scrubMs)
+            player.seekTo(target)
             nowPlaying.scrubMs = -1L
         }
         return true

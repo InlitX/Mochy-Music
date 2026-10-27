@@ -178,7 +178,8 @@ private val SquareOfHeight = Modifier.layout { measurable, constraints ->
 private fun TimeRow(state: IpodNowPlayingState, position: LivePosition, duration: Long, scale: IpodScale) {
     val playedSeconds = rememberPlayedSeconds(position)
     val scrubbing = state.bar == IpodBar.SCRUB
-    val shownMs = if (scrubbing && state.scrubMs >= 0) state.scrubMs else playedSeconds * 1000L
+    // a scrub still waiting to land shows where it's going, even once the scrubber is put away
+    val shownMs = if (state.scrubMs >= 0) state.scrubMs else playedSeconds * 1000L
     Box(Modifier.fillMaxSize()) {
         TimeText(clock(shownMs), scale, Modifier.align(Alignment.CenterStart).padding(start = scale.dp(30f)))
         Canvas(
@@ -187,7 +188,7 @@ private fun TimeRow(state: IpodNowPlayingState, position: LivePosition, duration
                 .padding(start = scale.dp(101f))
                 .size(scale.dp(268f), scale.dp(24f)),
         ) {
-            val ms = if (scrubbing && state.scrubMs >= 0) state.scrubMs else position.positionMs()
+            val ms = if (state.scrubMs >= 0) state.scrubMs else position.positionMs()
             val fraction = (ms.toFloat() / duration).coerceIn(0f, 1f)
             drawTrack()
             drawFill(fraction)
