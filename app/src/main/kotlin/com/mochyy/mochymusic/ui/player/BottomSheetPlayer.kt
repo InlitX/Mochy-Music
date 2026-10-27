@@ -561,7 +561,7 @@ private fun PlayerSheet(
         //    pushes the page back into the card the same way, and a swipe up opens the page the
         //    card offers.
         //  - Only the top of the player closes it with a swipe down: the strip under the status bar
-        //    (down to the cover's top), or the whole cover when it's the edge-to-edge one. A swipe
+        //    (down to the cover's top), or the whole cover when it's the edge-to-edge or squared one. A swipe
         //    anywhere used to close it, and a slightly crooked swipe over the controls threw the
         //    whole player away.
         val screenHeightPx = with(density) { screenHeight.toPx() }
@@ -671,7 +671,10 @@ private fun PlayerSheet(
                     val coverTop = if (pageOpen) null else rects.cover?.top
                     val stripBottom = maxOf(currentCloseStripBottom, coverTop ?: 0f)
                     if (start.y < stripBottom) return true
-                    if (pageOpen || currentCoverStyle != PlayerCoverStyle.EDGE_TO_EDGE) return false
+                    if (pageOpen) return false
+                    // the squared cover is a card you can pull down too, sideways on it still swipes songs
+                    if (currentCoverStyle == PlayerCoverStyle.SQUARED) return rects.cover?.contains(start) == true
+                    if (currentCoverStyle != PlayerCoverStyle.EDGE_TO_EDGE) return false
                     // the edge-to-edge cover is the player's top: all of it, down to the title
                     val controlsTop = rects.controls?.top ?: return false
                     return start.y < controlsTop
