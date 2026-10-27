@@ -75,9 +75,10 @@ class IpodScale(val width: Dp, val height: Dp, private val fontScale: Float) {
 
     fun rowHeight(art: Boolean): Dp = content / rows(art)
 
-    // the classic's glass is about three quarters as tall as it's wide, anything well past that is the tall screen
-    val tall: Boolean get() = content > width * 0.95f
 }
+
+// a scale for a bare list with no header above it, like the back of an album in cover flow
+fun ipodListScale(width: Dp, height: Dp, fontScale: Float) = IpodScale(width, height + width * (MockHeader / MockScreenWidth), fontScale)
 
 const val MockScreenWidth = 474f
 private const val MockHeader = 28f
@@ -85,26 +86,46 @@ private const val MockRow = 46.6f
 private const val MockArtRow = 66f
 private const val MockScrollbar = 11f
 
-// the pages slide in from the right as you go deeper and back out as you press menu, under a header that stays put
+// the pages slide in from the right as you go deeper and back out as you press menu, cover flow rises from the bottom like a sheet
 @Composable
-fun IpodPages(nav: IpodNavigator, modifier: Modifier = Modifier, page: @Composable (IpodEntry) -> Unit) {
+fun IpodPages(nav: IpodNavigator, modifier: Modifier = Modifier, page: @Composable (entry: IpodEntry, slideX: () -> Float) -> Unit) {
     val background = LocalIpodLook.current.screen.background
     Box(modifier.clipToBounds()) {
         val shown = nav.top
-        for (entry in listOfNotNull(nav.leaving, shown)) {
+        val leaving = nav.leaving
+        // the deeper page is always on top: the one coming in, or the one going back out
+        val deeper = if (nav.forward) shown else leaving
+        val order = if (nav.forward) listOfNotNull(leaving, shown) else listOfNotNull(shown, leaving)
+        val sheet = deeper?.page == IpodPage.CoverFlow
+        for (entry in order) {
             key(entry.id) {
                 val arriving = entry === shown
+                val moving = leaving != null
+                // how far across the page sits, as a share of the width: under a sheet nothing moves sideways
+                val slideX: () -> Float = {
+                    val t = nav.slide.value
+                    when {
+                        !moving || sheet -> 0f
+                        nav.forward -> if (arriving) 1f - t else -t
+                        else -> if (arriving) t - 1f else t
+                    }
+                }
+                val rise = moving && sheet && entry === deeper
+                // the main menu moves only its list, so its covers hold still and get covered over
+                val holdsStill = entry.page == IpodPage.Main
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            val t = nav.slide.value
-                            val away = if (nav.forward) 1f else -1f
-                            translationX = size.width * away * if (arriving) 1f - t else -t
+                            if (!holdsStill) translationX = size.width * slideX()
+                            if (rise) {
+                                val t = nav.slide.value
+                                translationY = size.height * if (nav.forward) 1f - t else t
+                            }
                         }
                         .background(background),
                 ) {
-                    page(entry)
+                    page(entry, slideX)
                 }
             }
         }

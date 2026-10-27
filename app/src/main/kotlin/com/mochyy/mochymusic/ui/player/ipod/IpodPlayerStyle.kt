@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +23,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -137,9 +138,9 @@ private fun IpodFace(geometry: IpodGeometry, preview: Boolean, density: Density)
                 .background(look.screen.background),
         ) {
             Column(Modifier.fillMaxSize()) {
-                TitleBar(nav, scale)
-                IpodPages(nav, Modifier.fillMaxWidth().weight(1f)) { entry ->
-                    IpodPageContent(entry, controller, library, scale, marquee, showing)
+                TitleBar(nav, coverFlow, scale)
+                IpodPages(nav, Modifier.fillMaxWidth().weight(1f)) { entry, slideX ->
+                    IpodPageContent(entry, slideX, controller, library, scale, marquee, showing)
                 }
             }
         }
@@ -163,14 +164,19 @@ private fun BarTimeout(nowPlaying: IpodNowPlayingState) {
     }
 }
 
-// read here so a page change only redraws the header, not the whole face
+// read here so a page change only redraws the header, not the whole face; a turned over album names itself
 @Composable
-private fun TitleBar(nav: IpodNavigator, scale: IpodScale) = IpodHeader(nav.top.page.title, scale)
+private fun TitleBar(nav: IpodNavigator, coverFlow: IpodCoverFlowState, scale: IpodScale) {
+    val page = nav.top.page
+    val title = if (page == IpodPage.CoverFlow && coverFlow.flipped) coverFlow.current?.title ?: page.title else page.title
+    IpodHeader(title, scale)
+}
 
 // one page of the menu tree: a list, the main menu with its slideshow, cover flow or now playing
 @Composable
 private fun IpodPageContent(
     entry: IpodEntry,
+    slideX: () -> Float,
     controller: IpodController,
     library: IpodLibraryViewModel?,
     scale: IpodScale,
@@ -180,15 +186,25 @@ private fun IpodPageContent(
     when (entry.page) {
         IpodPage.NowPlaying -> IpodNowPlaying(controller.nowPlaying, scale, marquee)
         IpodPage.CoverFlow -> IpodCoverFlow(controller.coverFlow, scale, controller::tapCoverFlow, controller::tapTrack)
-        IpodPage.Main -> Row(Modifier.fillMaxSize()) {
-            IpodMenuList(entry, scale, marquee, { controller.tapRow(entry, it) }, Modifier.weight(1f).fillMaxHeight())
+        IpodPage.Main -> Box(Modifier.fillMaxSize()) {
             // read once each time the main menu comes up, not kept live while music plays
             val covers by produceState(emptyList<String>(), library) { library?.let { value = it.covers() } }
             val fallback = rememberArtwork()
             IpodCoverCycle(
                 covers = covers.ifEmpty { listOfNotNull(fallback) },
                 running = showing,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxWidth(0.5f).fillMaxHeight(),
+            )
+            // only the menu slides, a whole page width, while the covers beside it hold still like on the classic
+            IpodMenuList(
+                entry = entry,
+                scale = scale,
+                marquee = marquee,
+                onTapRow = { controller.tapRow(entry, it) },
+                modifier = Modifier
+                    .fillMaxWidth(0.5f)
+                    .fillMaxHeight()
+                    .graphicsLayer { translationX = size.width * 2f * slideX() },
             )
         }
         else -> {
