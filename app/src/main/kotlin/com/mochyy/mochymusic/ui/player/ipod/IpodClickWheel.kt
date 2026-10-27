@@ -107,10 +107,16 @@ fun IpodClickWheel(
                                 }
                                 haptics.release()
                             }
-                            zone == RingZone.MENU -> {
-                                haptics.press()
-                                current.menuHeld()
-                                awaitLift(down.id)
+                            // menu needs a proper hold to jump to the top, a slow press is still just back
+                            zone == RingZone.MENU -> when (withTimeoutOrNull(MenuHoldMoreMs) { awaitRingStart(down.id, down.position, slop) }) {
+                                RingStart.Tap -> tap(zone, haptics, current)
+                                RingStart.Spin -> spin(down.id, middle, outer, down.position, notch)
+                                RingStart.Cancel -> Unit
+                                null -> {
+                                    haptics.press()
+                                    current.menuHeld()
+                                    awaitLift(down.id)
+                                }
                             }
                             // a slow press on play is still a press, and can still turn into a spin
                             else -> when (awaitRingStart(down.id, down.position, slop)) {
@@ -271,6 +277,7 @@ private const val DeadZone = 0.22f
 // 24 notches a turn, a little finer than retro's 20 so a phone-sized wheel doesn't feel sticky
 private const val Notch = (2 * PI / 24).toFloat()
 private const val HoldMs = 450L
+private const val MenuHoldMoreMs = 450L
 private const val ScanRepeatMs = 180L
 private const val StreakGapMs = 160L
 

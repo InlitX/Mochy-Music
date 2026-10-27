@@ -252,7 +252,7 @@ private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: B
     )
 }
 
-// dark status bar icons over the light body, put back to white the moment the player heads down or the style changes
+// dark status bar icons over the light body, back to white once the player is mostly closed or the style changes
 @Composable
 private fun DarkStatusIcons() {
     val view = LocalView.current
@@ -261,7 +261,7 @@ private fun DarkStatusIcons() {
         val window = view.context.findActivity()?.window ?: return@LaunchedEffect
         val controller = WindowCompat.getInsetsController(window, view)
         try {
-            snapshotFlow { sheet == null || (sheet.isExpandedOrExpanding && sheet.progress > 0.5f) }
+            snapshotFlow { sheet == null || sheet.progress > 0.5f }
                 .distinctUntilChanged()
                 .collect { light -> controller.isAppearanceLightStatusBars = light || !ForceDarkTheme }
         } finally {
@@ -426,7 +426,8 @@ private fun phoneGeometry(w: Float, h: Float, top: Float, bottom: Float): IpodGe
     val screen = Rect(w * ScreenLeft, screenTop, w * (ScreenLeft + ScreenWidth), screenTop + w * ScreenWidth * ScreenAspect)
     val floor = h - bottom
     val diameter = minOf(w * WheelShare, (floor - screen.bottom) * 0.84f)
-    val cy = ((screen.bottom + floor) / 2f + w * 0.02f).coerceAtMost(floor - diameter / 2f - w * 0.04f)
+    // the mockup's wheel sits a little past halfway down what's left under the glass
+    val cy = (screen.bottom + (h - screen.bottom) * 0.548f).coerceAtMost(floor - diameter / 2f - w * 0.04f)
     return IpodGeometry(
         body = Rect(0f, 0f, w, h),
         corner = 0f,
