@@ -343,6 +343,10 @@ fun LocalPlaylistScreen(
     // the header is the only item above the songs, and only while not searching
     val headerItems by rememberUpdatedState(if (isSearching) 0 else 1)
     val lazyListState = rememberLazyListState()
+    // each new search shows its matches from the first, not from wherever the last one was scrolled (#128)
+    LaunchedEffect(query.text) {
+        if (isSearching) lazyListState.scrollToItem(0)
+    }
     var dragInfo by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val reorderableState = rememberReorderableLazyListState(
         lazyListState = lazyListState,

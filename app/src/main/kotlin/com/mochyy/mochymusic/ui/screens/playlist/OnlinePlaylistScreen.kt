@@ -187,6 +187,10 @@ fun OnlinePlaylistScreen(
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(isSearching) { if (isSearching) focusRequester.requestFocus() }
+    // each new search shows its matches from the first, not from wherever the last one was scrolled (#128)
+    LaunchedEffect(query.text) {
+        if (isSearching) lazyListState.scrollToItem(0)
+    }
 
     LaunchedEffect(filteredSongs) {
         selection.fastForEachReversed { songId ->

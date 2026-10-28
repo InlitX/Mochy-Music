@@ -563,6 +563,34 @@ fun ProgressiveGlassBackground(
     modifier: Modifier = Modifier,
     steps: Int = 5
 ) {
+    // Settings > Appearance > Progressive blur. The switch was there but nothing read it (#9).
+    // Off, the bar is one even blur at full strength - no radius growing down its height - with
+    // its edge softened the way the first step's is, so it still melts into the page.
+    val (progressiveEnabled) = rememberPreference(
+        com.mochyy.mochymusic.constants.EnableProgressiveBlurKey,
+        defaultValue = true,
+    )
+    if (!progressiveEnabled) {
+        val fade = 1f / steps.coerceAtLeast(1)
+        val mask = remember(direction, fade) {
+            if (direction == BlurDirection.TopToBottom) {
+                Brush.verticalGradient(0f to Color.Transparent, fade to Color.Black, 1f to Color.Black)
+            } else {
+                Brush.verticalGradient(0f to Color.Black, (1f - fade) to Color.Black, 1f to Color.Transparent)
+            }
+        }
+        Box(modifier = modifier) {
+            GlassPillBackground(
+                state = state,
+                blurRadius = maxBlurRadius,
+                tint = tint,
+                foundationColor = foundationColor,
+                mask = mask,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
     val smooth = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         LocalBlurQuality.current == com.mochyy.mochymusic.constants.BlurQuality.HIGH
     if (smooth) {

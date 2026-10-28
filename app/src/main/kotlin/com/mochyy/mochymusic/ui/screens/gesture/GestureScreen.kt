@@ -69,6 +69,8 @@ import com.mochyy.mochymusic.ui.screens.audiolab.LabBackButton
 import com.mochyy.mochymusic.ui.screens.audiolab.LabCard
 import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
+import com.mochyy.mochymusic.constants.PlayerSwipeDownAnywhereKey
+import com.mochyy.mochymusic.ui.screens.audiolab.LabToggleRow
 import com.mochyy.mochymusic.utils.rememberEnumPreference
 import com.mochyy.mochymusic.utils.rememberPreference
 
@@ -199,6 +201,8 @@ fun CustomisationScreen(navController: NavController) {
                 action = left,
                 onPick = setLeft,
             )
+            Spacer(Modifier.height(14.dp))
+            PlayerGestureCard()
         }
     }
 }
@@ -320,6 +324,41 @@ private fun ActionOptionBadge(action: SongSwipeAction) {
             contentDescription = null,
             tint = action.color,
             modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+/**
+ * The open player's own gestures. Out of the box only its top strip and its cover close it with a
+ * swipe down, so a crooked swipe over the controls can't throw it away; this brings back closing
+ * it from anywhere for those who'd rather not reach for the top of a tall phone (#121).
+ */
+@Composable
+private fun PlayerGestureCard() {
+    val (anywhere, setAnywhere) = rememberPreference(PlayerSwipeDownAnywhereKey, defaultValue = false)
+    LabCard(padding = CardPadding) {
+        Text(
+            "Player",
+            fontFamily = InterFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+            letterSpacing = (-0.02).em,
+            color = LabColors.Primary,
+        )
+        Text(
+            "How the open player answers your swipes",
+            fontFamily = InterFontFamily,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+            color = LabColors.Secondary,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Spacer(Modifier.height(14.dp))
+        LabToggleRow(
+            title = "Swipe down anywhere to close",
+            subtitle = "Otherwise only from the top of the player and its cover",
+            checked = anywhere,
+            onCheckedChange = setAnywhere,
         )
     }
 }

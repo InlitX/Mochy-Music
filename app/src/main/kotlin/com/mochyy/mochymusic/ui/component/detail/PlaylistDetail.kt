@@ -31,6 +31,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -293,6 +296,29 @@ fun PlaylistDetailScaffold(
     coverThemeColor: Color? = null,
     content: LazyListScope.() -> Unit,
 ) {
+    // A bar that replaces the top bar (the list's own song search) sits over the list rather than
+    // above it, and there's no cover band then to push the first rows down: the first matches were
+    // drawn under the search field (#128). The list starts below the bar's measured height while
+    // it's up, and starts from the top when it opens - it used to keep the scroll from before, half
+    // way down a long playlist.
+    val overrideBarHeightPx = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val searchBarUp = topBarOverride != null
+    val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val overrideBarHeight = with(LocalDensity.current) { overrideBarHeightPx.intValue.toDp() }
+    val listPadding = if (searchBarUp) {
+        PaddingValues(
+            start = contentPadding.calculateStartPadding(layoutDirection),
+            top = contentPadding.calculateTopPadding() + overrideBarHeight,
+            end = contentPadding.calculateEndPadding(layoutDirection),
+            bottom = contentPadding.calculateBottomPadding(),
+        )
+    } else {
+        contentPadding
+    }
+    LaunchedEffect(searchBarUp) {
+        if (searchBarUp) lazyListState.scrollToItem(0)
+    }
+
     // the tapped card's cover comes first: the screen grows out of that image, so it has to be
     // there from the first frame, and keeping it means the cover never swaps mid-way
     val handedCover = remember(sharedElementKey) { containerTransformCover(sharedElementKey) }
@@ -418,14 +444,19 @@ fun PlaylistDetailScaffold(
 
             LazyColumn(
                 state = lazyListState,
-                contentPadding = contentPadding,
+                contentPadding = listPadding,
                 modifier = Modifier.fillMaxSize(),
                 content = content,
             )
         }
 
         if (topBarOverride != null) {
-            topBarOverride()
+            // measured, so the list starts under it (see listPadding)
+            Box(
+                modifier = Modifier.onSizeChanged { overrideBarHeightPx.intValue = it.height },
+            ) {
+                topBarOverride()
+            }
         } else {
             PlaylistTopBar(
                 glassState = glassState,
