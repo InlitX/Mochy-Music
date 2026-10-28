@@ -127,6 +127,9 @@ private val SettingsIndex = listOf(
     SettingsEntry("Keep playing even when closed", "Playback", "playback_settings", "background close stop playback"),
     SettingsEntry("Save Player's last state", "Playback", "playback_settings", "persistent queue restore track state"),
     SettingsEntry("Skip Silence", "Playback", "playback_settings", "silence trim gap interval"),
+    SettingsEntry("Prefer USB DAC", "Playback", "playback_settings", "usb dac headphones output external audio"),
+    SettingsEntry("USB DAC passthrough", "Playback", "playback_settings", "bit perfect bitperfect passthrough sample rate dac usb resample"),
+    SettingsEntry("Hi-res output", "Playback", "playback_settings", "hi res 24 bit float precision lossless flac quality"),
 
     // General
     SettingsEntry("Import Data", "General", "general_settings", "backup restore transfer library spotify"),

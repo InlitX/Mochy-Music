@@ -14,7 +14,20 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
+import android.os.Build
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.Usb
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.constants.HiResOutputKey
 import com.mochyy.mochymusic.constants.PersistentQueueKey
+import com.mochyy.mochymusic.constants.PreferUsbDacKey
+import com.mochyy.mochymusic.constants.UsbPassthroughKey
+import com.mochyy.mochymusic.playback.audio.AudioOutputs
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.mochyy.mochymusic.constants.SkipSilenceKey
 import com.mochyy.mochymusic.constants.StopPlaybackOnTaskRemovedKey
 import com.mochyy.mochymusic.ui.component.AppSwitch
@@ -43,6 +56,14 @@ fun PlaybackSettingsScreen(navController: NavController) {
     )
 
     val keepPlaying = !stopPlaybackOnTaskRemoved
+
+    val (preferUsbDac, onPreferUsbDacChange) = rememberPreference(PreferUsbDacKey, defaultValue = false)
+    val (usbPassthrough, onUsbPassthroughChange) = rememberPreference(UsbPassthroughKey, defaultValue = false)
+    val (hiResOutput, onHiResOutputChange) = rememberPreference(HiResOutputKey, defaultValue = false)
+    val outputs = LocalPlayerConnection.current?.service?.audioOutputs
+    val devices by remember(outputs) { outputs?.devices ?: MutableStateFlow(emptyList()) }.collectAsState()
+    val dac = devices.firstOrNull { it.kind == AudioOutputs.Kind.USB }
+    val dacName = dac?.name?.ifBlank { "USB DAC" }
 
     SubSettingsScaffold(
         title = "Playback",
@@ -103,6 +124,51 @@ fun PlaybackSettingsScreen(navController: NavController) {
             SettingsGroup(
                 style = SettingsGroupStyle.Grouped,
                 items = items,
+            )
+        }
+
+        val outputItems = listOfNotNull(
+            SettingsItem(
+                title = { Text("Prefer USB DAC") },
+                highlightKey = "Prefer USB DAC",
+                descriptionText = dacName?.let { "$it is plugged in" } ?: "Plays through a USB DAC when one is plugged in",
+                detail = "Sends the music to a plugged-in USB DAC even while Bluetooth or other headphones are connected. Unplug it and the music goes back to where it was.",
+                icon = rememberVectorPainter(Icons.Rounded.Usb),
+                iconShape = CircleShape,
+                onClick = { onPreferUsbDacChange(!preferUsbDac) },
+                trailingContent = { AppSwitch(checked = preferUsbDac, onCheckedChange = onPreferUsbDacChange) },
+            ),
+            // the dac's own mixer settings only exist on android 14 and up, so older phones don't see the row at all
+            SettingsItem(
+                title = { Text("USB DAC passthrough") },
+                highlightKey = "USB DAC passthrough",
+                descriptionText = "Each song at its own rate, bit-perfect when nothing changes the sound",
+                detail = "Asks the DAC to run at the song's own sample rate instead of Android's 48 kHz, so nothing is resampled. When the equalizer and effects are off and the volume is at 100%, the song goes out bit-perfect. While it's on, your phone's volume buttons may set the DAC's own volume.",
+                icon = rememberVectorPainter(Icons.Rounded.GraphicEq),
+                iconShape = CircleShape,
+                onClick = { onUsbPassthroughChange(!usbPassthrough) },
+                trailingContent = { AppSwitch(checked = usbPassthrough, onCheckedChange = onUsbPassthroughChange) },
+            ).takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE },
+            SettingsItem(
+                title = { Text("Hi-res output") },
+                highlightKey = "Hi-res output",
+                descriptionText = "Keeps 24-bit songs at full detail as 32-bit float",
+                detail = "Sends hi-res songs to the speaker as 32-bit float instead of cutting them down to 16-bit. It only kicks in while the equalizer, Audio FX, Crossmix, layered fades, haptics, skip silence and speed changes are all off, because those work in 16-bit. Turn any of them on and the song carries on in 16-bit with every effect.",
+                icon = rememberVectorPainter(Icons.Rounded.HighQuality),
+                iconShape = CircleShape,
+                onClick = { onHiResOutputChange(!hiResOutput) },
+                trailingContent = { AppSwitch(checked = hiResOutput, onCheckedChange = onHiResOutputChange) },
+            ),
+        ).filter {
+            query.isBlank() || it.highlightKey?.contains(query, ignoreCase = true) == true ||
+                it.descriptionText?.contains(query, ignoreCase = true) == true
+        }
+
+        if (outputItems.isNotEmpty()) {
+            SettingsGroup(
+                title = "Output",
+                style = SettingsGroupStyle.Grouped,
+                items = outputItems,
             )
         }
 
