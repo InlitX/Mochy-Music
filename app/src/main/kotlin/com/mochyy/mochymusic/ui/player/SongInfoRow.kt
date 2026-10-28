@@ -88,6 +88,8 @@ fun SongInfoRow(
     chevronModifier: Modifier = Modifier,
     /** A tap on the title and artist: the song's details sheet (its artists, album, about). */
     onSongInfoClick: (() -> Unit)? = null,
+    /** A tap on the format badge: the playing stream's info, straight away. */
+    onStreamInfoClick: (() -> Unit)? = null,
     /**
      * How much of the title and artist shows. The page header's title takes their place as a page
      * opens, drawn exactly like them, so this hides them the moment it does. Read while drawing.
@@ -175,6 +177,7 @@ fun SongInfoRow(
                         showSampleRate = showSampleRate,
                         infoAlpha = infoAlpha,
                         badgeAlpha = badgeAlpha,
+                        onBadgeClick = onStreamInfoClick,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
@@ -188,6 +191,7 @@ fun SongInfoRow(
                                 showSampleRate = showSampleRate,
                                 infoAlpha = infoAlpha,
                                 badgeAlpha = badgeAlpha,
+                                onBadgeClick = onStreamInfoClick,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .carouselText(carousel, slot),
@@ -281,6 +285,7 @@ private fun SongLines(
     showSampleRate: Boolean,
     infoAlpha: () -> Float,
     badgeAlpha: () -> Float,
+    onBadgeClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -316,7 +321,12 @@ private fun SongLines(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.width(8.dp))
-                    StreamFormatBadge(text = badge ?: lastBadge[0].orEmpty())
+                    StreamFormatBadge(
+                        text = badge ?: lastBadge[0].orEmpty(),
+                        modifier = if (onBadgeClick != null) {
+                            Modifier.clickable(interactionSource = null, indication = null, onClick = onBadgeClick)
+                        } else Modifier,
+                    )
                     // clear of the row's edge fade
                     Spacer(Modifier.width(TitleEdgeFade))
                 }

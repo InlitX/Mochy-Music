@@ -77,6 +77,8 @@ fun TurntableControls(
     onChevronPositioned: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     likeBurst: LikeBurstState? = null,
     onSongInfoClick: (() -> Unit)? = null,
+    /** a tap on the format badge opens the playing stream's info */
+    onStreamInfoClick: (() -> Unit)? = null,
 ) {
     val connection = LocalPlayerConnection.current ?: return
     val track by connection.uiState.trackInfo.collectAsState()
@@ -114,6 +116,7 @@ fun TurntableControls(
                             onClick = onSongInfoClick,
                         ) else Modifier
                     ),
+                onBadgeClick = onStreamInfoClick,
             )
         }
     }
@@ -270,15 +273,21 @@ private fun ChevronButton(open: Boolean, hidden: Boolean, onClick: () -> Unit, m
 
 /** The song's title, badge and artist, riding the player's row of songs with the record. */
 @Composable
-private fun TitleBlock(title: String, artist: String, mediaId: String, modifier: Modifier = Modifier) {
+private fun TitleBlock(
+    title: String,
+    artist: String,
+    mediaId: String,
+    modifier: Modifier = Modifier,
+    onBadgeClick: (() -> Unit)? = null,
+) {
     val carousel = LocalSongCarousel.current
     Box(modifier = modifier) {
         if (carousel == null) {
-            TitleLines(mediaId, title, artist, Modifier)
+            TitleLines(mediaId, title, artist, Modifier, onBadgeClick)
         } else {
             for (slot in rememberTextSlots(carousel)) {
                 key(slot.uid) {
-                    TitleLines(slot.mediaId, slot.title, slot.artist, Modifier.carouselText(carousel, slot))
+                    TitleLines(slot.mediaId, slot.title, slot.artist, Modifier.carouselText(carousel, slot), onBadgeClick)
                 }
             }
         }
@@ -286,7 +295,7 @@ private fun TitleBlock(title: String, artist: String, mediaId: String, modifier:
 }
 
 @Composable
-private fun TitleLines(mediaId: String, title: String, artist: String, modifier: Modifier) {
+private fun TitleLines(mediaId: String, title: String, artist: String, modifier: Modifier, onBadgeClick: (() -> Unit)?) {
     val connection = LocalPlayerConnection.current ?: return
     val (showBadge) = rememberPreference(ShowFormatBadgeKey, defaultValue = true)
     val (showSampleRate) = rememberPreference(ShowFormatSampleRateKey, defaultValue = false)
@@ -308,7 +317,13 @@ private fun TitleLines(mediaId: String, title: String, artist: String, modifier:
             )
             if (badge != null) {
                 Spacer(Modifier.width(8.dp))
-                StreamFormatBadge(text = badge, height = 18.dp)
+                StreamFormatBadge(
+                    text = badge,
+                    height = 18.dp,
+                    modifier = if (onBadgeClick != null) {
+                        Modifier.clickable(interactionSource = null, indication = null, onClick = onBadgeClick)
+                    } else Modifier,
+                )
             }
         }
         if (artist.isNotBlank()) {

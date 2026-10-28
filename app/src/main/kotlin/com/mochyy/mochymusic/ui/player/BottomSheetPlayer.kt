@@ -289,6 +289,7 @@ private fun PlayerSheet(
     var showSleepTimer by remember { mutableStateOf(false) }
     // The title and artist's sheet: the artists, the album, about the song
     var showSongDetails by remember { mutableStateOf(false) }
+    var showStreamInfo by remember { mutableStateOf(false) }
 
     var showActionMenu by remember { mutableStateOf(false) }
     // Which surface opened the menu. The lyrics tools only appear when it came from the lyrics
@@ -400,6 +401,7 @@ private fun PlayerSheet(
         likeBurst.clear()
         showSleepTimer = false
         showSongDetails = false
+        showStreamInfo = false
     }
 
     // A page open when the player closes stays open: next time the player opens, it opens on that
@@ -1161,6 +1163,7 @@ private fun PlayerSheet(
                             sideModifier = Modifier.studioPiece(studioPieces, com.mochyy.mochymusic.ui.player.studio.StudioPieces.SIDE),
                             chevronModifier = Modifier.studioPiece(studioPieces, com.mochyy.mochymusic.ui.player.studio.StudioPieces.CHEVRON),
                             onSongInfoClick = { if (!studioEngaged) showSongDetails = true },
+                            onStreamInfoClick = { if (!studioEngaged) showStreamInfo = true },
                             // the header's title is this one moving, so it hides as that takes over
                             // (or fades, with no measured spot for the header's to start from)
                             infoAlpha = {
@@ -1382,6 +1385,7 @@ private fun PlayerSheet(
                     onChevronPositioned = { chevronButtonRect = it },
                     likeBurst = likeBurst,
                     onSongInfoClick = { if (!studioEngaged) showSongDetails = true },
+                    onStreamInfoClick = { if (!studioEngaged) showStreamInfo = true },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = belowControls + TurntableControlsLift)
@@ -1468,6 +1472,10 @@ private fun PlayerSheet(
                     state.collapseSoft()
                 },
             )
+        }
+
+        if (showStreamInfo) {
+            com.mochyy.mochymusic.ui.player.info.StreamInfoSheet(onDismiss = { showStreamInfo = false })
         }
 
         if (showActionMenu) {
