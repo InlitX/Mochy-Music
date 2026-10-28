@@ -414,6 +414,38 @@ class CastConnectionHandler(
         }
     }
 
+    /** a cast receiver on the network, as the player's device sheet lists it */
+    data class CastTarget(val id: String, val name: String, val detail: String?)
+
+    private val _targets = MutableStateFlow<List<CastTarget>>(emptyList())
+    val targets: StateFlow<List<CastTarget>> = _targets.asStateFlow()
+
+    private val discoveryCallback = object : MediaRouter.Callback() {
+        override fun onRouteAdded(router: MediaRouter, route: MediaRouter.RouteInfo) = publishTargets()
+        override fun onRouteRemoved(router: MediaRouter, route: MediaRouter.RouteInfo) = publishTargets()
+        override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) = publishTargets()
+    }
+
+    // only while the device sheet is open: active discovery keeps the wifi radio busy
+    fun startDiscovery() {
+        if (mediaRouter == null) initialize()
+        val selector = routeSelector ?: return
+        mediaRouter?.addCallback(selector, discoveryCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
+        publishTargets()
+    }
+
+    fun stopDiscovery() {
+        mediaRouter?.removeCallback(discoveryCallback)
+    }
+
+    private fun publishTargets() {
+        _targets.value = getAvailableRoutes().map { CastTarget(it.id, it.name, it.description?.takeIf { d -> d.isNotBlank() }) }
+    }
+
+    fun connectTo(id: String) {
+        getAvailableRoutes().firstOrNull { it.id == id }?.let(::connectToRoute)
+    }
+
     fun connectToRoute(route: MediaRouter.RouteInfo) {
 
         if (mediaRouter == null) {

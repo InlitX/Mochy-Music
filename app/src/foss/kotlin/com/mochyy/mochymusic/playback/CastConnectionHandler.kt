@@ -41,7 +41,15 @@ class CastConnectionHandler(
     var isSyncingFromCast: Boolean = false
         private set
 
+    /** a cast receiver on the network; the foss build has no cast, so there are never any */
+    data class CastTarget(val id: String, val name: String, val detail: String?)
+
+    val targets: StateFlow<List<CastTarget>> = MutableStateFlow(emptyList())
+
     fun initialize(): Boolean = false
+    fun startDiscovery() {}
+    fun stopDiscovery() {}
+    fun connectTo(id: String) {}
     fun disconnect() {}
     fun loadCurrentMedia() {}
     fun loadMedia(metadata: com.mochyy.mochymusic.models.MediaMetadata) {}

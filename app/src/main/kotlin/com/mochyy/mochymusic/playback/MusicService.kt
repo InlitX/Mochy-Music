@@ -95,6 +95,9 @@ import com.mochyy.mochymusic.constants.TransportFadeSecondsKey
 import com.mochyy.mochymusic.constants.CrossfadeGaplessKey
 import com.mochyy.mochymusic.constants.CrossmixMode
 import com.mochyy.mochymusic.constants.CrossmixModeKey
+import com.mochyy.mochymusic.constants.HiResOutputKey
+import com.mochyy.mochymusic.constants.PreferUsbDacKey
+import com.mochyy.mochymusic.constants.UsbPassthroughKey
 import com.mochyy.mochymusic.constants.playable
 import com.mochyy.mochymusic.crossmix.CrossmixAnalysisRepository
 import com.mochyy.mochymusic.constants.DisableLoadMoreWhenRepeatAllKey
@@ -292,6 +295,14 @@ class MusicService :
     var preferredDeviceId: Int? = null
         private set
 
+    /** the outputs, the one picked in the player, the usb dac's mixer, and whether 32-bit float may pass */
+    val audioOutputs by lazy { com.mochyy.mochymusic.playback.audio.AudioOutputs(this) }
+    // each player's stats for nerds; weak like the spectra, so a released player takes its own along
+    private val playerInspectors = java.util.WeakHashMap<Player, StreamInspector>()
+
+    /** what [player]'s song really is on its way out, for stream info */
+    fun inspectorOf(player: Player): StreamInspector? = playerInspectors[player]
+
     private var crossfadeEnabled = false
     private var crossfadeDuration = 5000f
     private var crossfadeGapless = true
@@ -391,12 +402,16 @@ class MusicService :
     }
 
     fun setPreferredAudioDevice(deviceId: Int?) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            val deviceInfo = devices.find { it.id == deviceId }
-            player.setPreferredAudioDevice(deviceInfo)
-            preferredDeviceId = deviceId
-        }
+        preferredDeviceId = deviceId
+        audioOutputs.select(deviceId)
+    }
+
+    // every player follows the picked output: crossmix and crossfade make new ones, which used to fall back to the default
+    private fun applyOutputRoute(device: AudioDeviceInfo?) {
+        playerCrossmixProcessors.keys.forEach { (it as? ExoPlayer)?.setPreferredAudioDevice(device) }
+        if (::player.isInitialized) player.setPreferredAudioDevice(device)
+        secondaryPlayer?.setPreferredAudioDevice(device)
+        fadingPlayer?.setPreferredAudioDevice(device)
     }
 
     lateinit var sleepTimer: SleepTimer
@@ -417,6 +432,13 @@ class MusicService :
     private val moduleStreamHeaders = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
     // which provider each song was last handed to (a module id, or "youtube")
     private val resolvedSourceIds = java.util.concurrent.ConcurrentHashMap<String, String>()
+    // the providers picked by hand in stream info, by song; they win over the order until they stop having it
+    private val forcedRoutes = java.util.concurrent.ConcurrentHashMap<String, ForcedRoute>()
+    private val _playingFrom = MutableStateFlow<Map<String, PlayingFrom>>(emptyMap())
+    /** where each song played from, for stream info's provider row */
+    val playingFrom = _playingFrom.asStateFlow()
+    /** stream info's "force change": stops, asks the picked provider up to 20 times, then reloads from it */
+    val providerSwitch by lazy { ProviderSwitch({ scope }, ProviderSwitchHost()) }
     /** what each song is playing as, by media id, for the player's format badge */
     val streamFacts = MutableStateFlow<Map<String, StreamFacts>>(emptyMap())
     /**
@@ -630,8 +652,13 @@ class MusicService :
                     setSmallIcon(R.drawable.mochy_notification)
                 },
         )
+        audioOutputs.onRouteChanged = ::applyOutputRoute
+        audioOutputs.preferUsb = dataStore.get(PreferUsbDacKey, false)
+        audioOutputs.passthrough = dataStore.get(UsbPassthroughKey, false)
+        audioOutputs.start()
         player = createExoPlayer()
         player.addListener(this@MusicService)
+        observeOutputSettings()
         sleepTimer = SleepTimer(scope, player)
         player.addListener(sleepTimer)
 
@@ -1070,6 +1097,7 @@ class MusicService :
         val silenceProcessor = SilenceDetectorAudioProcessor { handleLongSilenceDetected() }
         val crossmixProcessor = CrossmixTransitionAudioProcessor()
         val spectrum = com.mochyy.mochymusic.playback.audio.AudioSpectrum()
+        val inspector = StreamInspector()
 
         val hapticVibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -1130,7 +1158,7 @@ class MusicService :
 
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(createMediaSourceFactory())
-            .setRenderersFactory(createRenderersFactory(eqProcessor, fxProcessors, silenceProcessor, hapticAudioProcessor, crossmixProcessor, replayGain, spectrum))
+            .setRenderersFactory(createRenderersFactory(eqProcessor, fxProcessors, silenceProcessor, hapticAudioProcessor, crossmixProcessor, replayGain, spectrum, inspector))
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .setAudioAttributes(
@@ -1168,6 +1196,9 @@ class MusicService :
         playerCrossmixProcessors[player] = crossmixProcessor
         playerSpectra[player] = spectrum
         playerEqProcessors[player] = eqProcessor
+        playerInspectors[player] = inspector
+        player.addAnalyticsListener(inspector)
+        player.setPreferredAudioDevice(audioOutputs.preferredDevice())
 
         player.apply {
                 runBlocking {
@@ -1181,6 +1212,27 @@ class MusicService :
             }
         if (publish) _playerFlow.value = player
         return player
+    }
+
+    // the usb dac switches, and when 32-bit float may pass: media3's float path skips every audio processor
+    private fun observeOutputSettings() {
+        dataStore.data
+            .map { (it[PreferUsbDacKey] ?: false) to (it[UsbPassthroughKey] ?: false) }
+            .distinctUntilChanged()
+            .collect(scope) { (preferUsb, passthrough) ->
+                audioOutputs.preferUsb = preferUsb
+                audioOutputs.passthrough = passthrough
+            }
+        val wantsFloat = dataStore.data.map { prefs ->
+            (prefs[HiResOutputKey] ?: false) &&
+                !(prefs[SkipSilenceKey] ?: false) &&
+                !(prefs[MusicHapticsEnabledKey] ?: false) &&
+                prefs[TransportEffectKey].toEnum(TransportEffect.OFF) == TransportEffect.OFF &&
+                prefs[CrossmixModeKey]?.let { runCatching { CrossmixMode.valueOf(it) }.getOrNull() }?.playable() != CrossmixMode.CROSSMIX
+        }
+        combine(wantsFloat, audioLab.shapesSound, audioLab.playback) { wants, shapesSound, playback ->
+            wants && !shapesSound && playback.speed == 1f && playback.pitch == 1f
+        }.distinctUntilChanged().collect(scope) { audioOutputs.floatAllowed = it }
     }
 
     private fun setupAudioFocusRequest() {
@@ -3659,7 +3711,8 @@ class MusicService :
                         factory
                     },
                     fetcherAction = { mediaId ->
-                        (deviceStream(mediaItem) ?: routeStream(mediaId)).also { stream ->
+                        val forced = forcedRoutes.containsKey(mediaId)
+                        ((if (forced) null else deviceStream(mediaItem)) ?: routeStream(mediaId)).also { stream ->
                             if (stream != null) playingStreams[mediaId] = stream else playingStreams.remove(mediaId)
                         }
                     },
@@ -3684,15 +3737,17 @@ class MusicService :
         crossmixProcessor: CrossmixTransitionAudioProcessor,
         replayGain: com.mochyy.mochymusic.eq.audio.ReplayGainTags,
         spectrum: com.mochyy.mochymusic.playback.audio.AudioSpectrum,
+        inspector: StreamInspector,
     ) =
         object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
-            ) = CrossmixClockSink(DefaultAudioSink
+            ) = CrossmixClockSink(com.mochyy.mochymusic.playback.audio.PrecisionSink(DefaultAudioSink
                 .Builder(this@MusicService)
-                .setEnableFloatOutput(enableFloatOutput)
+                // float is only ever let through by PrecisionSink, while nothing it would skip is on
+                .setEnableFloatOutput(true)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
@@ -3709,7 +3764,7 @@ class MusicService :
                         SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
                         SonicAudioProcessor(),
                     ),
-                ).build(), crossmixProcessor, audioFx, replayGain, spectrum)
+                ).build(), audioOutputs, inspector), crossmixProcessor, audioFx, replayGain, spectrum)
         }.apply {
             // a phone's first-choice decoder failing to start (a vendor FLAC decoder on a 24-bit
             // file, say) moves on to its next one instead of failing the song
@@ -3842,6 +3897,7 @@ class MusicService :
         isRunning = false
 
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        audioOutputs.release()
         castConnectionHandler?.release()
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
@@ -4246,11 +4302,13 @@ class MusicService :
         }
         if (file != null) {
             forgetModuleFacts(mediaId)
+            notePlayingFrom(mediaId, PlayingFrom(PlayingFrom.Device, "This device"))
             // announced as "Playing from this device"
             return com.mochyy.mochymusic.playback.custom.CustomStreamResult(streamUrl = file, source = "this device")
         }
         if (isFullyDownloaded(mediaId)) {
             forgetModuleFacts(mediaId)
+            notePlayingFrom(mediaId, PlayingFrom(PlayingFrom.Downloads, "Your downloads"))
             // the same item: the data source finds the download under its media id
             return com.mochyy.mochymusic.playback.custom.CustomStreamResult(
                 streamUrl = uri?.toString() ?: mediaId,
@@ -4264,18 +4322,76 @@ class MusicService :
         // offline: no provider is asked; the song plays if it's cached, and is skipped if not.
         // An imported file is never looked for online, even one whose file has gone missing.
         if (com.mochyy.mochymusic.utils.OfflineMode.isOn || mediaId.startsWith("LOCAL_")) return null
+        forcedRoutes[mediaId]?.let { forced ->
+            if (forced.providerId == com.mochyy.mochymusic.modules.SourceModules.YouTubeId) return youTubeRoute(mediaId)
+            forcedModuleStream(mediaId, forced)?.let { return it }
+            // the picked provider doesn't have it any more: the usual order takes over
+            forcedRoutes.remove(mediaId)
+        }
         val skip = recentFailures(mediaId)
         // a fresh lookup: a notice from one that never got to play no longer holds
         if (skip.isEmpty()) decoderNotices.remove(mediaId)
         // songs that only YouTube has (and the common case of YouTube first) need no lookup
         val first = sourceModules.order.value.firstOrNull { it !in skip && sourceModules.isUsable(it) }
-        if (first == com.mochyy.mochymusic.modules.SourceModules.YouTubeId) {
-            resolvedSourceIds[mediaId] = first
-            forgetModuleFacts(mediaId)
-            return null
+        if (first == com.mochyy.mochymusic.modules.SourceModules.YouTubeId) return youTubeRoute(mediaId)
+        val track = trackQueryOf(mediaId)
+        val route = sourceModules.route(track, skip) { id, passed ->
+            if (!decoderNotices.containsKey(mediaId)) noteMissingDecoder(mediaId, passed.codec?.uppercase(), passed.sampleRateHz, from = id)
         }
-        val song = database.song(mediaId).first()
-        val track = song?.let {
+        return when (route) {
+            is com.mochyy.mochymusic.modules.SourceModules.Route.Module -> moduleStream(mediaId, route.module, route.stream)
+            com.mochyy.mochymusic.modules.SourceModules.Route.YouTube -> youTubeRoute(mediaId)
+            com.mochyy.mochymusic.modules.SourceModules.Route.Exhausted -> {
+                val youTube = com.mochyy.mochymusic.modules.SourceModules.YouTubeId
+                when {
+                    // YouTube is in the order after providers that don't have it: it plays there
+                    youTube !in skip && sourceModules.isUsable(youTube) -> youTubeRoute(mediaId)
+                    // the user turned YouTube off to hear only their other providers
+                    !sourceModules.isEnabled(youTube) ->
+                        throw com.mochyy.mochymusic.playback.custom.NoProviderException("none of your providers have it, and YouTube Music is off")
+                    else -> throw com.mochyy.mochymusic.playback.custom.NoProviderException("every provider failed on it")
+                }
+            }
+        }
+    }
+
+    /** null hands the song to YouTube, which is all YouTube needs */
+    private fun youTubeRoute(mediaId: String): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {
+        val youTube = com.mochyy.mochymusic.modules.SourceModules.YouTubeId
+        resolvedSourceIds[mediaId] = youTube
+        forgetModuleFacts(mediaId)
+        notePlayingFrom(mediaId, PlayingFrom(youTube, "YouTube Music"))
+        return null
+    }
+
+    private fun moduleStream(
+        mediaId: String,
+        module: com.mochyy.mochymusic.module.SourceModule,
+        stream: com.mochyy.mochymusic.module.SourceStream,
+    ): com.mochyy.mochymusic.playback.custom.CustomStreamResult {
+        resolvedSourceIds[mediaId] = module.info.id
+        val cacheKey = "$ModuleCacheKeyPrefix${module.info.id}|$mediaId"
+        moduleStreamHeaders[cacheKey] = stream.headers
+        streamFacts.update { it + (mediaId to StreamFacts(codec = stream.codec, fromModule = true)) }
+        notePlayingFrom(mediaId, PlayingFrom(module.info.id, module.info.name, stream.qualityLabel, stream.matched.id))
+        Timber.tag("StreamFetch").i("$mediaId plays from ${module.info.name}: ${stream.matched.title} · ${stream.qualityLabel}")
+        return com.mochyy.mochymusic.playback.custom.CustomStreamResult(
+            streamUrl = stream.url,
+            isHls = stream.format == com.mochyy.mochymusic.module.StreamFormat.Hls,
+            isDash = stream.format == com.mochyy.mochymusic.module.StreamFormat.Dash,
+            source = "${module.info.name} · ${stream.qualityLabel}",
+            widevineLicense = (stream.drm as? com.mochyy.mochymusic.module.StreamDrm.Widevine)?.license,
+            cacheKey = cacheKey,
+        )
+    }
+
+    private fun notePlayingFrom(mediaId: String, from: PlayingFrom) {
+        _playingFrom.update { if (it[mediaId] == from) it else it + (mediaId to from) }
+    }
+
+    /** the song as a module looks for it */
+    private suspend fun trackQueryOf(mediaId: String): com.mochyy.mochymusic.module.TrackQuery? =
+        database.song(mediaId).first()?.let {
             com.mochyy.mochymusic.module.TrackQuery(
                 title = it.song.title,
                 artists = it.artists.map { a -> a.name },
@@ -4283,46 +4399,56 @@ class MusicService :
                 durationMs = it.song.duration.takeIf { d -> d > 0 }?.times(1000L),
             )
         }
-        val route = sourceModules.route(track, skip) { id, passed ->
-            if (!decoderNotices.containsKey(mediaId)) noteMissingDecoder(mediaId, passed.codec?.uppercase(), passed.sampleRateHz, from = id)
+
+    /** one ask of [module] for the song, passing over a stream this phone has no decoder for */
+    private suspend fun resolveWith(module: com.mochyy.mochymusic.module.SourceModule, mediaId: String): com.mochyy.mochymusic.module.SourceStream? {
+        val track = trackQueryOf(mediaId) ?: return null
+        val result = module.resolve(track, sourceModules.picks(module.info.id))
+        return (result as? com.mochyy.mochymusic.module.ResolveResult.Found)?.stream
+            ?.takeIf { com.mochyy.mochymusic.modules.DeviceDecoders.canPlay(it) }
+    }
+
+    // the stream the switch already found is used once; a later replay asks the provider again
+    private suspend fun forcedModuleStream(mediaId: String, forced: ForcedRoute): com.mochyy.mochymusic.playback.custom.CustomStreamResult? {
+        val module = sourceModules.module(forced.providerId) ?: return null
+        val stream = forced.freshStream?.also { forced.freshStream = null }
+            ?: runCatching { resolveWith(module, mediaId) }.getOrNull()
+            ?: return null
+        return moduleStream(mediaId, module, stream)
+    }
+
+    private inner class ProviderSwitchHost : ProviderSwitch.Host {
+        override fun currentMediaId(): String? = player.currentMediaItem?.mediaId?.takeIf { !it.startsWith("LOCAL_") }
+
+        override fun holdPlayback(): Boolean {
+            val wasPlaying = player.playWhenReady
+            player.pause()
+            return wasPlaying
         }
-        return when (route) {
-            is com.mochyy.mochymusic.modules.SourceModules.Route.Module -> {
-                val stream = route.stream
-                resolvedSourceIds[mediaId] = route.module.info.id
-                val cacheKey = "$ModuleCacheKeyPrefix${route.module.info.id}|$mediaId"
-                moduleStreamHeaders[cacheKey] = stream.headers
-                streamFacts.update { it + (mediaId to StreamFacts(codec = stream.codec, fromModule = true)) }
-                Timber.tag("StreamFetch").i("$mediaId plays from ${route.module.info.name}: ${stream.matched.title} · ${stream.qualityLabel}")
-                com.mochyy.mochymusic.playback.custom.CustomStreamResult(
-                    streamUrl = stream.url,
-                    isHls = stream.format == com.mochyy.mochymusic.module.StreamFormat.Hls,
-                    isDash = stream.format == com.mochyy.mochymusic.module.StreamFormat.Dash,
-                    source = "${route.module.info.name} · ${stream.qualityLabel}",
-                    widevineLicense = (stream.drm as? com.mochyy.mochymusic.module.StreamDrm.Widevine)?.license,
-                    cacheKey = cacheKey,
-                )
+
+        override fun resumePlayback() = player.play()
+
+        override suspend fun resolve(providerId: String, mediaId: String): ForcedRoute? = withContext(Dispatchers.IO) {
+            if (providerId == com.mochyy.mochymusic.modules.SourceModules.YouTubeId) {
+                YTPlayerUtils.playerResponseForPlayback(mediaId, null, audioQuality, connectivityManager).getOrNull()
+                    ?: return@withContext null
+                return@withContext ForcedRoute(providerId, null)
             }
-            com.mochyy.mochymusic.modules.SourceModules.Route.YouTube -> {
-                resolvedSourceIds[mediaId] = com.mochyy.mochymusic.modules.SourceModules.YouTubeId
-                forgetModuleFacts(mediaId)
-                null
-            }
-            com.mochyy.mochymusic.modules.SourceModules.Route.Exhausted -> {
-                val youTube = com.mochyy.mochymusic.modules.SourceModules.YouTubeId
-                when {
-                    youTube !in skip && sourceModules.isUsable(youTube) -> {
-                        // YouTube is in the order after providers that don't have it: it plays there
-                        resolvedSourceIds[mediaId] = youTube
-                        forgetModuleFacts(mediaId)
-                        null
-                    }
-                    // the user turned YouTube off to hear only their other providers
-                    !sourceModules.isEnabled(youTube) ->
-                        throw com.mochyy.mochymusic.playback.custom.NoProviderException("none of your providers have it, and YouTube Music is off")
-                    else -> throw com.mochyy.mochymusic.playback.custom.NoProviderException("every provider failed on it")
-                }
-            }
+            val module = sourceModules.module(providerId) ?: return@withContext null
+            resolveWith(module, mediaId)?.let { ForcedRoute(providerId, it) }
+        }
+
+        override fun switchTo(mediaId: String, route: ForcedRoute, play: Boolean) {
+            forcedRoutes[mediaId] = route
+            failedSources.remove(mediaId)
+            failedSourcesAt.remove(mediaId)
+            val index = player.currentMediaItemIndex
+            val position = player.currentPosition
+            // stopping releases the song's source; preparing again fetches it, now from the picked provider
+            player.stop()
+            player.prepare()
+            player.seekTo(index, position)
+            player.playWhenReady = play
         }
     }
 
