@@ -518,6 +518,10 @@ fun LyricsScreen(
     }
 
     val (lyricsWaveAnimation) = rememberPreference(LyricsWaveAnimationKey, defaultValue = true)
+    // the lines' blur by their distance from the sung one is an element blur: off with blur turned
+    // off (Settings > Appearance > Disable blur), and with animations turned off (#10)
+    val (disableBlur) = rememberPreference(com.mochyy.mochymusic.constants.DisableBlurKey, defaultValue = false)
+    val lineBlurAllowed = !disableBlur && com.mochyy.mochymusic.ui.utils.AppMotion.enabled
     val (lyricsHighBloom) = rememberPreference(LyricsHighBloomKey, defaultValue = true)
 
     // Drives the per-line loading dots and lifts the readings out of the way. The button that
@@ -680,7 +684,7 @@ fun LyricsScreen(
                                     }
                                 }
                                 val state = look.state
-                                val blurStage = if (suppressEffects) 0 else look.blurStage
+                                val blurStage = if (suppressEffects || !lineBlurAllowed) 0 else look.blurStage
 
                                 val romanized by entry.romanizedTextFlow.collectAsState()
                                 val ruby by entry.rubyFlow.collectAsState()

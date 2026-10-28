@@ -307,6 +307,10 @@ fun AutoPlaylistScreen(
     }
 
     val state = rememberLazyListState()
+    // each new search shows its matches from the first, not from wherever the last one was scrolled (#128)
+    LaunchedEffect(query.text) {
+        if (isSearching) state.scrollToItem(0)
+    }
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val pullRefreshState = rememberPullToRefreshState()
     val canRefresh = playlistType == PlaylistType.LIKE || playlistType == PlaylistType.UPLOADED

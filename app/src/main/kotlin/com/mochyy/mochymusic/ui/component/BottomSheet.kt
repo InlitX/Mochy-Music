@@ -73,7 +73,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.mochyy.mochymusic.constants.NavigationBarAnimationSpec
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlin.math.pow
@@ -97,6 +101,12 @@ private val SheetSwipeCommit = 8.dp
 private val SheetCloseCommit = 36.dp
 private val SheetCloseFlick = 900.dp
 private val SheetCloseFlickTravel = 12.dp
+
+/**
+ * How far the mini player has to be pulled down, summed over the drag, before it's dismissed
+ * (which stops playback and clears the queue).
+ */
+private val MiniPlayerDismissCommit = 48.dp
 
 private val PlayerSheetHorizontalAnimationSpec = spring<Float>(
     dampingRatio = 0.92f,
@@ -456,6 +466,7 @@ fun BottomSheet(
                             val closePx = SheetCloseCommit.toPx()
                             val flickPx = SheetCloseFlick.toPx()
                             val flickTravelPx = SheetCloseFlickTravel.toPx()
+                            val dismissPx = MiniPlayerDismissCommit.toPx()
                             // Whether this drag began on the open player (or one all but settled
                             // open: the open spring's tail runs on for a second after it looks up).
                             var startedOpen = false
@@ -473,8 +484,9 @@ fun BottomSheet(
                                     sideSwipe = null
                                     dragSum = Offset.Zero
                                     acted = false
-                                    startedOpen = state.isExpanded ||
-                                        (state.isExpandedOrExpanding && state.progress > 0.9f)
+                                    // by how open it looks: a sheet showing open whose anchor says
+                                    // otherwise (a cut-short animation) still swipes closed (#109)
+                                    startedOpen = state.isExpanded || state.progress > 0.9f
                                     val coordinates = sheetCoordinates[0]
                                     swipeStart = if (coordinates != null && coordinates.isAttached) {
                                         coordinates.localToRoot(start)
@@ -524,7 +536,16 @@ fun BottomSheet(
                                             acted = true
                                             state.collapseSoft()
                                             change.consume()
-                                        } else if (dragAmount.y > 2f && state.isCollapsed && onDismiss != null) {
+                                        } else if (
+                                            !acted && state.isCollapsed && onDismiss != null &&
+                                            dragSum.y > dismissPx && abs(dragSum.y) > abs(dragSum.x) * 2f
+                                        ) {
+                                            // Dismissing stops playback and clears the queue, so it
+                                            // takes a deliberate pull down, summed over the drag and
+                                            // clearly vertical. It used to be any single 2px move
+                                            // down: the first move of a slightly slanted sideways
+                                            // swipe (meant to skip) threw the whole queue away (#47).
+                                            acted = true
                                             state.dismiss()
                                             onDismiss.invoke()
                                             change.consume()
@@ -918,7 +939,7 @@ fun rememberBottomSheetState(
         Animatable(0.dp, Dp.VectorConverter)
     }
 
-    return remember(dismissedBound, expandedBound, collapsedBound, coroutineScope) {
+    val state = remember(dismissedBound, expandedBound, collapsedBound, coroutineScope) {
         val initialValue = when (previousAnchor) {
             expandedAnchor -> expandedBound
             collapsedAnchor -> collapsedBound
@@ -946,7 +967,36 @@ fun rememberBottomSheetState(
             anchor = { previousAnchor },
         )
     }
+
+    // The sheet always ends where it was last sent. collapse()/expand() set the anchor first and
+    // animate after, in a coroutine of their own, and the window resizing under the open player
+    // (the navigation bar hiding, a rotation) swaps in a new state mid-way. Should that animation
+    // be cut short, the anchor and the drawn sheet disagree: the player looks open but reads as
+    // closing, so the handle, the swipe down and the open player's own state all refuse it - the
+    // "stuck in the player" report (#109). Whenever nothing is animating the sheet and it rests
+    // somewhere other than its anchor's bound, it is sent the rest of the way.
+    LaunchedEffect(state) {
+        snapshotFlow {
+            val target = when (previousAnchor) {
+                expandedAnchor -> state.expandedBound
+                collapsedAnchor -> state.collapsedBound
+                else -> state.dismissedBound
+            }
+            if (animatable.isRunning || animatable.value == target) null else target
+        }.collectLatest { target ->
+            if (target == null) return@collectLatest
+            // a beat first: an animation just launched (a bounds change, a swipe's settle) starts
+            // running within a frame, and this then stands down
+            delay(SheetSettleGraceMs)
+            // launched on its own, so the next emission (the animation starting) can't cancel it
+            coroutineScope.launch { animatable.animateTo(target, PlayerSheetAnimationSpec) }
+        }
+    }
+    return state
 }
+
+/** How long the sheet may rest away from its anchor, with nothing animating it, before it's sent home. */
+private const val SheetSettleGraceMs = 250L
 
 /**
  * A sideways swipe on the collapsed sheet, the mini player. The player hands it to its row of

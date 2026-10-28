@@ -417,6 +417,13 @@ private fun PlayerSheet(
     // it is: collapsed, the pages are unmounted (still remembered) and the seek bar holds still.
     val sheetShowing by remember(state) { derivedStateOf { state.progress > 0f } }
 
+    // Settings > Customise > Gesture: a swipe down anywhere on the open player closes it (#121)
+    val (swipeDownAnywhere) = rememberPreference(
+        com.mochyy.mochymusic.constants.PlayerSwipeDownAnywhereKey,
+        defaultValue = false,
+    )
+    val currentSwipeDownAnywhere by androidx.compose.runtime.rememberUpdatedState(swipeDownAnywhere)
+
     val isSheetInTransition by remember(state) {
         derivedStateOf { !state.isExpanded && !state.isCollapsed && !state.isDismissed }
     }
@@ -677,6 +684,9 @@ private fun PlayerSheet(
                     val stripBottom = maxOf(currentCloseStripBottom, coverTop ?: 0f)
                     if (start.y < stripBottom) return true
                     if (pageOpen) return false
+                    // chosen in Settings > Gesture: the whole player, as it was before the top-only
+                    // close. Swipes up still open the card's page, sideways ones still skip.
+                    if (currentSwipeDownAnywhere) return true
                     // the squared cover is a card you can pull down too, sideways on it still swipes songs
                     if (currentCoverStyle == PlayerCoverStyle.SQUARED) return rects.cover?.contains(start) == true
                     if (currentCoverStyle != PlayerCoverStyle.EDGE_TO_EDGE) return false
