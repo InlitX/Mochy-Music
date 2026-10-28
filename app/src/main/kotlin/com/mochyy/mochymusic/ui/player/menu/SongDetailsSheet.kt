@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,12 +35,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.mochyy.mochymusic.LocalDatabase
@@ -52,14 +50,16 @@ import com.mochyy.mochymusic.models.MediaMetadata
 import com.mochyy.mochymusic.ui.utils.resize
 import com.music.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * What tapping the title and artist on the player opens: the song at the top, a row for each of
- * its artists (with the artist's own photo), one for its album, and "About song", which opens the
- * song's description in a second sheet stacked on this one. Small: it is as tall as what's in it.
+ * its artists (with the artist's own photo), one for its album, then "About song" and "Stream
+ * info", each opening its own sheet stacked on this one. Small: it is as tall as what's in it.
  */
 @Composable
 fun SongDetailsSheet(
@@ -70,8 +70,13 @@ fun SongDetailsSheet(
     val playerConnection = LocalPlayerConnection.current ?: return
     val metadata by playerConnection.mediaMetadata.collectAsState()
     val song = metadata ?: return
+    // stream info is about the song really playing: until a stream is found for it there's nothing to show
+    val streaming by remember(song.id) {
+        playerConnection.service.playingFrom.map { it.containsKey(song.id) }.distinctUntilChanged()
+    }.collectAsState(initial = false)
 
     var showAbout by remember { mutableStateOf(false) }
+    var showStream by remember { mutableStateOf(false) }
     // Shared by this sheet and the about sheet, so the about sheet stacks on this one (it shrinks
     // back and peeks its handle above) instead of opening over it as a second dimmed sheet.
     val stack = rememberMenuSheetStack()
@@ -116,20 +121,14 @@ fun SongDetailsSheet(
                         title = "About song",
                         onClick = { showAbout = true },
                     ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(DetailImageSize)
-                                .clip(RoundedCornerShape(7.dp))
-                                .background(Color.White.copy(alpha = 0.9f)),
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.info),
-                                contentDescription = null,
-                                tint = Color.Black.copy(alpha = 0.75f),
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
+                        DetailGlyph(R.drawable.info)
+                    }
+                    DetailRow(
+                        title = "Stream info",
+                        enabled = streaming,
+                        onClick = { showStream = true },
+                    ) {
+                        DetailGlyph(R.drawable.graphic_eq)
                     }
                 }
 
@@ -139,54 +138,14 @@ fun SongDetailsSheet(
         }
 
         if (showAbout) {
-            AboutSongSheet(song = song, onDismiss = { showAbout = false })
-        }
-    }
-}
-
-/** "About song": the song's description, stacked on the details sheet; done goes back to it. */
-@Composable
-private fun AboutSongSheet(song: MediaMetadata, onDismiss: () -> Unit) {
-    // null while it loads; "" when YouTube had nothing to say
-    val description by produceState<String?>(initialValue = null, song.id) {
-        value = withContext(Dispatchers.IO) {
-            YouTube.getMediaInfo(song.id).getOrNull()?.description?.trim().orEmpty()
-        }
-    }
-
-    MenuSheetSurface(onDismiss = onDismiss, wrapHeight = true) { _ ->
-        val closeSheet = LocalMenuSheetClose.current
-        SheetColumn {
-            SongHeader(song)
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "About song",
-                color = Color.White,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.04).em,
-                maxLines = 1,
+            com.mochyy.mochymusic.ui.player.info.AboutSongSheet(
+                song = song,
+                onDismiss = { showAbout = false },
+                onOpenArtist = onOpenArtist,
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            // A long description scrolls here, between the title and the button, which stays put
-            Column(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    text = when {
-                        description == null -> "…"
-                        description.isNullOrEmpty() -> "There's no description for this song."
-                        else -> description.orEmpty()
-                    },
-                    color = Color.White.copy(alpha = 0.82f),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                )
-            }
-            Spacer(modifier = Modifier.height(28.dp))
-            DoneButton(onClick = closeSheet)
+        }
+        if (showStream) {
+            com.mochyy.mochymusic.ui.player.info.StreamInfoSheet(onDismiss = { showStream = false })
         }
     }
 }
@@ -204,9 +163,9 @@ private fun ColumnScope.SheetColumn(content: @Composable ColumnScope.() -> Unit)
     )
 }
 
-/** The song itself at the top of both sheets, like the player's action menu has it. */
+/** The song itself at the top of the song's sheets, like the player's action menu has it. */
 @Composable
-private fun SongHeader(song: MediaMetadata) {
+internal fun SongHeader(song: MediaMetadata) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         AsyncImage(
             model = song.thumbnailUrl?.resize(240, 240),
@@ -248,15 +207,18 @@ private val DetailImageSize = 28.dp
 private fun DetailRow(
     title: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
     leading: @Composable () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer { alpha = if (enabled) 1f else 0.4f }
             .clip(RoundedCornerShape(16.dp))
             .background(MenuRowSurface)
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
@@ -273,6 +235,25 @@ private fun DetailRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** a row's white square with a glyph on it, for the rows that aren't a person or a cover */
+@Composable
+private fun DetailGlyph(icon: Int) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(DetailImageSize)
+            .clip(RoundedCornerShape(7.dp))
+            .background(Color.White.copy(alpha = 0.9f)),
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = Color.Black.copy(alpha = 0.75f),
+            modifier = Modifier.size(16.dp),
         )
     }
 }
