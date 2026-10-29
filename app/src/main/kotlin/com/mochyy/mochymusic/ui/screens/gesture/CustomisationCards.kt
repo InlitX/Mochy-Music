@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -69,11 +70,11 @@ internal val CustomisePageMargin = 36.dp
 // the slider runs from a square corner to this many px
 internal const val MaxCoverRadius = 45f
 
-private val CardShape = RoundedCornerShape(22.dp)
-private val SliderCardShape = RoundedCornerShape(20.dp)
+internal val CardShape = RoundedCornerShape(22.dp)
+internal val SliderCardShape = RoundedCornerShape(20.dp)
 private val RoundingCardHeight = 186.dp
-private val StyleCardHeight = 187.dp
-private val CardTextInset = 22.dp
+internal val StyleCardHeight = 187.dp
+internal val CardTextInset = 22.dp
 
 // the cover corner in the rounding card: flush with its top right, this big
 private val SwatchWidth = 146.dp
@@ -87,7 +88,7 @@ private val ArcTail = 12.dp
 // the outline round the style that's in use
 private val HighlightColor = Color.White.copy(alpha = 0.9f)
 
-private val CardLabelStyle = TextStyle(
+internal val CardLabelStyle = TextStyle(
     fontFamily = InterFontFamily,
     fontWeight = FontWeight.SemiBold,
     fontSize = 15.sp,
@@ -95,7 +96,7 @@ private val CardLabelStyle = TextStyle(
     letterSpacing = (-0.03).em,
 )
 
-private val CardValueStyle = TextStyle(
+internal val CardValueStyle = TextStyle(
     fontFamily = InterFontFamily,
     fontWeight = FontWeight.Bold,
     fontSize = 32.sp,
@@ -104,14 +105,14 @@ private val CardValueStyle = TextStyle(
     color = Color.White,
 )
 
-private val SmallLabelStyle = TextStyle(
+internal val SmallLabelStyle = TextStyle(
     fontFamily = InterFontFamily,
     fontWeight = FontWeight.Medium,
     fontSize = 9.sp,
     letterSpacing = (-0.01).em,
 )
 
-private val CaptionStyle = TextStyle(
+internal val CaptionStyle = TextStyle(
     fontFamily = InterFontFamily,
     fontWeight = FontWeight.Medium,
     fontSize = 10.sp,
@@ -154,46 +155,67 @@ fun CoverRoundingSection(
 
         Spacer(Modifier.height(11.dp))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(SliderCardShape)
-                .background(LabColors.Card)
-                .padding(start = CardTextInset, end = CardTextInset, top = 16.dp, bottom = 12.dp),
+        CustomiseSliderCard(
+            title = "customize it",
+            startLabel = "square",
+            endLabel = "more rounded",
+            fraction = radiusPx / MaxCoverRadius,
+            onFractionChange = { f ->
+                val next = f * MaxCoverRadius
+                val tick = (next / 5f).roundToInt()
+                // a tick every 5px, so the drag feels like it has notches
+                if (tick != lastTick) {
+                    lastTick = tick
+                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                }
+                onRadiusChange(next)
+            },
+        )
+    }
+}
+
+// the slim card under a big one: a title (and its value), a bare slider line, and what each end means
+@Composable
+internal fun CustomiseSliderCard(
+    title: String,
+    startLabel: String,
+    endLabel: String,
+    fraction: Float,
+    onFractionChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    valueText: String? = null,
+    enabled: Boolean = true,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(SliderCardShape)
+            .background(LabColors.Card)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
+            .padding(start = CardTextInset, end = CardTextInset, top = 16.dp, bottom = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(text = title, style = SliderTitleStyle, color = Color.White, modifier = Modifier.weight(1f))
+            if (valueText != null) Text(text = valueText, style = SliderTitleStyle, color = Color.White.copy(alpha = 0.7f))
+        }
+        Spacer(Modifier.height(4.dp))
+        BareSlider(fraction = fraction, onFractionChange = onFractionChange, enabled = enabled)
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text = "customize it",
-                style = TextStyle(
-                    fontFamily = InterFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    letterSpacing = (-0.03).em,
-                ),
-                color = Color.White,
-            )
-            Spacer(Modifier.height(4.dp))
-            RoundingSlider(
-                value = radiusPx,
-                onValueChange = { next ->
-                    val tick = (next / 5f).roundToInt()
-                    // a tick every 5px, so the drag feels like it has notches
-                    if (tick != lastTick) {
-                        lastTick = tick
-                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    }
-                    onRadiusChange(next)
-                },
-            )
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("square", style = SmallLabelStyle, color = Color.White.copy(alpha = 0.5f))
-                Text("more rounded", style = SmallLabelStyle, color = Color.White.copy(alpha = 0.5f))
-            }
+            Text(startLabel, style = SmallLabelStyle, color = Color.White.copy(alpha = 0.5f))
+            Text(endLabel, style = SmallLabelStyle, color = Color.White.copy(alpha = 0.5f))
         }
     }
 }
+
+private val SliderTitleStyle = TextStyle(
+    fontFamily = InterFontFamily,
+    fontWeight = FontWeight.Bold,
+    fontSize = 13.sp,
+    letterSpacing = (-0.03).em,
+)
 
 // the big cover corner tucked into the card's top right, with the white arc hugging its bend
 @Composable
@@ -230,32 +252,44 @@ private fun RoundingSwatch(radiusPx: Float, modifier: Modifier) {
     }
 }
 
-// a bare line like the mock: the bright part is how round covers are, tap or drag anywhere on it
+// a bare line like the mock: the bright part is how far along it is, tap or drag anywhere on it
 @Composable
-private fun RoundingSlider(value: Float, onValueChange: (Float) -> Unit) {
+private fun BareSlider(fraction: Float, onFractionChange: (Float) -> Unit, enabled: Boolean) {
     var widthPx by remember { mutableFloatStateOf(1f) }
-    val fraction = (value / MaxCoverRadius).coerceIn(0f, 1f)
+    val shown = fraction.coerceIn(0f, 1f)
+    val currentShown by androidx.compose.runtime.rememberUpdatedState(shown)
+    val currentOnChange by androidx.compose.runtime.rememberUpdatedState(onFractionChange)
 
     fun updateFromX(x: Float) {
-        onValueChange((x / widthPx).coerceIn(0f, 1f) * MaxCoverRadius)
+        currentOnChange((x / widthPx).coerceIn(0f, 1f))
     }
 
-    val dragState = rememberDraggableState { delta -> updateFromX(fraction * widthPx + delta) }
+    // the finger's own spot, so a slider that snaps to steps still moves when each move is smaller than a step
+    var dragX by remember { mutableFloatStateOf(0f) }
+    val dragState = rememberDraggableState { delta ->
+        dragX += delta
+        updateFromX(dragX)
+    }
 
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(20.dp)
             .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
-            .pointerInput(Unit) { detectTapGestures { offset -> updateFromX(offset.x) } }
-            .draggable(state = dragState, orientation = Orientation.Horizontal),
+            .pointerInput(enabled) { if (enabled) detectTapGestures { offset -> updateFromX(offset.x) } }
+            .draggable(
+                state = dragState,
+                orientation = Orientation.Horizontal,
+                enabled = enabled,
+                onDragStarted = { dragX = currentShown * widthPx },
+            ),
     ) {
         val y = size.height / 2f
         val stroke = 3.dp.toPx()
         val start = stroke / 2f
         val end = size.width - stroke / 2f
         drawLine(Color.White.copy(alpha = 0.2f), Offset(start, y), Offset(end, y), stroke, StrokeCap.Round)
-        drawLine(Color.White, Offset(start, y), Offset(start + (end - start) * fraction, y), stroke, StrokeCap.Round)
+        drawLine(Color.White, Offset(start, y), Offset(start + (end - start) * shown, y), stroke, StrokeCap.Round)
     }
 }
 

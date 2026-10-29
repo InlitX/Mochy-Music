@@ -37,22 +37,27 @@ import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
 internal val PreviewWidth = 133.dp
 
 private val FrameShape = RoundedCornerShape(topStart = 15.dp, topEnd = 15.dp)
-private val FrameFill = Color(0xFF2B2B2D)
-private val ArtFill = Brush.verticalGradient(listOf(Color(0xFF636365), Color(0xFF3F3F41)))
+internal val FrameFill = Color(0xFF2B2B2D)
+internal val ArtFill = Brush.verticalGradient(listOf(Color(0xFF636365), Color(0xFF3F3F41)))
 private val SoftArtFill = Brush.verticalGradient(listOf(Color(0xFF545456), FrameFill))
 private val ArtLight = Color(0xFF7C7C7E)
-private val Ink = Color.White.copy(alpha = 0.92f)
-private val Bone = Color.White.copy(alpha = 0.2f)
-private val BoneDim = Color.White.copy(alpha = 0.1f)
+internal val Ink = Color.White.copy(alpha = 0.92f)
+internal val Bone = Color.White.copy(alpha = 0.2f)
+internal val BoneDim = Color.White.copy(alpha = 0.1f)
 private val Pill = RoundedCornerShape(50)
 
 // the little phone screen peeking up from a style card's bottom right, sinking into the card at its foot
 @Composable
-internal fun PreviewFrame(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+internal fun PreviewFrame(
+    modifier: Modifier = Modifier,
+    width: Dp = PreviewWidth,
+    top: Dp = 23.dp,
+    content: @Composable BoxScope.() -> Unit,
+) {
     Box(
         modifier = modifier
-            .padding(top = 23.dp, end = 18.dp)
-            .width(PreviewWidth)
+            .padding(top = top, end = 18.dp)
+            .width(width)
             .fillMaxHeight()
             .clip(FrameShape)
             .background(FrameFill)
@@ -205,7 +210,7 @@ private fun NowPlayingBars() {
 
 // a title and the line under it, like the mock's two white bars
 @Composable
-private fun TitleBars(modifier: Modifier = Modifier) {
+internal fun TitleBars(modifier: Modifier = Modifier) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         Bar(42.dp, 4.5.dp)
         Bar(30.dp, 4.5.dp)
@@ -261,7 +266,7 @@ private fun Shelf(shape: RoundedCornerShape, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Bar(width: Dp, height: Dp, color: Color = Ink) {
+internal fun Bar(width: Dp, height: Dp, color: Color = Ink) {
     Box(Modifier.size(width, height).background(color, Pill))
 }
 
