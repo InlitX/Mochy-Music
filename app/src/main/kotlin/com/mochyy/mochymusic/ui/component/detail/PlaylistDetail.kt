@@ -1384,6 +1384,8 @@ fun PlaylistTrackRow(
     onLikeClick: (() -> Unit)? = null,
 ) {
     val band by animateFloatAsState(if (selected) 1f else 0f, tween(180), label = "selectedBand")
+    // Keep album rows as compact as the other tracks while giving the heart a 48dp tap target.
+    val verticalPadding = if (trailing == null && liked != null && onLikeClick != null) 5.dp else 9.dp
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -1395,7 +1397,7 @@ fun PlaylistTrackRow(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .padding(start = PlaylistInset, end = 24.dp, top = 9.dp, bottom = 9.dp)
+            .padding(start = PlaylistInset, end = 24.dp, top = verticalPadding, bottom = verticalPadding)
     ) {
         Box(
             modifier = Modifier
