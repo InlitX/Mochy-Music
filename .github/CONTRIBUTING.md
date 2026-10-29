@@ -35,7 +35,9 @@ Yooo, thanks for wanting to help out. This thing is small, so the process here i
 
 7. **Open the pull request.** Fill in the PR template, link the issue it fixes, and add screenshots or a screen recording for anything visual.
 
-Commit messages should be short and say what changed. Conventional prefixes (`fix:`, `feat:`, `refactor:`) are welcome but not required. just make it simple, ok?
+8. **Test the app and profile it, compare, record the jitter before and after** if you make any visual changes/optimisation, thanks!
+
+Commit messages should be short and say what changed. Conventional prefixes (`fix:`, `feat:`, `refactor:`) are welcome but not required. just make it simple, ok? 
 
 ## Reporting bugs
 
