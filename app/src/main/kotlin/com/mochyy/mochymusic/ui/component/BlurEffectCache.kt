@@ -63,6 +63,12 @@ object BlurEffectCache {
         }
     }
 
+    /** a blur on a thing itself (a lyric line, a morphing title, a menu row), gone while element blur is off */
+    fun element(
+        radius: Float,
+        tileMode: Shader.TileMode = Shader.TileMode.CLAMP,
+    ): RenderEffect? = if (com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur) get(radius, tileMode) else null
+
     /** The radius [get] actually blurs by: clamped on API <= 34 unless [allowLargeRadius]. */
     fun effectiveRadius(radius: Float, allowLargeRadius: Boolean = false): Float =
         if (Build.VERSION.SDK_INT <= 34 && !allowLargeRadius) radius.coerceAtMost(54f) else radius

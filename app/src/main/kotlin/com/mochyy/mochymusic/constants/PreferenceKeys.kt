@@ -700,6 +700,7 @@ val EnableLyricsThumbnailPlayPauseKey = booleanPreferencesKey("enableLyricsThumb
 val LyricsTextPositionKey = stringPreferencesKey("lyricsTextPosition")
 val LyricsClickKey = booleanPreferencesKey("lyricsClick")
 
+// the old lyrics shader switch, only read once to move people onto the shaderless lyric styles
 val LyricsWaveAnimationKey = booleanPreferencesKey("lyricsWaveAnimation")
 
 val LyricsHighBloomKey = booleanPreferencesKey("lyricsHighBloom")
@@ -743,12 +744,27 @@ val LyricsStandardBlurKey = booleanPreferencesKey("lyricsStandardBlur")
  */
 val LyricsMotionStyleKey = stringPreferencesKey("lyricsMotionStyle")
 
-enum class LyricsMotionStyle(val displayName: String, val description: String) {
+// risesWords: words rise and lines cascade (style 1's motion), shaded: the agsl glow and wave run on top
+enum class LyricsMotionStyle(
+    val displayName: String,
+    val description: String,
+    val risesWords: Boolean,
+    val shaded: Boolean,
+) {
     /** Style 1: words rise into place as they're sung, held notes swell and glow, lines cascade. */
-    MOTION("Style 1", "Words rise as they're sung, long notes swell, lines cascade"),
+    MOTION("Style 1", "Words rise as they're sung, long notes swell, lines cascade", risesWords = true, shaded = true),
 
     /** Style 2: the original - a wave across the sung letters, the list scrolls as one piece. */
-    LEGACY("Style 2", "The original wave across the sung letters"),
+    LEGACY("Style 2", "The original wave across the sung letters", risesWords = false, shaded = true),
+
+    // style 1 without the shader, for phones that struggle with it
+    BORING("Boring", "Style 1's rise, without the glow", risesWords = true, shaded = false),
+
+    // style 2 without the shader, just the colour sweeping along
+    PLAIN("Plain", "Style 2's sweep, without the glow or the wave", risesWords = false, shaded = false);
+
+    // the same motion with the shader switched off, used when moving people off the old shader switch
+    val withoutShader: LyricsMotionStyle get() = if (risesWords) BORING else PLAIN
 }
 
 val LyricsAnimationStyleKey = stringPreferencesKey("lyricsAnimationStyle")
@@ -1092,8 +1108,19 @@ val BlurQualityKey = stringPreferencesKey("blurQuality")
 
 enum class BlurQuality { LOW, HIGH }
 val EnableProgressiveBlurKey = booleanPreferencesKey("enableProgressiveBlur")
+// the animation switch in customize: off, nothing in the app moves (the old key name stayed so nobody's choice is lost)
 val EnableElementBlurAnimatorKey = booleanPreferencesKey("enableElementBlurAnimator")
 val BlurStrengthPxKey = floatPreferencesKey("blurStrengthPx")
+// blur on things themselves (lyric lines, title morphs, menus, page wipes), apart from the glass blur
+val ElementBlurKey = booleanPreferencesKey("elementBlur")
+// how fast animations run on top of android's own animation speed, 1 means just follow android
+val AnimationSpeedKey = floatPreferencesKey("animationSpeed")
+// the phone's status bar over the open player, off hides it (the ipod always hides it, it has its own)
+val PlayerStatusBarKey = booleanPreferencesKey("playerStatusBar")
+// settings rows show only their titles, holding a row still shows what it does
+val HideSettingsDescriptionsKey = booleanPreferencesKey("hideSettingsDescriptions")
+// no update popup on home and no update notification, the updater page still shows what's new when opened
+val HideUpdateNoticeKey = booleanPreferencesKey("hideUpdateNotice")
 val AudioQualityBadgeDevKey = booleanPreferencesKey("audioQualityBadgeDev")
 val YtVideoBackgroundLyricsSyncKey = booleanPreferencesKey("ytVideoBackgroundLyricsSync")
 val ForceYtBackdropBlur1500Key = booleanPreferencesKey("forceYtBackdropBlur1500")

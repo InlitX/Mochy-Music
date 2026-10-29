@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.Box
@@ -553,6 +554,20 @@ fun GlassPillBackground(
 
 enum class BlurDirection { TopToBottom, BottomToTop }
 
+// the hairline where a flat bar's blur stops, when progressive blur is off
+private val FlatBarEdgeColor = Color.White.copy(alpha = 0.16f)
+private val FlatBarEdgeWidth = 1.dp
+
+// how dark the one even tint is that replaces a bar's fading scrim while progressive blur is off
+const val FlatBarScrimAlpha = 0.45f
+
+// whether bars blur progressively; off, they're flat with a hairline, and their own fading scrims turn into one tint
+@Composable
+fun rememberProgressiveBlur(): Boolean {
+    val (enabled) = rememberPreference(com.mochyy.mochymusic.constants.EnableProgressiveBlurKey, defaultValue = true)
+    return enabled
+}
+
 @Composable
 fun ProgressiveGlassBackground(
     state: GlassState,
@@ -563,29 +578,26 @@ fun ProgressiveGlassBackground(
     modifier: Modifier = Modifier,
     steps: Int = 5
 ) {
-    // Settings > Appearance > Progressive blur. The switch was there but nothing read it (#9).
-    // Off, the bar is one even blur at full strength - no radius growing down its height - with
-    // its edge softened the way the first step's is, so it still melts into the page.
-    val (progressiveEnabled) = rememberPreference(
-        com.mochyy.mochymusic.constants.EnableProgressiveBlurKey,
-        defaultValue = true,
-    )
-    if (!progressiveEnabled) {
-        val fade = 1f / steps.coerceAtLeast(1)
-        val mask = remember(direction, fade) {
-            if (direction == BlurDirection.TopToBottom) {
-                Brush.verticalGradient(0f to Color.Transparent, fade to Color.Black, 1f to Color.Black)
-            } else {
-                Brush.verticalGradient(0f to Color.Black, (1f - fade) to Color.Black, 1f to Color.Transparent)
-            }
-        }
-        Box(modifier = modifier) {
+    // off, the bar is one even blur that stops at a hard edge with a hairline, a classic frosted bar instead of a fade
+    if (!rememberProgressiveBlur()) {
+        Box(
+            modifier = modifier
+                .clipToBounds()
+                .drawWithContent {
+                    drawContent()
+                    val line = FlatBarEdgeWidth.toPx()
+                    val y = if (direction == BlurDirection.TopToBottom) 0f else size.height - line
+                    drawRect(FlatBarEdgeColor, topLeft = Offset(0f, y), size = Size(size.width, line))
+                },
+        ) {
             GlassPillBackground(
                 state = state,
                 blurRadius = maxBlurRadius,
                 tint = tint,
                 foundationColor = foundationColor,
-                mask = mask,
+                tileMode = android.graphics.Shader.TileMode.CLAMP,
+                // blurred from what's really past the edge, so the hard edge doesn't smear into a glow
+                bleed = true,
                 modifier = Modifier.fillMaxSize(),
             )
         }

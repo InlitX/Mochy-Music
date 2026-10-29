@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,18 +40,12 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.ui.component.BottomSheetState
 import com.mochyy.mochymusic.ui.component.LocalPlayerBottomSheetState
-import com.mochyy.mochymusic.ui.player.findActivity
 import com.mochyy.mochymusic.ui.player.styles.LocalStyleInteractive
 import com.mochyy.mochymusic.ui.player.styles.rememberStyleShowing
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
@@ -60,7 +53,6 @@ import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
 import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
 
 // the ipod classic as a player: fills a phone edge to edge, sits whole on black on a big screen
 @Composable
@@ -83,7 +75,6 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
             if (wholeDevice) deviceGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
             else phoneGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
         }
-        if (!preview) HideStatusBar()
         Box(
             Modifier
                 .fillMaxSize()
@@ -300,32 +291,6 @@ private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: B
                 onDrawBehind { drawPath(path, ink, style = stroke) }
             },
     )
-}
-
-// the ipod has its own battery and status header, so the android status bar hides while the player is open
-@Composable
-private fun HideStatusBar() {
-    val view = LocalView.current
-    val sheet = LocalPlayerBottomSheetState.current
-    val focused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(view, sheet, focused) {
-        val window = view.context.findActivity()?.window ?: return@LaunchedEffect
-        val controller = WindowCompat.getInsetsController(window, window.decorView.rootView)
-        try {
-            snapshotFlow { sheet == null || sheet.isExpanded }
-                .distinctUntilChanged()
-                .collect { open ->
-                    if (open) {
-                        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                        controller.hide(WindowInsetsCompat.Type.statusBars())
-                    } else {
-                        controller.show(WindowInsetsCompat.Type.statusBars())
-                    }
-                }
-        } finally {
-            controller.show(WindowInsetsCompat.Type.statusBars())
-        }
-    }
 }
 
 // a style card in the picker shows the ipod, it doesn't work it

@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.areNavigationBarsVisible
+import androidx.compose.foundation.layout.areStatusBarsVisible
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
@@ -97,6 +98,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -220,6 +222,7 @@ import com.valentinilk.shimmer.LocalShimmerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import com.mochyy.mochymusic.ui.screens.setup.SetupWizardContainer
 import kotlinx.coroutines.Dispatchers
+import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -288,6 +291,9 @@ class MainActivity : ComponentActivity() {
 
     /** A fresh launch from the launcher plays the launch intro (ui/launch/LaunchIntro.kt). */
     private var introRequested = false
+
+    // keeps the app's animation speed following android's own animation scale while we're open
+    private var systemScaleObserver: android.database.ContentObserver? = null
     private var introPlays = false
 
     private val serviceConnection = object : ServiceConnection {
@@ -347,6 +353,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        systemScaleObserver?.let { contentResolver.unregisterContentObserver(it) }
+        systemScaleObserver = null
         if (dataStore.get(StopMusicOnTaskClearKey, false) &&
             playerConnection?.isPlaying?.value == true &&
             isFinishing
@@ -392,6 +400,8 @@ class MainActivity : ComponentActivity() {
 
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        systemScaleObserver = com.mochyy.mochymusic.ui.utils.AppMotion.followSystemScale(this)
+        moveOffOldLyricsShaderSwitch()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             val locale = dataStore[AppLanguageKey]
@@ -417,7 +427,12 @@ class MainActivity : ComponentActivity() {
                 }
         }
 
-        setContent {
+        // our own animation scale goes into the window's recomposer, so the customize speed and the off switch reach every animation
+        val motionRecomposer = window.decorView.createLifecycleAwareWindowRecomposer(
+            com.mochyy.mochymusic.ui.utils.AppMotion.durationScale,
+            lifecycle,
+        )
+        setContent(parent = motionRecomposer) {
             mochyApp(
                 playerConnection = playerConnection,
                 database = database,
@@ -459,12 +474,18 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Settings > Appearance > Animation, for the page transitions and the lyrics' blur (#10)
+        // customize's animation and element blur settings, copied where draw code and the window's animation scale read them
         val animationsEnabled by rememberPreference(
             com.mochyy.mochymusic.constants.EnableElementBlurAnimatorKey,
             defaultValue = true,
         )
-        SideEffect { com.mochyy.mochymusic.ui.utils.AppMotion.enabled = animationsEnabled }
+        val animationSpeed by rememberPreference(com.mochyy.mochymusic.constants.AnimationSpeedKey, defaultValue = 1f)
+        val elementBlur by rememberPreference(com.mochyy.mochymusic.constants.ElementBlurKey, defaultValue = true)
+        SideEffect {
+            com.mochyy.mochymusic.ui.utils.AppMotion.enabled = animationsEnabled
+            com.mochyy.mochymusic.ui.utils.AppMotion.speed = animationSpeed
+            com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur = elementBlur
+        }
 
         // "Keep screen on" (the player's menu, or a chevron button): the phone doesn't sleep while
         // Mochy is on screen. A window flag only holds while the app is in front, which is the point.
@@ -718,7 +739,7 @@ class MainActivity : ComponentActivity() {
                     expandedBound = maxHeight,
                 )
 
-                PlayerNavBarSync(playerBottomSheetState)
+                PlayerSystemBarsSync(playerBottomSheetState)
 
                 val playerAwareWindowInsets = remember(
                     bottomInset,
@@ -1335,23 +1356,33 @@ class MainActivity : ComponentActivity() {
     // reads the sheet state here, so its flips don't recompose the whole app root
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
-    private fun PlayerNavBarSync(state: BottomSheetState) {
+    private fun PlayerSystemBarsSync(state: BottomSheetState) {
         // The open player hides the navigation bar: gone once the sheet sits at the top,
         // back as soon as it heads down - not whenever it stops sitting exactly at the top
         // (a resize it is catching up with), which brought the bar back over the open player.
         val playerOpen = state.isExpanded
         val playerHeadingDown = !state.isExpandedOrExpanding
+        // the status bar goes too when customize's top bar is off, and always on the ipod, which draws its own
+        val (statusBarShown) = rememberPreference(com.mochyy.mochymusic.constants.PlayerStatusBarKey, defaultValue = true)
+        val playerStyle by rememberEnumPreference(com.mochyy.mochymusic.constants.PlayerStyleKey, com.mochyy.mochymusic.constants.PlayerStyle.DEFAULT)
+        val hideStatusBar = !statusBarShown || playerStyle == com.mochyy.mochymusic.constants.PlayerStyle.IPOD
         // Back in the app (from Home, the recents, a dialog) it's hidden again: with
         // gesture navigation a swipe from the bottom brings it back for good (see
         // playerNavBarBehavior).
         val windowFocused = LocalWindowInfo.current.isWindowFocused
-        LaunchedEffect(playerOpen, playerHeadingDown, windowFocused) {
+        LaunchedEffect(playerOpen, playerHeadingDown, windowFocused, hideStatusBar) {
             val controller = WindowCompat.getInsetsController(window, window.decorView.rootView)
+            // one behaviour for both bars, set only here: the ipod used to set its own and broke the back swipe on gesture navigation
             if (playerOpen) {
                 controller.systemBarsBehavior = window.playerNavBarBehavior()
                 controller.hide(WindowInsetsCompat.Type.navigationBars())
+                if (hideStatusBar) {
+                    controller.hide(WindowInsetsCompat.Type.statusBars())
+                } else {
+                    controller.show(WindowInsetsCompat.Type.statusBars())
+                }
             } else if (playerHeadingDown) {
-                controller.show(WindowInsetsCompat.Type.navigationBars())
+                controller.show(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.statusBars())
             }
         }
         // A bar a swipe brought back while the player stays open (Samsung's swipe-from-
@@ -1362,6 +1393,29 @@ class MainActivity : ComponentActivity() {
             delay(2_500)
             WindowCompat.getInsetsController(window, window.decorView.rootView)
                 .hide(WindowInsetsCompat.Type.navigationBars())
+        }
+        // same for a status bar pulled down over a player that hides it
+        val statusBarsShown = WindowInsets.areStatusBarsVisible
+        LaunchedEffect(playerOpen, statusBarsShown, hideStatusBar) {
+            if (!playerOpen || !statusBarsShown || !hideStatusBar) return@LaunchedEffect
+            delay(2_500)
+            WindowCompat.getInsetsController(window, window.decorView.rootView)
+                .hide(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
+    // people who had the old lyrics shader switch off land on the matching shaderless lyric style, once
+    private fun moveOffOldLyricsShaderSwitch() {
+        if (dataStore[com.mochyy.mochymusic.constants.LyricsWaveAnimationKey] != false) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            dataStore.edit { prefs ->
+                if (prefs[com.mochyy.mochymusic.constants.LyricsWaveAnimationKey] != false) return@edit
+                val stored = prefs[com.mochyy.mochymusic.constants.LyricsMotionStyleKey]
+                val style = com.mochyy.mochymusic.constants.LyricsMotionStyle.entries.firstOrNull { it.name == stored }
+                    ?: com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION
+                prefs[com.mochyy.mochymusic.constants.LyricsMotionStyleKey] = style.withoutShader.name
+                prefs.remove(com.mochyy.mochymusic.constants.LyricsWaveAnimationKey)
+            }
         }
     }
 
@@ -1493,8 +1547,6 @@ class MainActivity : ComponentActivity() {
 }
 
 val SubSettingsRoutes = setOf(
-    "appearance_settings",
-    "playback_settings",
     "experimental_settings",
     "cipher_settings",
     "playback_diagnostics",
@@ -1543,6 +1595,8 @@ private const val UpdateSnoozeWindowMillis = 24L * 60L * 60L * 1000L
 @Composable
 private fun HomeUpdatePrompt(currentRoute: String?) {
     if (currentRoute != Screens.Home.route) return
+    val (noticeHidden) = rememberPreference(com.mochyy.mochymusic.constants.HideUpdateNoticeKey, defaultValue = false)
+    if (noticeHidden) return
 
     val updateState by com.mochyy.mochymusic.ui.screens.update.rememberUpdateState()
     val (snoozedAt, setSnoozedAt) = rememberPreference(
