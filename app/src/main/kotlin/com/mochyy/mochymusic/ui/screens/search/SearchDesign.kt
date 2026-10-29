@@ -38,12 +38,14 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +64,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +80,7 @@ import com.mochyy.mochymusic.ui.component.BlurDirection
 import com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha
 import com.mochyy.mochymusic.ui.component.rememberProgressiveBlur
 import com.mochyy.mochymusic.ui.component.GlassState
+import com.mochyy.mochymusic.ui.component.LocalPlayerBottomSheetState
 import com.mochyy.mochymusic.ui.component.ProgressiveGlassBackground
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.ui.component.containerTransformSource
@@ -457,6 +461,20 @@ fun SearchField(
     focusRequester: FocusRequester? = null,
     onFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
+    val playerSheet = LocalPlayerBottomSheetState.current
+    val focusManager = LocalFocusManager.current
+    var fieldHasFocus by remember { mutableStateOf(false) }
+
+    // The search page stays composed beneath the player. Once the player starts opening, a
+    // focused field there can leave Android's text-selection handle floating above the player.
+    // Clear only this field's focus, not focus in the player's own sheets (e.g. a lyrics editor).
+    LaunchedEffect(playerSheet, focusManager) {
+        val sheet = playerSheet ?: return@LaunchedEffect
+        snapshotFlow { sheet.progress > 0.001f }.collect { playerOpening ->
+            if (playerOpening && fieldHasFocus) focusManager.clearFocus()
+        }
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -511,13 +529,10 @@ fun SearchField(
                                 Modifier
                             }
                         )
-                        .then(
-                            if (onFocusChanged != null) {
-                                Modifier.onFocusChanged { onFocusChanged(it.isFocused) }
-                            } else {
-                                Modifier
-                            }
-                        ),
+                        .onFocusChanged {
+                            fieldHasFocus = it.isFocused
+                            onFocusChanged?.invoke(it.isFocused)
+                        },
                 )
             }
         }
