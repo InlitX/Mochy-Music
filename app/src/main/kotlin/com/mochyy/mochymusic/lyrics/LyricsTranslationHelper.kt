@@ -228,7 +228,8 @@ object LyricsTranslationHelper {
 
         nonEmptyEntries.forEachIndexed { idx, (originalIndex, _) ->
             if (idx < translatedLines.size) {
-                lyrics[originalIndex].translatedTextFlow.value = translatedLines[idx]
+                // a youtube translation leaves some lines without one, and a blank one would show as an empty row
+                lyrics[originalIndex].translatedTextFlow.value = translatedLines[idx].takeIf { it.isNotBlank() }
             }
         }
 
@@ -564,6 +565,48 @@ object LyricsTranslationHelper {
                 }
             }
         }
+    }
+
+    /** shows the video's own uploaded translation when youtube has one in the target language; false when it doesn't, so the caller translates the usual way */
+    suspend fun translateWithYouTubeCaptions(
+        lyrics: List<LyricsEntry>,
+        request: YouTubeCaptionTranslation.Request,
+        lyricsEntity: LyricsEntity?,
+        mode: String,
+        database: MusicDatabase,
+    ): Boolean {
+        val tag = YouTubeCaptionTranslation.storedLanguageTag(request.targetLanguage)
+        // saved from an earlier play, so it shows offline too
+        if (loadTranslationsFromDatabase(lyrics, lyricsEntity, tag, mode)) return true
+
+        translationJob?.cancel()
+        _status.value = TranslationStatus.Translating
+        val translated = try {
+            YouTubeCaptionTranslation.translate(request)
+        } finally {
+            if (_status.value is TranslationStatus.Translating) _status.value = TranslationStatus.Idle
+        }
+        if (translated == null || translated.size != lyrics.size) return false
+
+        lyrics.forEachIndexed { index, entry -> entry.translatedTextFlow.value = translated[index] }
+        _hasActiveTranslations.value = true
+        _status.value = TranslationStatus.Success
+
+        // stored one row per non-blank line, the same way the other translations are
+        val stored = lyrics.indices.filter { lyrics[it].text.isNotBlank() }.joinToString("\n") { translated[it].orEmpty() }
+        try {
+            val current = database.lyrics(request.songId).first()
+            if (current != null) {
+                database.query { upsert(current.copy(translatedLyrics = stored, translationLanguage = tag, translationMode = mode)) }
+                _translationSaved.tryEmit(Unit)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to save the youtube translation")
+        }
+
+        delay(3000)
+        if (_status.value is TranslationStatus.Success) _status.value = TranslationStatus.Idle
+        return true
     }
 
     /**

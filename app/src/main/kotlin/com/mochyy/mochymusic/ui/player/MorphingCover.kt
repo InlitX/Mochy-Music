@@ -602,29 +602,41 @@ fun MorphingCover(
     }
 
 
-    val lyricsSyncEnabled by rememberPreference(YtVideoBackgroundLyricsSyncKey, defaultValue = false)
+    val lyricsSyncEnabled by rememberPreference(YtVideoBackgroundLyricsSyncKey, defaultValue = true)
     val currentLyrics by playerConnection?.currentLyrics?.collectAsState(initial = null)
         ?: androidx.compose.runtime.mutableStateOf(null)
-    var lyricVideoAnchors by remember(trackInfo.mediaId) { mutableStateOf<List<LyricVideoAnchor>?>(null) }
+    // the video plays as soon as it loads, then moves into step with the song once its captions are lined up with the lyrics
+    var lyricVideoTimeline by remember(trackInfo.mediaId) { mutableStateOf<LyricVideoTimeline?>(null) }
     LaunchedEffect(videoInfo?.videoId, currentLyrics?.lyrics, lyricsSyncEnabled) {
         val mediaId = trackInfo.mediaId
         val videoId = videoInfo?.videoId
         val lyricsRaw = currentLyrics?.lyrics
             ?.takeIf { it.isNotBlank() && it != com.mochyy.mochymusic.db.entities.LyricsEntity.LYRICS_NOT_FOUND }
-        // the track's own video is already in step with it; anchors are for lining up a separate one
+        // the track's own video is already in step with it; the timeline is for lining up a separate one
         if (!lyricsSyncEnabled || videoId == null || videoId == mediaId || lyricsRaw == null) {
-            lyricVideoAnchors = null
+            lyricVideoTimeline = null
             return@LaunchedEffect
         }
-        if (LyricVideoAnchorCache.contains(mediaId)) {
-            lyricVideoAnchors = LyricVideoAnchorCache.get(mediaId)
+        val key = "$mediaId|$videoId|${lyricsRaw.hashCode()}"
+        if (LyricVideoTimelineCache.contains(key)) {
+            lyricVideoTimeline = LyricVideoTimelineCache.get(key)
             return@LaunchedEffect
         }
-        val anchors = withContext(Dispatchers.IO) {
-            runCatching { buildLyricVideoAnchors(videoId, lyricsRaw) }.getOrNull()
+        val timeline = try {
+            buildLyricVideoTimeline(videoId, lyricsRaw)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
         }
-        LyricVideoAnchorCache.put(mediaId, anchors)
-        lyricVideoAnchors = anchors
+        LyricVideoTimelineCache.put(key, timeline)
+        lyricVideoTimeline = timeline
+    }
+    // the lyrics' own offset counts too: it's what puts the lyrics, and so the video, on the song
+    val videoPositionAt = remember(lyricVideoTimeline) {
+        lyricVideoTimeline?.let { timeline ->
+            { songMs: Long -> timeline.videoMsAt(songMs + (playerConnection?.lyricsOffsetMs?.value ?: 0)) }
+        }
     }
 
     val videoGlassState = remember(trackInfo.mediaId) { GlassState() }
@@ -1002,7 +1014,7 @@ fun MorphingCover(
                                     streamUrl = videoInfo?.streamUrl,
                                     isPlaying = isPlaying,
                                     positionMsProvider = { playerConnection?.player?.currentPosition ?: 0L },
-                                    lyricVideoAnchors = lyricVideoAnchors,
+                                    videoPositionAt = videoPositionAt,
                                     glassState = videoGlassState,
                                     modifier = Modifier
                                         .fillMaxSize()

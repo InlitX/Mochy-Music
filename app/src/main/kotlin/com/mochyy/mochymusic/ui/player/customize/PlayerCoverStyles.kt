@@ -92,7 +92,7 @@ private val TimestampMatchingOption = CoverOption.Switch(
     description = "Based on subtitle",
     icon = R.drawable.lyrics,
     key = YtVideoBackgroundLyricsSyncKey,
-    default = false,
+    default = true,
     parent = YtVideoOption,
 )
 

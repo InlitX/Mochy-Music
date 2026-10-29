@@ -1382,6 +1382,23 @@ object YouTube {
         return timedTextToLrc(innerTube.timedText(track.baseUrl, client).bodyAsText())
     }
 
+    /** every caption track the video has, uploaded and auto-generated, from the first client that lists any */
+    suspend fun videoCaptions(videoId: String): Result<VideoCaptions> = runCatching {
+        CAPTION_CLIENTS.firstNotNullOfOrNull { client ->
+            runCatching {
+                player(videoId, client = client).getOrThrow()
+                    .captions?.playerCaptionsTracklistRenderer?.captionTracks
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { VideoCaptions(videoId, it, client) }
+            }.getOrNull()
+        } ?: throw IllegalStateException("No captions for $videoId")
+    }
+
+    /** one of [captions]' tracks as timed cues */
+    suspend fun captionCues(captions: VideoCaptions, track: PlayerResponse.Captions.CaptionTrack): Result<List<CaptionCue>> = runCatching {
+        timedTextToCues(innerTube.timedText(track.baseUrl, captions.client).bodyAsText())
+    }
+
     private val CAPTION_CLIENTS = listOf(
         YouTubeClient.ANDROID_VR_NO_AUTH,
         YouTubeClient.IOS,

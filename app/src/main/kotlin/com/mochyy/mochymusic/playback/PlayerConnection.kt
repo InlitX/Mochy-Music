@@ -21,6 +21,7 @@ import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.extensions.currentMetadata
 import com.mochyy.mochymusic.lyrics.LyricsUtils
+import com.mochyy.mochymusic.lyrics.VideoLyricsSync
 import com.mochyy.mochymusic.extensions.getCurrentQueueIndex
 import com.mochyy.mochymusic.extensions.getQueueWindows
 import com.mochyy.mochymusic.extensions.isAutoplay
@@ -37,6 +38,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -58,6 +61,7 @@ class PlayerConnection(
     private companion object {
         private const val TAG = "PlayerConnection"
         private const val PLAYER_INIT_TIMEOUT_MS = 5000L
+        private const val VideoLyricsSyncDelayMs = 1_500L
     }
 
     // its own job under the parent's, so dispose() can stop the pollers and flows this connection started
@@ -158,6 +162,18 @@ class PlayerConnection(
         // parse off the main thread, or the first frames of opening the player pay for it
         scope.launch(kotlinx.coroutines.Dispatchers.Default) {
             currentLyrics.map { it?.lyrics }.distinctUntilChanged().collect(LyricsUtils::warmParsedLyrics)
+        }
+        // a music video shows its lyrics straight away, then they move onto the video's own timing once youtube's captions are in
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            combine(mediaMetadata, currentLyrics) { metadata, lyrics -> metadata to lyrics }
+                .distinctUntilChanged()
+                .collectLatest { (metadata, lyrics) ->
+                    if (metadata == null || lyrics == null) return@collectLatest
+                    // a song skipped straight past never asks youtube anything
+                    delay(VideoLyricsSyncDelayMs)
+                    runCatching { VideoLyricsSync.syncIfNeeded(context, database, metadata, lyrics) }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it else reportException(it) }
+                }
         }
     }
     val currentFormat =

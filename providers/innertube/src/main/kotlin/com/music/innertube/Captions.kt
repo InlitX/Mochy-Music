@@ -2,6 +2,7 @@
 
 package com.music.innertube
 
+import com.music.innertube.models.YouTubeClient
 import com.music.innertube.models.response.PlayerResponse.Captions.CaptionTrack
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -39,6 +40,48 @@ internal fun timedTextToLrc(json: String): String {
         lines += String.format(Locale.ROOT, "[%02d:%02d.%03d]%s", start / 60_000, start / 1000 % 60, start % 1000, text)
     }
     return lines.joinToString("\n")
+}
+
+/** one caption piece timed on the video: a whole line for uploaded tracks, a word or two for auto-generated ones */
+data class CaptionCue(val startMs: Long, val endMs: Long, val text: String)
+
+/** a video's caption tracks, along with the client whose links can download them */
+class VideoCaptions internal constructor(
+    val videoId: String,
+    val tracks: List<CaptionTrack>,
+    internal val client: YouTubeClient,
+)
+
+/** timed-text json (fmt=json3) as cues, split wherever youtube timed a piece on its own, so auto captions keep their word timing */
+internal fun timedTextToCues(json: String): List<CaptionCue> {
+    val events = Json.parseToJsonElement(json).jsonObject["events"]?.jsonArray ?: return emptyList()
+    val cues = ArrayList<CaptionCue>()
+    for (event in events) {
+        val cue = event.jsonObject
+        val start = cue["tStartMs"]?.jsonPrimitive?.longOrNull ?: continue
+        val end = start + (cue["dDurationMs"]?.jsonPrimitive?.longOrNull ?: 0L)
+        val segs = cue["segs"]?.jsonArray ?: continue
+        // each piece as (start, text); a seg with no offset of its own belongs to the piece before it
+        val pieces = ArrayList<Pair<Long, StringBuilder>>()
+        for (seg in segs) {
+            val segObject = seg.jsonObject
+            val text = segObject["utf8"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val offset = segObject["tOffsetMs"]?.jsonPrimitive?.longOrNull
+            if (offset != null || pieces.isEmpty()) pieces += (start + (offset ?: 0L)) to StringBuilder(text)
+            else pieces.last().second.append(text)
+        }
+        pieces.forEachIndexed { index, (pieceStart, raw) ->
+            val text = raw.toString()
+                .replace(SoundLabel, " ")
+                .replace('♪', ' ')
+                .replace(Whitespace, " ")
+                .trim()
+            if (text.isEmpty()) return@forEachIndexed
+            val pieceEnd = pieces.getOrNull(index + 1)?.first ?: end
+            cues += CaptionCue(pieceStart, maxOf(pieceEnd, pieceStart), text)
+        }
+    }
+    return cues.sortedBy { it.startMs }
 }
 
 // the closing bracket is escaped because android's regex engine is stricter than desktop java's

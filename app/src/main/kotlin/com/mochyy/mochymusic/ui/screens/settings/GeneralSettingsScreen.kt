@@ -23,6 +23,8 @@ import com.mochyy.mochymusic.constants.DontSkipOnFailureKey
 import com.mochyy.mochymusic.constants.LocalSongAutoMetadataKey
 import com.mochyy.mochymusic.constants.OfflineModeKey
 import com.mochyy.mochymusic.constants.StreamFailureTimeoutKey
+import com.mochyy.mochymusic.constants.SyncLyricsToVideoKey
+import com.mochyy.mochymusic.constants.YouTubeCaptionTranslationKey
 import com.mochyy.mochymusic.ui.screens.audiolab.LabCard
 import com.mochyy.mochymusic.ui.screens.audiolab.LabSlider
 import com.mochyy.mochymusic.ui.component.AppSwitch
@@ -49,6 +51,15 @@ fun GeneralSettingsScreen(navController: NavController) {
     val (disableVideoAutoplay, onDisableVideoAutoplayChange) = rememberPreference(
         DisableVideoAutoplayKey,
         defaultValue = false
+    )
+
+    val (youtubeTranslations, onYoutubeTranslationsChange) = rememberPreference(
+        YouTubeCaptionTranslationKey,
+        defaultValue = true
+    )
+    val (syncLyricsToVideo, onSyncLyricsToVideoChange) = rememberPreference(
+        SyncLyricsToVideoKey,
+        defaultValue = true
     )
 
     val (dontSkipOnFailure, onDontSkipOnFailureChange) = rememberPreference(
@@ -130,6 +141,36 @@ fun GeneralSettingsScreen(navController: NavController) {
                     AppSwitch(
                         checked = disableVideoAutoplay,
                         onCheckedChange = onDisableVideoAutoplayChange,
+                    )
+                },
+            ),
+            SettingsItem(
+                title = { Text("Translations from YouTube") },
+                highlightKey = "Translations from YouTube",
+                descriptionText = "Use a video's own translated captions when you translate lyrics",
+                detail = "When the song's video has captions someone made in your language, they're used instead of a machine translation",
+                icon = painterResource(R.drawable.translate),
+                iconShape = CircleShape,
+                onClick = { onYoutubeTranslationsChange(!youtubeTranslations) },
+                trailingContent = {
+                    AppSwitch(
+                        checked = youtubeTranslations,
+                        onCheckedChange = onYoutubeTranslationsChange,
+                    )
+                },
+            ),
+            SettingsItem(
+                title = { Text("Sync lyrics to music videos") },
+                highlightKey = "Sync lyrics to music videos",
+                descriptionText = "Line lyrics up with the video's own captions",
+                detail = "Lyrics are usually timed to the album version. When a music video plays, they're moved to match the video once its captions load",
+                icon = painterResource(R.drawable.lyrics),
+                iconShape = CircleShape,
+                onClick = { onSyncLyricsToVideoChange(!syncLyricsToVideo) },
+                trailingContent = {
+                    AppSwitch(
+                        checked = syncLyricsToVideo,
+                        onCheckedChange = onSyncLyricsToVideoChange,
                     )
                 },
             ),

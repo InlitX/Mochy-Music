@@ -8,6 +8,9 @@
 
 package com.mochyy.mochymusic.ui.player.menu
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,8 +32,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -42,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,14 +59,19 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.TranslateLanguageKey
 import com.mochyy.mochymusic.constants.TranslateLyricsKey
 import com.mochyy.mochymusic.constants.TranslateSourceLanguageKey
+import com.mochyy.mochymusic.constants.YouTubeCaptionTranslationKey
 import com.mochyy.mochymusic.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.mochyy.mochymusic.lyrics.LyricsProviderRegistry
 import com.mochyy.mochymusic.lyrics.LyricsTranslationHelper
 import com.mochyy.mochymusic.lyrics.LyricsUtils
+import com.mochyy.mochymusic.lyrics.YouTubeCaptionTranslation
 import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.component.SheetIcon
 import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.viewmodels.LyricsMenuViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 // ---------------------------------------------------------------------------------------------
 // Editor
@@ -396,6 +407,7 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
     val status by LyricsTranslationHelper.status.collectAsState()
     val translationOn by LyricsTranslationHelper.translationOn.collectAsState()
     val isTranslating = status is LyricsTranslationHelper.TranslationStatus.Translating
+    val hasYouTubeTranslation = rememberYouTubeTranslationAvailable(target)
 
     MenuSheetSurface(onDismiss = onDismiss, wrapHeight = true) { _ ->
         val closeSheet = LocalMenuSheetClose.current
@@ -456,6 +468,13 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 AppSwitch(checked = sessionWide, onCheckedChange = setSessionWide)
+            }
+
+            AnimatedVisibility(visible = hasYouTubeTranslation, enter = fadeIn() + expandVertically()) {
+                YouTubeTranslationNote(
+                    languageName = TranslationTargets.firstOrNull { it.first == target }?.second ?: target,
+                    modifier = Modifier.padding(top = 18.dp),
+                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -538,6 +557,80 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
         )
     }
 }
+
+// whether the playing song's video has its own uploaded captions in target, asked when the sheet opens (and shared with the lyrics, so it's asked once)
+@Composable
+private fun rememberYouTubeTranslationAvailable(target: String): Boolean {
+    val playerConnection = LocalPlayerConnection.current
+    val (enabled) = rememberPreference(YouTubeCaptionTranslationKey, defaultValue = true)
+    var available by remember { mutableStateOf(false) }
+    LaunchedEffect(target, enabled) {
+        available = false
+        if (!enabled || target.isBlank() || playerConnection == null) return@LaunchedEffect
+        val metadata = playerConnection.mediaMetadata.value ?: return@LaunchedEffect
+        val raw = playerConnection.currentLyrics.first()?.lyrics
+            ?.takeIf { it.isNotBlank() && it != LYRICS_NOT_FOUND } ?: return@LaunchedEffect
+        val lines = withContext(Dispatchers.Default) { LyricsUtils.parseLyricsCached(raw) }
+        available = YouTubeCaptionTranslation.translate(
+            YouTubeCaptionTranslation.Request(
+                songId = metadata.id,
+                title = metadata.title,
+                artist = metadata.artists.joinToString { it.name },
+                isVideo = metadata.isVideoSong,
+                lines = lines,
+                targetLanguage = target,
+            ),
+        ) != null
+    }
+    return available
+}
+
+// the green tick that says the translation comes from the video's own captions, and where to turn that off
+@Composable
+private fun YouTubeTranslationNote(languageName: String, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(MenuRowSurface)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(YouTubeTranslationGreen),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Translation from YouTube",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "This video has its own $languageName captions, so they're used as the translation. " +
+                    "You can turn this off in Settings > General.",
+                color = Color(0xFF9A9A9A),
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        }
+    }
+}
+
+private val YouTubeTranslationGreen = Color(0xFF93F58A)
 
 /**
  * The full language list, in its own overlay on top of the translation sheet.

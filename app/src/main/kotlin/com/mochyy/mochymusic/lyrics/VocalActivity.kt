@@ -10,7 +10,6 @@ import kotlin.math.ln
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.tan
 
@@ -100,7 +99,7 @@ internal class VocalActivityAnalyzer {
             real[i] = midRing[at] * Window[i]
             imaginary[i] = sideRing[at] * Window[i]
         }
-        fft(real, imaginary)
+        fft.transform(real, imaginary)
 
         var bandEnergy = 0f
         var allEnergy = 0f
@@ -188,35 +187,6 @@ internal class VocalActivityAnalyzer {
         }
     }
 
-    private fun fft(re: FloatArray, im: FloatArray) {
-        var j = 0
-        for (i in 1 until re.size) {
-            var bit = re.size shr 1
-            while (j and bit != 0) { j = j xor bit; bit = bit shr 1 }
-            j = j xor bit
-            if (i < j) {
-                val r = re[i]; re[i] = re[j]; re[j] = r
-                val m = im[i]; im[i] = im[j]; im[j] = m
-            }
-        }
-        var length = 2
-        while (length <= re.size) {
-            val half = length / 2
-            for (start in re.indices step length) {
-                for (k in 0 until half) {
-                    val twiddle = k * (FrameSize / length)
-                    val wr = CosTable[twiddle]; val wi = -SinTable[twiddle]
-                    val even = start + k; val odd = even + half
-                    val oddReal = re[odd] * wr - im[odd] * wi
-                    val oddImaginary = re[odd] * wi + im[odd] * wr
-                    re[odd] = re[even] - oddReal; im[odd] = im[even] - oddImaginary
-                    re[even] += oddReal; im[even] += oddImaginary
-                }
-            }
-            length = length shl 1
-        }
-    }
-
     private class Growing {
         private var values = FloatArray(8_192)
         var size = 0
@@ -253,8 +223,7 @@ internal class VocalActivityAnalyzer {
         }
 
         private val Window = FloatArray(FrameSize) { i -> (0.5 - 0.5 * cos(2.0 * PI * i / (FrameSize - 1))).toFloat() }
-        private val CosTable = FloatArray(FrameSize / 2) { cos(2.0 * PI * it / FrameSize).toFloat() }
-        private val SinTable = FloatArray(FrameSize / 2) { sin(2.0 * PI * it / FrameSize).toFloat() }
+        private val fft = Fft(FrameSize)
     }
 }
 
@@ -263,15 +232,19 @@ internal class VocalActivityAnalyzer {
  * ~6.5 kHz is filtered out first: left in, cymbals at 12-15 kHz would fold down into the voice's
  * band and read as singing.
  */
-private class StereoResampler(val inputRate: Int) {
-    private val step = inputRate.toDouble() / VocalActivityAnalyzer.SampleRate
-    private val filtering = inputRate > VocalActivityAnalyzer.SampleRate
+internal class StereoResampler(
+    val inputRate: Int,
+    outputRate: Int = VocalActivityAnalyzer.SampleRate,
+    cutoffHz: Double = 6_500.0,
+) {
+    internal val step = inputRate.toDouble() / outputRate
+    internal val filtering = inputRate > outputRate
     // a 4th-order Butterworth low-pass: two biquads per channel
-    private val left = arrayOf(Biquad.lowPass(inputRate, CutoffHz, 0.5412), Biquad.lowPass(inputRate, CutoffHz, 1.3066))
-    private val right = arrayOf(Biquad.lowPass(inputRate, CutoffHz, 0.5412), Biquad.lowPass(inputRate, CutoffHz, 1.3066))
-    private var position = 0.0
-    private var previousLeft = 0f
-    private var previousRight = 0f
+    internal val left = arrayOf(Biquad.lowPass(inputRate, cutoffHz, 0.5412), Biquad.lowPass(inputRate, cutoffHz, 1.3066))
+    internal val right = arrayOf(Biquad.lowPass(inputRate, cutoffHz, 0.5412), Biquad.lowPass(inputRate, cutoffHz, 1.3066))
+    internal var position = 0.0
+    internal var previousLeft = 0f
+    internal var previousRight = 0f
 
     inline fun push(pcm: ShortBuffer, channels: Int, emit: (mid: Float, side: Float) -> Unit) {
         val frames = pcm.remaining() / channels
@@ -297,7 +270,7 @@ private class StereoResampler(val inputRate: Int) {
         }
     }
 
-    private class Biquad(
+    internal class Biquad(
         private val b0: Float, private val b1: Float, private val b2: Float,
         private val a1: Float, private val a2: Float,
     ) {
@@ -325,7 +298,4 @@ private class StereoResampler(val inputRate: Int) {
         }
     }
 
-    private companion object {
-        const val CutoffHz = 6_500.0
-    }
 }

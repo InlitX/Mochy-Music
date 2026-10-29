@@ -39,10 +39,19 @@ object YouTubeVideoUrlCache {
 }
 
 suspend fun findOfficialMusicVideo(title: String, artist: String): OfficialMusicVideo? {
+    val videoId = findOfficialMusicVideoId(title, artist) ?: return null
+    val streamUrl = YTPlayerUtils.resolveVideoStreamUrl(videoId).getOrNull() ?: return null
+    return OfficialMusicVideo(videoId = videoId, streamUrl = streamUrl)
+}
+
+// just the official video's id, for when its captions are wanted and not its picture; misses are kept too, so a song is searched once
+suspend fun findOfficialMusicVideoId(title: String, artist: String): String? {
     if (title.isBlank() || artist.isBlank()) return null
+    val key = "$title|$artist"
+    if (OfficialVideoIdCache.contains(key)) return OfficialVideoIdCache.get(key)
 
     val results = YouTube.search(query = "$title $artist", filter = YouTube.SearchFilter.FILTER_VIDEO)
-        .getOrNull()?.items.orEmpty()
+        .getOrElse { return null }.items
 
     val normalizedTitle = normalizeCanvasSongTitle(title)
     val normalizedArtist = normalizeCanvasArtistName(artist)
@@ -56,8 +65,23 @@ suspend fun findOfficialMusicVideo(title: String, artist: String): OfficialMusic
             (candidateTitle.contains(normalizedTitle, ignoreCase = true) || normalizedTitle.contains(candidateTitle, ignoreCase = true)) &&
                 (candidateArtist.contains(normalizedArtist, ignoreCase = true) || normalizedArtist.contains(candidateArtist, ignoreCase = true))
         }
-        ?: return null
+    OfficialVideoIdCache.put(key, match?.id)
+    return match?.id
+}
 
-    val streamUrl = YTPlayerUtils.resolveVideoStreamUrl(match.id).getOrNull() ?: return null
-    return OfficialMusicVideo(videoId = match.id, streamUrl = streamUrl)
+private object OfficialVideoIdCache {
+    private const val maxSize = 64
+    private val map = LinkedHashMap<String, String?>(maxSize, 0.75f, true)
+
+    @Synchronized
+    fun contains(key: String): Boolean = map.containsKey(key)
+
+    @Synchronized
+    fun get(key: String): String? = map[key]
+
+    @Synchronized
+    fun put(key: String, videoId: String?) {
+        map[key] = videoId
+        if (map.size > maxSize) map.remove(map.keys.first())
+    }
 }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -150,6 +151,7 @@ import com.mochyy.mochymusic.ui.component.HomeCardHighlight
 import com.mochyy.mochymusic.ui.component.HomeCompactTopBones
 import com.mochyy.mochymusic.ui.component.HomeCoverCard
 import com.mochyy.mochymusic.ui.component.HomeHopInCard
+import com.mochyy.mochymusic.ui.component.HomeTopGlow
 import com.mochyy.mochymusic.ui.component.homeRowHeight
 import com.mochyy.mochymusic.ui.component.HomeSectionBones
 import com.mochyy.mochymusic.ui.component.HeroCarouselBones
@@ -299,6 +301,30 @@ private fun <T> HomeTrackGrid(
             Box(modifier = Modifier.width(columnWidth)) {
                 content(index, item)
             }
+        }
+    }
+}
+
+/** the listen now and hop in tops: room for the top bar, then the section over a glow of its own covers' colours */
+@Composable
+private fun HomeCompactTop(
+    glowCoverUrls: List<String>,
+    glowVisibility: () -> Float,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val topInset = WindowInsets.stableSystemBars.asPaddingValues().calculateTopPadding()
+    Box {
+        // outside the launch rise, so the glow never slides down off the top edge while the intro plays
+        HomeTopGlow(
+            coverUrls = glowCoverUrls,
+            depth = topInset + 150.dp,
+            visibility = glowVisibility,
+            modifier = Modifier.matchParentSize(),
+        )
+        Column(modifier = Modifier.launchRise(order = 1)) {
+            Spacer(Modifier.height(topInset + 78.dp))
+            content()
+            Spacer(Modifier.height(34.dp))
         }
     }
 }
@@ -831,6 +857,8 @@ fun HomeScreen(
     }
 
     val heroScrollProgressProvider = remember { { heroScrollProgress } }
+    // the compact tops' cover glow fades out as the list scrolls up under the top bar
+    val topGlowVisibility = remember { { 1f - heroScrollProgress } }
     // the glass layer only switches on or off once, so reading the raw progress would redraw the list on every scroll frame
     val heroGlassActive = remember { derivedStateOf { heroScrollProgress > 0f } }
 
@@ -1389,8 +1417,11 @@ fun HomeScreen(
                     }
                     HomeStyle.LISTEN_NOW -> {
                         item(key = "hero_listen_now", contentType = "hero_compact") {
-                            Column(modifier = Modifier.launchRise(order = 1)) {
-                                Spacer(Modifier.height(WindowInsets.stableSystemBars.asPaddingValues().calculateTopPadding() + 78.dp))
+                            // no glow under the launch bones; it fades in with the songs
+                            val glowCoverUrls = remember(startListeningSongs, launchHold) {
+                                if (launchHold) emptyList() else startListeningSongs.mapNotNull { it.thumbnailUrl }.take(2)
+                            }
+                            HomeCompactTop(glowCoverUrls, topGlowVisibility) {
                                 if (launchHold || (isFirstLoad && startListeningSongs.isEmpty())) {
                                     BonesHost {
                                         HomeCompactTopBones(isHopIn = false)
@@ -1406,14 +1437,17 @@ fun HomeScreen(
                                         content = trackRow,
                                     )
                                 }
-                                Spacer(Modifier.height(34.dp))
                             }
                         }
                     }
                     HomeStyle.HOP_IN -> {
                         item(key = "hero_hop_in", contentType = "hero_compact") {
-                            Column(modifier = Modifier.launchRise(order = 1)) {
-                                Spacer(Modifier.height(WindowInsets.stableSystemBars.asPaddingValues().calculateTopPadding() + 78.dp))
+                            // a library playlist's own thumbnailUrl is always null; its covers live in thumbnails
+                            val glowCoverUrls = remember(hopInLocalItems, launchHold) {
+                                if (launchHold) emptyList()
+                                else hopInLocalItems.mapNotNull { (it as? Playlist)?.thumbnails?.firstOrNull() ?: it.thumbnailUrl }.take(2)
+                            }
+                            HomeCompactTop(glowCoverUrls, topGlowVisibility) {
                                 if (launchHold || (isFirstLoad && hopInLocalItems.isEmpty())) {
                                     BonesHost {
                                         HomeCompactTopBones(isHopIn = true)

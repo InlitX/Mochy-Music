@@ -51,9 +51,8 @@ fun YouTubeVideoBackground(
     streamUrl: String?,
     isPlaying: Boolean,
     positionMsProvider: () -> Long,
-
-    lyricVideoAnchors: List<LyricVideoAnchor>? = null,
-
+    // where on the video a song position is, once the video's captions are lined up with the lyrics
+    videoPositionAt: ((songPositionMs: Long) -> Long)? = null,
     glassState: GlassState,
     modifier: Modifier = Modifier,
 ) {
@@ -62,7 +61,7 @@ fun YouTubeVideoBackground(
     // its frames, while the last few were still closing. Memory climbed past a gigabyte in thirty
     // quick skips and weaker phones killed the app. The video starts once the song has stayed.
     val settledUrl = rememberSettled(streamUrl, VideoSettleMs) ?: return
-    YouTubeVideoPlayer(settledUrl, isPlaying, positionMsProvider, lyricVideoAnchors, glassState, modifier)
+    YouTubeVideoPlayer(settledUrl, isPlaying, positionMsProvider, videoPositionAt, glassState, modifier)
 }
 
 /** how long a song has to stay before its video starts */
@@ -73,7 +72,7 @@ private fun YouTubeVideoPlayer(
     streamUrl: String,
     isPlaying: Boolean,
     positionMsProvider: () -> Long,
-    lyricVideoAnchors: List<LyricVideoAnchor>?,
+    videoPositionAt: ((songPositionMs: Long) -> Long)?,
     glassState: GlassState,
     modifier: Modifier,
 ) {
@@ -136,16 +135,15 @@ private fun YouTubeVideoPlayer(
         exoPlayer.playWhenReady = isPlaying
     }
 
-    LaunchedEffect(exoPlayer, streamUrl, lyricVideoAnchors) {
+    LaunchedEffect(exoPlayer, streamUrl, videoPositionAt) {
         while (isActive) {
             val duration = exoPlayer.duration
             if (duration > 0) {
                 val songPositionMs = positionMsProvider()
-                val target = lyricVideoAnchors
-                    ?.let { resolveAnchoredVideoPositionMs(it, songPositionMs) }
-                    ?: (songPositionMs % duration)
-                if (abs(exoPlayer.currentPosition - target) > 750) {
-                    exoPlayer.seekTo(target.coerceIn(0, duration))
+                val target = videoPositionAt?.invoke(songPositionMs) ?: (songPositionMs % duration)
+                // past either end of the video (the song's own intro or outro) it just keeps playing instead of seeking every tick
+                if (target in 0..duration && abs(exoPlayer.currentPosition - target) > 750) {
+                    exoPlayer.seekTo(target)
                 }
             }
             delay(500)
