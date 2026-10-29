@@ -8,27 +8,29 @@ type: Bug
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is, where it happens, how, and when
+pls remove all (---)
 
-**Reproduce it**
-Steps to reproduce the behavior:
+**The bug is**
+(A clear and concise description of what the bug is, where it happens, how, and when. pls delete this)
+
+**how can it happen**
+(Steps to reproduce the behavior)
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
 4. See error
+etc
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**And that's not right it should be like**
+(A clear and concise description of what you expected to happen.)
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Here look**
+(If applicable, add screenshots to help explain your problem.)
 
-**Smartphone (please complete the following information):**
+**And my device is**
  - Device: [e.g. iPhone67]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+ - OS: [e.g. SlopOS - Android 67 verity]
+ - The app Version [e.g. 22]
 
 **Additional context**
 Add any other context about the problem here.

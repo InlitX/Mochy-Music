@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: I have a great idea here
+about: I have a great idea bro
 title: Feature
 labels: enhancement
 assignees: ''
@@ -8,17 +8,22 @@ type: Feature
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+( delete all (---) and the part you dont want to use )
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**it will be cool if you add this feature**
+(what feature, or)
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+**yo i have a problem with this and I want a feature related to this**
+(A clear and concise description of what the problem is. Ex. I'm always frustrated when [...])
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+**and that's why I propose this**
+(A clear and concise description of what you want to happen.)
+
+**or maybe the app should do this**
+(A clear and concise description of any alternative solutions or features you've considered.)
+
+**and btw**
+(Add any other context or screenshots about the feature request here.)
 
 tick this/mark this with x pls
 [ ] I will not mad when the feature will be not added shortly/forever.
