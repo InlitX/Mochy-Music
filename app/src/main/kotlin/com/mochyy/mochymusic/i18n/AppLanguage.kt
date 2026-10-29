@@ -103,6 +103,17 @@ object AppLanguage {
             val locales = if (tag == SYSTEM_DEFAULT) LocaleList.getEmptyLocaleList()
                 else LocaleList.forLanguageTags(tag)
             activity.getSystemService(LocaleManager::class.java).applicationLocales = locales
+            // Android normally recreates the Activity for a locale change. It can skip
+            // that when a legacy locale was migrated during cold start, or when the
+            // selected locale resolves to the same language as the device. If the old
+            // Activity is still alive after the platform has had time to act, recreate
+            // it so both the wrapped resources and the picker reflect the new choice.
+            activity.window.decorView.postDelayed({
+                if (!activity.isFinishing && !activity.isDestroyed && !activity.isChangingConfigurations) {
+                    refreshApplicationResources(activity.applicationContext)
+                    activity.recreate()
+                }
+            }, 1_000L)
         } else {
             activity.applicationContext.dataStore.edit { it[AppLanguageKey] = tag }
             refreshApplicationResources(activity.applicationContext)
