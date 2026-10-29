@@ -1609,7 +1609,8 @@ class MusicService :
                         ),
                     ).setIconResId(
                         when (player.repeatMode) {
-                            REPEAT_MODE_OFF -> R.drawable.repeat
+                            // The player artwork is 95 x 77 dp; notifications need a 24 dp icon.
+                            REPEAT_MODE_OFF -> R.drawable.notification_repeat
                             REPEAT_MODE_ONE -> R.drawable.repeat_one_on
                             REPEAT_MODE_ALL -> R.drawable.repeat_on
                             else -> throw IllegalStateException()
