@@ -84,6 +84,8 @@ val StopPlaybackOnTaskRemovedKey = booleanPreferencesKey("stopPlaybackOnTaskRemo
 val KeepScreenOn = booleanPreferencesKey("keepScreenOn")
 // a swipe down anywhere on the open player closes it, not only from its top and cover (#121)
 val PlayerSwipeDownAnywhereKey = booleanPreferencesKey("playerSwipeDownAnywhere")
+// Optional immersive player: never hide the status bar on the rest of the app.
+val HidePlayerStatusBarKey = booleanPreferencesKey("hidePlayerStatusBar")
 val DeveloperModeKey = booleanPreferencesKey("developerMode")
 
 enum class SliderStyle {

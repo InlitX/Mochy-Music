@@ -309,6 +309,9 @@ private fun PlayerSheet(
     // card - the old style grew, then the new one was built mid-spring, and the spring stuttered.
     var pickedPlayerStyle by remember { mutableStateOf<PlayerStyle?>(null) }
     val playerStyle = pickedPlayerStyle ?: savedPlayerStyle
+    val (hideStatusBar) = rememberPreference(com.mochyy.mochymusic.constants.HidePlayerStatusBarKey, false)
+    // The iPod style already owns its status-bar behavior, including its preview lifecycle.
+    if (hideStatusBar && playerStyle != PlayerStyle.IPOD) HidePlayerStatusBar(state)
     LaunchedEffect(savedPlayerStyle) {
         if (savedPlayerStyle == pickedPlayerStyle) pickedPlayerStyle = null
     }

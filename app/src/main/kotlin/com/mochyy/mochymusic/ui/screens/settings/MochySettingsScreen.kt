@@ -78,6 +78,7 @@ private val SettingsIndex = listOf(
     // Appearance
     SettingsEntry("Customize player", "Appearance", "appearance_settings", "player customise cover style"),
     SettingsEntry("Customize lyrics tab", "Appearance", "appearance_settings", "lyrics letter typography font"),
+    SettingsEntry("Hide status bar in player", "Appearance", "appearance_settings", "immersive fullscreen status bar clock battery"),
     SettingsEntry("Lyrics Shader", "Appearance", "appearance_settings", "lyrics glow wave letters bloom shader"),
     SettingsEntry("High quality bloom", "Appearance", "appearance_settings", "lyrics bloom quality extra soft pass"),
     SettingsEntry("Always enable Youtube background", "Appearance", "appearance_settings", "youtube video background canvas"),
