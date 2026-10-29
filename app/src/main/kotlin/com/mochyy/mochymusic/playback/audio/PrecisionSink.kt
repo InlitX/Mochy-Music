@@ -15,11 +15,12 @@ import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
 /**
- * Decides, song by song, whether audio reaches the track as 32-bit float or 16-bit. The sink
- * under it is built with float on, but media3's float path skips every audio processor (the
- * equalizer, audio fx, crossmix, haptics, skip silence, speed), so float only goes through while
- * [AudioOutputs.floatAllowed] says none of them would be lost. Otherwise hi-res audio is brought
- * down to 16-bit right here and takes the usual road, exactly like it did before.
+ * Decides, song by song, what reaches the audio track: 32-bit float or 16-bit, at the song's rate
+ * or (with the hi-fi resampler) at the output's own. The sink under it is built with float on, but
+ * media3's float road skips every audio processor, so float only goes through while
+ * [AudioOutputs.floatAllowed] says nothing would be lost. Otherwise anything finer than 16-bit is
+ * dithered down to 16-bit here and takes the usual road with every effect. The long story is in
+ * docs/notes/audio-output.md.
  */
 @UnstableApi
 class PrecisionSink(
@@ -31,14 +32,24 @@ class PrecisionSink(
     private var inputFormat: Format? = null
     private var bufferSize = 0
     private var outputChannels: IntArray? = null
-    /** hi-res pcm is coming in and being turned into 16-bit here */
-    private var converting = false
     private var configuredAllowed = false
+    private var configuredTarget: Int? = null
+    private var handedFormat: Format? = null
 
-    // a converted buffer the sink hasn't taken all of yet, and the decoder buffer it came from
+    /** true while buffers are reworked here instead of going straight down */
+    private var processing = false
+    private var outEncoding = C.ENCODING_PCM_16BIT
+    private var resampler: SincResampler? = null
+
+    // a reworked buffer the sink hasn't taken all of yet, and the decoder buffer it came from
     private var pending: ByteBuffer? = null
     private var pendingSource: ByteBuffer? = null
-    private var scratch: ByteBuffer? = null
+
+    // scratch kept between buffers, so the playback thread doesn't allocate for every one
+    private var planes = Array(2) { FloatArray(0) }
+    private var resampled = Array(2) { FloatArray(0) }
+    private var out: ByteBuffer? = null
+    private var dither = 0x2545F491
 
     // the decoder is asked for float only when float would make it all the way to the track
     override fun getFormatSupport(format: Format): Int {
@@ -52,45 +63,69 @@ class PrecisionSink(
         this.inputFormat = inputFormat
         this.bufferSize = specifiedBufferSize
         this.outputChannels = outputChannels
+        handedFormat = null
         inspector?.onSinkConfigured(inputFormat)
         applyConfiguration()
     }
 
     private fun applyConfiguration() {
         val format = inputFormat ?: return
-        val isPcm = MimeTypes.AUDIO_RAW == format.sampleMimeType
-        val hiRes = isPcm && Util.isEncodingHighResolutionPcm(format.pcmEncoding)
         configuredAllowed = outputs.floatAllowed
-        converting = hiRes && !configuredAllowed
+        configuredTarget = outputs.fixedOutputRate
+        val encoding = format.pcmEncoding
+        val workable = MimeTypes.AUDIO_RAW == format.sampleMimeType && encoding in Workable && format.channelCount > 0
+        val hiRes = workable && Util.isEncodingHighResolutionPcm(encoding)
+        val target = configuredTarget?.takeIf { workable && it != format.sampleRate }
+        val nextResampler = target?.let {
+            resampler?.takeIf { r -> r.inRate == format.sampleRate && r.outRate == it }
+                ?: SincResampler.create(format.sampleRate, it, format.channelCount)
+        }
+        val reworked = nextResampler != null || hiRes
+        val nextEncoding = when {
+            !reworked -> encoding
+            configuredAllowed -> C.ENCODING_PCM_FLOAT
+            else -> C.ENCODING_PCM_16BIT
+        }
+        val handed = if (reworked) {
+            format.buildUpon()
+                .setPcmEncoding(nextEncoding)
+                .setSampleRate(nextResampler?.outRate ?: format.sampleRate)
+                .build()
+        } else format
+        inspector?.onProcessing(nextResampler, dithered = reworked && nextEncoding == C.ENCODING_PCM_16BIT)
+        // the same decision again (an effect switched on while a 16-bit song plays): nothing to reopen
+        if (handed == handedFormat && nextResampler === resampler) return
+
+        processing = reworked
+        outEncoding = nextEncoding
+        if (nextResampler !== resampler) nextResampler?.reset()
+        resampler = nextResampler
         pending = null
         pendingSource = null
-        if (isPcm) {
-            outputs.prepareMixer(
-                sampleRate = format.sampleRate,
-                channels = outputChannels?.size ?: format.channelCount,
-                encoding = if (hiRes && !converting) C.ENCODING_PCM_FLOAT else C.ENCODING_PCM_16BIT,
-            )
+        handedFormat = handed
+        if (MimeTypes.AUDIO_RAW == format.sampleMimeType) {
+            outputs.prepareMixer(handed.sampleRate, outputChannels?.size ?: format.channelCount, handed.pcmEncoding)
         }
-        val handed = if (converting) format.buildUpon().setPcmEncoding(C.ENCODING_PCM_16BIT).build() else format
         super.configure(handed, bufferSize, outputChannels)
     }
 
     override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
-        val format = inputFormat
-        // an effect was switched on (or every one off) mid-song: the sink drains and reopens, a moment's gap
-        if (format != null && pending == null && configuredAllowed != outputs.floatAllowed &&
-            MimeTypes.AUDIO_RAW == format.sampleMimeType && Util.isEncodingHighResolutionPcm(format.pcmEncoding)
+        // an effect or the output changed mid-song: the sink drains the old track and reopens, a moment's gap
+        if (pending == null && inputFormat != null &&
+            (configuredAllowed != outputs.floatAllowed || configuredTarget != outputs.fixedOutputRate)
         ) {
             applyConfiguration()
         }
-        if (!converting) return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+        if (!processing) return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
 
         if (pending == null || pendingSource !== buffer) {
-            pending = toInt16(buffer, format!!.pcmEncoding)
+            pending = rework(buffer, inputFormat!!)
             pendingSource = buffer
             buffer.position(buffer.limit())
         }
-        val done = super.handleBuffer(pending!!, presentationTimeUs, encodedAccessUnitCount)
+        val reworked = pending!!
+        // the resampler can hold a short buffer back whole while its filter fills
+        val done = !reworked.hasRemaining() || super.handleBuffer(reworked, presentationTimeUs, encodedAccessUnitCount)
         if (done) {
             pending = null
             pendingSource = null
@@ -101,49 +136,113 @@ class PrecisionSink(
     override fun flush() {
         pending = null
         pendingSource = null
+        resampler?.reset()
         super.flush()
     }
 
     override fun reset() {
         pending = null
         pendingSource = null
+        resampler?.reset()
         super.reset()
     }
 
-    // keeps the top 16 bits of each sample, the same cut media3's own 16-bit path makes
-    private fun toInt16(source: ByteBuffer, encoding: Int): ByteBuffer {
+    // decoder pcm to float planes, through the resampler when there is one, then float or dithered 16-bit
+    private fun rework(source: ByteBuffer, format: Format): ByteBuffer {
+        val channels = format.channelCount
         val input = source.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        val samples = when (encoding) {
-            C.ENCODING_PCM_24BIT, C.ENCODING_PCM_24BIT_BIG_ENDIAN -> input.remaining() / 3
-            else -> input.remaining() / 4
+        val frameBytes = bytesPerSample(format.pcmEncoding) * channels
+        val frames = input.remaining() / frameBytes
+        ensurePlanes(channels, frames)
+        readPlanes(input, format.pcmEncoding, channels, frames)
+
+        val r = resampler
+        var data = planes
+        var count = frames
+        if (r != null) {
+            ensureResampled(channels, r.maxOutputFrames(frames))
+            count = r.process(planes, frames, resampled)
+            data = resampled
         }
-        val out = scratch?.takeIf { it.capacity() >= samples * 2 }
-            ?: ByteBuffer.allocateDirect(samples * 2).order(ByteOrder.LITTLE_ENDIAN).also { scratch = it }
-        out.clear()
+
+        val bytes = count * channels * if (outEncoding == C.ENCODING_PCM_FLOAT) 4 else 2
+        val target = out?.takeIf { it.capacity() >= bytes }
+            ?: ByteBuffer.allocateDirect(bytes + bytes / 4).order(ByteOrder.LITTLE_ENDIAN).also { out = it }
+        target.clear()
+        if (outEncoding == C.ENCODING_PCM_FLOAT) {
+            for (i in 0 until count) for (c in 0 until channels) target.putFloat(data[c][i])
+        } else {
+            for (i in 0 until count) for (c in 0 until channels) target.putShort(ditherTo16(data[c][i]))
+        }
+        target.flip()
+        return target
+    }
+
+    private fun readPlanes(input: ByteBuffer, encoding: Int, channels: Int, frames: Int) {
         val start = input.position()
         when (encoding) {
-            C.ENCODING_PCM_24BIT -> for (i in 0 until samples) {
-                out.put(input.get(start + i * 3 + 1))
-                out.put(input.get(start + i * 3 + 2))
+            C.ENCODING_PCM_16BIT -> for (i in 0 until frames) for (c in 0 until channels) {
+                planes[c][i] = input.getShort(start + (i * channels + c) * 2) / 32768f
             }
-            C.ENCODING_PCM_24BIT_BIG_ENDIAN -> for (i in 0 until samples) {
-                out.put(input.get(start + i * 3 + 1))
-                out.put(input.get(start + i * 3))
+            C.ENCODING_PCM_16BIT_BIG_ENDIAN -> for (i in 0 until frames) for (c in 0 until channels) {
+                planes[c][i] = java.lang.Short.reverseBytes(input.getShort(start + (i * channels + c) * 2)) / 32768f
             }
-            C.ENCODING_PCM_32BIT -> for (i in 0 until samples) {
-                out.put(input.get(start + i * 4 + 2))
-                out.put(input.get(start + i * 4 + 3))
+            C.ENCODING_PCM_24BIT -> for (i in 0 until frames) for (c in 0 until channels) {
+                val at = start + (i * channels + c) * 3
+                val value = (input.get(at).toInt() and 0xFF) or ((input.get(at + 1).toInt() and 0xFF) shl 8) or (input.get(at + 2).toInt() shl 16)
+                planes[c][i] = value / 8388608f
             }
-            C.ENCODING_PCM_32BIT_BIG_ENDIAN -> for (i in 0 until samples) {
-                out.put(input.get(start + i * 4 + 1))
-                out.put(input.get(start + i * 4))
+            C.ENCODING_PCM_24BIT_BIG_ENDIAN -> for (i in 0 until frames) for (c in 0 until channels) {
+                val at = start + (i * channels + c) * 3
+                val value = (input.get(at).toInt() shl 16) or ((input.get(at + 1).toInt() and 0xFF) shl 8) or (input.get(at + 2).toInt() and 0xFF)
+                planes[c][i] = value / 8388608f
             }
-            else -> for (i in 0 until samples) {
-                val value = input.getFloat(start + i * 4).coerceIn(-1f, 1f)
-                out.putShort((value * Short.MAX_VALUE).roundToInt().toShort())
+            C.ENCODING_PCM_32BIT -> for (i in 0 until frames) for (c in 0 until channels) {
+                planes[c][i] = (input.getInt(start + (i * channels + c) * 4) / 2147483648.0).toFloat()
+            }
+            C.ENCODING_PCM_32BIT_BIG_ENDIAN -> for (i in 0 until frames) for (c in 0 until channels) {
+                planes[c][i] = (Integer.reverseBytes(input.getInt(start + (i * channels + c) * 4)) / 2147483648.0).toFloat()
+            }
+            else -> for (i in 0 until frames) for (c in 0 until channels) {
+                planes[c][i] = input.getFloat(start + (i * channels + c) * 4)
             }
         }
-        out.flip()
-        return out
+    }
+
+    // tpdf dither: two random halves of a step added before rounding, so quiet detail fades into a faint even hiss instead of grit
+    private fun ditherTo16(sample: Float): Short {
+        dither = dither xor (dither shl 13)
+        dither = dither xor (dither ushr 17)
+        dither = dither xor (dither shl 5)
+        val a = (dither and 0xFFFF) / 65536f
+        val b = ((dither ushr 16) and 0xFFFF) / 65536f
+        val value = (sample * 32768f + a - b).roundToInt()
+        return value.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+    }
+
+    private fun ensurePlanes(channels: Int, frames: Int) {
+        if (planes.size != channels || planes[0].size < frames) planes = Array(channels) { FloatArray(frames + frames / 4) }
+    }
+
+    private fun ensureResampled(channels: Int, frames: Int) {
+        if (resampled.size != channels || resampled[0].size < frames) resampled = Array(channels) { FloatArray(frames + frames / 4) }
+    }
+
+    private companion object {
+        val Workable = setOf(
+            C.ENCODING_PCM_16BIT,
+            C.ENCODING_PCM_16BIT_BIG_ENDIAN,
+            C.ENCODING_PCM_24BIT,
+            C.ENCODING_PCM_24BIT_BIG_ENDIAN,
+            C.ENCODING_PCM_32BIT,
+            C.ENCODING_PCM_32BIT_BIG_ENDIAN,
+            C.ENCODING_PCM_FLOAT,
+        )
+
+        fun bytesPerSample(encoding: Int): Int = when (encoding) {
+            C.ENCODING_PCM_16BIT, C.ENCODING_PCM_16BIT_BIG_ENDIAN -> 2
+            C.ENCODING_PCM_24BIT, C.ENCODING_PCM_24BIT_BIG_ENDIAN -> 3
+            else -> 4
+        }
     }
 }

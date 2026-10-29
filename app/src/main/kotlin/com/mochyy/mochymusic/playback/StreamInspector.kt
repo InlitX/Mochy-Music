@@ -46,6 +46,13 @@ data class StreamDetails(
     val tunneling: Boolean = false,
     val underruns: Int = 0,
     val fileSizeBytes: Long? = null,
+    /** mochy's own resampler, when it's converting this song */
+    val resampledFrom: Int? = null,
+    val resampledTo: Int? = null,
+    val resamplerTaps: Int? = null,
+    val resamplerPassbandHz: Double? = null,
+    /** brought down to 16-bit with tpdf dither, rather than cut */
+    val dithered: Boolean = false,
 )
 
 /**
@@ -132,6 +139,19 @@ class StreamInspector : AnalyticsListener {
         }
     }
 
+    // what the precision sink is doing to the song's samples; arrives on the playback thread
+    fun onProcessing(resampler: com.mochyy.mochymusic.playback.audio.SincResampler?, dithered: Boolean) {
+        val from = resampler?.inRate
+        val to = resampler?.outRate
+        val taps = resampler?.taps
+        val passband = resampler?.passbandHz
+        main.post {
+            edit(readingId) {
+                it.copy(resampledFrom = from, resampledTo = to, resamplerTaps = taps, resamplerPassbandHz = passband, dithered = dithered)
+            }
+        }
+    }
+
     private fun mediaIdOf(eventTime: AnalyticsListener.EventTime): String? {
         val timeline = eventTime.timeline
         if (timeline.isEmpty || eventTime.windowIndex >= timeline.windowCount) return playingId
@@ -161,6 +181,11 @@ class StreamInspector : AnalyticsListener {
             outputBufferBytes = previous?.outputBufferBytes,
             offload = previous?.offload ?: false,
             tunneling = previous?.tunneling ?: false,
+            resampledFrom = previous?.resampledFrom,
+            resampledTo = previous?.resampledTo,
+            resamplerTaps = previous?.resamplerTaps,
+            resamplerPassbandHz = previous?.resamplerPassbandHz,
+            dithered = previous?.dithered ?: false,
         )
         songs[id] = fresh
         while (songs.size > KeptSongs) songs.remove(songs.keys.first())

@@ -82,6 +82,28 @@ class AudioOutputs(private val context: Context) {
     @Volatile
     var floatAllowed: Boolean = false
 
+    /** the hi-fi resampler switch: songs are brought to the output's own rate here instead of in android's mixer */
+    @Volatile
+    var resampler: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            routeChanged()
+        }
+
+    /**
+     * The rate the sound will be mixed at, when it's known for sure and the resampler is on: the
+     * speaker and the headphone jack run at the phone's own mixer rate. Bluetooth isn't (its rate
+     * depends on the codec, and android doesn't say), nor usb, which has passthrough instead.
+     */
+    @Volatile
+    var fixedOutputRate: Int? = null
+        private set
+
+    private val systemMixerRate: Int? by lazy {
+        runCatching { audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() }.getOrNull()?.takeIf { it > 0 }
+    }
+
     /** told whenever the device every player should play to changes; called on the main thread */
     var onRouteChanged: (AudioDeviceInfo?) -> Unit = {}
 
@@ -176,6 +198,8 @@ class AudioOutputs(private val context: Context) {
         }
         val preferred = preferredDevice()
         val active = activeDevice()
+        val activeKind = active?.let { kindOf(it.type) }
+        fixedOutputRate = systemMixerRate.takeIf { resampler && (activeKind == Kind.PHONE || activeKind == Kind.WIRED) }
         _devices.value = outputs()
             .mapNotNull { info -> kindOf(info.type)?.let { info to it } }
             .map { (info, kind) ->

@@ -184,6 +184,7 @@ val AudioOffload = booleanPreferencesKey("enableOffload")
 val PreferUsbDacKey = booleanPreferencesKey("preferUsbDac")
 val UsbPassthroughKey = booleanPreferencesKey("usbDacPassthrough")
 val HiResOutputKey = booleanPreferencesKey("hiResFloatOutput")
+val HiFiResamplerKey = booleanPreferencesKey("hiFiResampler")
 
 // which service the about sheet's "about" text comes from: "musixmatch" or "youtube"
 val AboutSongSourceKey = stringPreferencesKey("aboutSongSource")

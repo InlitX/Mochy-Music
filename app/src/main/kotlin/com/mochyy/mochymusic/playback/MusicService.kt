@@ -95,6 +95,7 @@ import com.mochyy.mochymusic.constants.TransportFadeSecondsKey
 import com.mochyy.mochymusic.constants.CrossfadeGaplessKey
 import com.mochyy.mochymusic.constants.CrossmixMode
 import com.mochyy.mochymusic.constants.CrossmixModeKey
+import com.mochyy.mochymusic.constants.HiFiResamplerKey
 import com.mochyy.mochymusic.constants.HiResOutputKey
 import com.mochyy.mochymusic.constants.PreferUsbDacKey
 import com.mochyy.mochymusic.constants.UsbPassthroughKey
@@ -655,6 +656,7 @@ class MusicService :
         audioOutputs.onRouteChanged = ::applyOutputRoute
         audioOutputs.preferUsb = dataStore.get(PreferUsbDacKey, false)
         audioOutputs.passthrough = dataStore.get(UsbPassthroughKey, false)
+        audioOutputs.resampler = dataStore.get(HiFiResamplerKey, false)
         audioOutputs.start()
         player = createExoPlayer()
         player.addListener(this@MusicService)
@@ -1217,11 +1219,12 @@ class MusicService :
     // the usb dac switches, and when 32-bit float may pass: media3's float path skips every audio processor
     private fun observeOutputSettings() {
         dataStore.data
-            .map { (it[PreferUsbDacKey] ?: false) to (it[UsbPassthroughKey] ?: false) }
+            .map { Triple(it[PreferUsbDacKey] ?: false, it[UsbPassthroughKey] ?: false, it[HiFiResamplerKey] ?: false) }
             .distinctUntilChanged()
-            .collect(scope) { (preferUsb, passthrough) ->
+            .collect(scope) { (preferUsb, passthrough, resampler) ->
                 audioOutputs.preferUsb = preferUsb
                 audioOutputs.passthrough = passthrough
+                audioOutputs.resampler = resampler
             }
         val wantsFloat = dataStore.data.map { prefs ->
             (prefs[HiResOutputKey] ?: false) &&
