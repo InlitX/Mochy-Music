@@ -31,7 +31,7 @@ object Musixmatch {
     private const val ApiBase = "$Site/ws/1.1/"
     private const val AppId = "community-app-v1.0"
     // the site's signing key as of its last bundle; a stale one gets a 401 and is read again from the site
-    private const val DefaultSigningKey = "f09016176ba43a1cfd1031fbd6b3d26c"
+    private const val DefaultSigningKey = "e96ddc8a77ab4d745906ff46323346df"
     private const val FallbackUserAgent =
         "Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
     private const val Tag = "Musixmatch"
@@ -133,8 +133,12 @@ object Musixmatch {
         repeat(2) { attempt ->
             val query = (listOf("app_id" to AppId, "format" to "json") + params)
                 .joinToString("&") { (k, v) -> "$k=${encode(v)}" }
-            val response = get(sign("$ApiBase$method?$query"), "application/json") ?: return null
-            val message = parse(response)?.obj("message") ?: return null
+            val response = get(sign("$ApiBase$method?$query"), "application/json")
+            // a stale key gets a plain http 401 with no body worth reading
+            if (response == Unauthorized) {
+                if (attempt == 0 && refreshSigningKey()) return@repeat else return null
+            }
+            val message = response?.let(::parse)?.obj("message") ?: return null
             val status = message.obj("header")?.int("status_code")
             when (status) {
                 200 -> return message.obj("body")
@@ -251,6 +255,7 @@ object Musixmatch {
                 Triple(response.code, if (response.isSuccessful && !challenged) response.body.string() else null, challenged)
             }
             if (body != null) return body
+            if (code == 401) return Unauthorized
             if (!challenged || attempt > 0) {
                 Timber.tag(Tag).d("$code for ${url.substringBefore('?')}")
                 return null
@@ -285,6 +290,8 @@ object Musixmatch {
     private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
 
     private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.intOrNull?.let { n -> n == 1 } }
+
+    private const val Unauthorized = "\u0000unauthorized"
 
     private val NextData = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
     private val AppBundle = Regex("""src="([^"]*/_next/static/chunks/pages/_app-[^"]+\.js)"""")
