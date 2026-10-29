@@ -131,6 +131,7 @@ private val SettingsIndex = listOf(
     SettingsEntry("Prefer USB DAC", "Playback", "playback_settings", "usb dac headphones output external audio"),
     SettingsEntry("USB DAC passthrough", "Playback", "playback_settings", "bit perfect bitperfect passthrough sample rate dac usb resample"),
     SettingsEntry("Hi-res output", "Playback", "playback_settings", "hi res 24 bit float precision lossless flac quality"),
+    SettingsEntry("Hi-fi resampler", "Playback", "playback_settings", "resample sample rate 44.1 48 khz sinc src quality filter"),
 
     // General
     SettingsEntry("Import Data", "General", "general_settings", "backup restore transfer library spotify"),

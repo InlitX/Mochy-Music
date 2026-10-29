@@ -9,6 +9,7 @@ import com.mochyy.mochymusic.playback.StreamDetails
 import com.mochyy.mochymusic.playback.StreamFacts
 import com.mochyy.mochymusic.playback.StreamInspector
 import com.mochyy.mochymusic.playback.audio.AudioOutputs
+import com.mochyy.mochymusic.playback.audio.SincResampler
 import java.util.Locale
 import kotlin.math.log2
 import kotlin.math.roundToInt
@@ -109,6 +110,7 @@ private fun decoderCard(input: StatsInput): StatCard {
 private fun resamplerCard(input: StatsInput): StatCard {
     val d = input.details
     val effects = input.effects
+    if (d.resampledFrom != null && d.resampledTo != null) return mochyResamplerCard(d, effects)
     val inRate = d.decodedSampleRate ?: d.sampleRate ?: return StatCard("Resampler", emptyList())
     val outRate = input.mixer?.sampleRate ?: input.systemMixerRate?.takeIf { input.device?.kind in FixedRateKinds && input.castingTo == null }
     val timeStretch = effects.speed != 1f || effects.pitch != 1f
@@ -134,6 +136,21 @@ private fun resamplerCard(input: StatsInput): StatCard {
     )
 }
 
+// mochy's own filter did the work, so android's mixer is handed the rate it already runs at
+private fun mochyResamplerCard(d: StreamDetails, effects: EffectsSnapshot): StatCard = StatCard(
+    title = "Resampler",
+    lines = listOfNotNull(
+        "Type" to "Mochy hi-fi, windowed sinc (Kaiser)",
+        "I/O rate" to "${kHz(d.resampledFrom!!)} → ${kHz(d.resampledTo!!)}",
+        d.resamplerPassbandHz?.let { "Passband" to "flat to ${kHz(it.toInt())}" },
+        "Cutoff" to kHz(minOf(d.resampledFrom, d.resampledTo) / 2),
+        "Quality" to "−${SincResampler.StopbandDb.toInt()} dB stopband, 32-bit float",
+        d.resamplerTaps?.let { "Taps" to "$it per sample" },
+        "Android's mixer" to "Not resampling, the rates match",
+        effects.speed.takeIf { it != 1f }?.let { "Speed" to String.format(Locale.US, "%.2f×", it) },
+    ),
+)
+
 private fun dspCard(input: StatsInput): StatCard {
     val d = input.details
     val e = input.effects
@@ -155,6 +172,7 @@ private fun dspCard(input: StatsInput): StatCard {
             d.outputEncoding?.let { "PCM format" to pcmName(it) },
             d.outputSampleRate?.let { "Sample rate" to kHz(it) },
             "Effects" to chain.joinToString(", ").ifEmpty { "None, the sound is untouched" },
+            line("Dither", "TPDF, to 16-bit".takeIf { d.dithered }),
             line("Normalization", "On".takeIf { e.normalize }),
             when {
                 floatPath -> "Hi-res path" to "32-bit float, straight through"

@@ -19,9 +19,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Usb
+import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.constants.HiFiResamplerKey
 import com.mochyy.mochymusic.constants.HiResOutputKey
 import com.mochyy.mochymusic.constants.PersistentQueueKey
 import com.mochyy.mochymusic.constants.PreferUsbDacKey
@@ -60,6 +62,7 @@ fun PlaybackSettingsScreen(navController: NavController) {
     val (preferUsbDac, onPreferUsbDacChange) = rememberPreference(PreferUsbDacKey, defaultValue = false)
     val (usbPassthrough, onUsbPassthroughChange) = rememberPreference(UsbPassthroughKey, defaultValue = false)
     val (hiResOutput, onHiResOutputChange) = rememberPreference(HiResOutputKey, defaultValue = false)
+    val (hiFiResampler, onHiFiResamplerChange) = rememberPreference(HiFiResamplerKey, defaultValue = false)
     val outputs = LocalPlayerConnection.current?.service?.audioOutputs
     val devices by remember(outputs) { outputs?.devices ?: MutableStateFlow(emptyList()) }.collectAsState()
     val dac = devices.firstOrNull { it.kind == AudioOutputs.Kind.USB }
@@ -158,6 +161,16 @@ fun PlaybackSettingsScreen(navController: NavController) {
                 iconShape = CircleShape,
                 onClick = { onHiResOutputChange(!hiResOutput) },
                 trailingContent = { AppSwitch(checked = hiResOutput, onCheckedChange = onHiResOutputChange) },
+            ),
+            SettingsItem(
+                title = { Text("Hi-fi resampler") },
+                highlightKey = "Hi-fi resampler",
+                descriptionText = "Mochy's own filter turns songs to your speaker's rate",
+                detail = "Most songs are 44.1 kHz and your phone plays at 48 kHz, so something has to convert them. With this on, Mochy does it with its own high-quality filter (flat to 20 kHz, 120 dB of rejection, in 32-bit float) instead of leaving it to the phone. It works on the speaker and the headphone jack. Bluetooth and USB are left alone: Bluetooth's rate can't be read reliably, and USB has passthrough. It uses a little more battery.",
+                icon = rememberVectorPainter(Icons.Rounded.Waves),
+                iconShape = CircleShape,
+                onClick = { onHiFiResamplerChange(!hiFiResampler) },
+                trailingContent = { AppSwitch(checked = hiFiResampler, onCheckedChange = onHiFiResamplerChange) },
             ),
         ).filter {
             query.isBlank() || it.highlightKey?.contains(query, ignoreCase = true) == true ||
