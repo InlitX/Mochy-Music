@@ -423,6 +423,8 @@ dependencies {
     implementation(project(":providers:paxsenixlyrics"))
     implementation(project(":providers:directlyrics"))
     implementation(project(":providers:musixmatch"))
+    implementation(project(":providers:genius"))
+    implementation(project(":providers:wikipedia"))
     implementation(project(":modules:api"))
     implementation(project(":modules:applemusic"))
     implementation(project(":modules:monochrome"))

@@ -32,6 +32,8 @@ include(":providers:applecanvas")
 include(":providers:paxsenixlyrics")
 include(":providers:directlyrics")
 include(":providers:musixmatch")
+include(":providers:genius")
+include(":providers:wikipedia")
 
 // source modules: built in today, written so each can ship as its own APK later
 include(":modules:api")
