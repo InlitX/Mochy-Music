@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 val MenuSurface = Color(0xFF0B0B0C)
 val MenuRowSurface = Color(0xFF161619)
@@ -239,7 +239,7 @@ fun MenuSheetSurface(
 
     val measuredHeightPx = remember { mutableFloatStateOf(0f) }
 
-    val statusBarBottomPx = WindowInsets.statusBars.getTop(density).toFloat() + with(density) { StatusBarGap.toPx() }
+    val statusBarBottomPx = WindowInsets.stableStatusBars.getTop(density).toFloat() + with(density) { StatusBarGap.toPx() }
     var parentTopInWindowPx by remember { mutableFloatStateOf(0f) }
 
     BoxWithConstraints(

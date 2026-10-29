@@ -876,7 +876,7 @@ private fun LyricLine(
         scaleY = zoom
         if (canBlur) {
             val blur = (1f - e) * blurIn + out * blurOut
-            renderEffect = if (blur > 0.5f) {
+            renderEffect = if (blur > 0.5f && com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur) {
                 androidx.compose.ui.graphics.BlurEffect(blur, blur, androidx.compose.ui.graphics.TileMode.Clamp)
             } else null
         }

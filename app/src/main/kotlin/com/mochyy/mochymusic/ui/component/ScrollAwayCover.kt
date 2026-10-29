@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import com.mochyy.mochymusic.constants.BlurQuality
 import com.mochyy.mochymusic.constants.DisableBlurKey
+import com.mochyy.mochymusic.constants.ElementBlurKey
 import com.mochyy.mochymusic.utils.rememberPreference
 
 private const val CoverZoom = 0.22f
@@ -38,11 +39,18 @@ internal fun smoothstep(from: Float, to: Float, x: Float): Float {
     return t * t * (3f - 2f * t)
 }
 
-/** whether [ScrollAwayCover] can blur its frame here: android 12 and up, and the user hasn't turned blur off */
+/** whether glass can blur here: android 12 and up, and the user hasn't turned blur off */
 @Composable
 fun rememberCoverBlurAvailable(): Boolean {
     val (disableBlur) = rememberPreference(DisableBlurKey, defaultValue = false)
     return !disableBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+}
+
+// whether a thing can blur itself (the cover zooming away, a ring fading out): android 12 and up, with element blur on
+@Composable
+fun rememberElementBlurAvailable(): Boolean {
+    val (elementBlur) = rememberPreference(ElementBlurKey, defaultValue = true)
+    return elementBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 }
 
 /** what a big cover does as the list scrolls it away: rides up, zooms, blurs, dims, dissolves from the bottom and fades; the Home hero and the playlist backdrop share it */
@@ -56,7 +64,7 @@ fun ScrollAwayCover(
     softFrom: Float = 0f,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val frameBlur = rememberCoverBlurAvailable()
+    val frameBlur = rememberElementBlurAvailable()
     val highQuality = LocalBlurQuality.current == BlurQuality.HIGH
     val frame = rememberGraphicsLayer()
 

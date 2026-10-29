@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +41,7 @@ import com.mochyy.mochymusic.ui.player.LyricsHeaderArtTopFromStatusBar
 import com.mochyy.mochymusic.ui.player.LyricsHeaderArtX
 import com.mochyy.mochymusic.ui.player.LyricsScreen
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 /**
  * The song's whole lyrics over a style, from its menu: the flagship's own lyrics page on the
@@ -111,7 +111,7 @@ fun StyleLyricsPage(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
+                    .stableStatusBarsPadding()
                     .padding(start = LyricsHeaderArtX, top = LyricsHeaderArtTopFromStatusBar, end = 24.dp),
             ) {
                 androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {

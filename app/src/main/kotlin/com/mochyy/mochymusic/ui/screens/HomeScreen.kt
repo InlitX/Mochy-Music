@@ -1878,17 +1878,22 @@ fun HomeScreen(
                         )
                     }
 
+                    val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
                     Box(
                         modifier = Modifier
                             .matchParentSize()
                             .drawWithCache {
                                 // every stop is black, so the fade is built once and only its alpha follows the scroll
-                                val fade = Brush.verticalGradient(
-                                    0f to Color.Black.copy(alpha = 0.9f),
-                                    0.3f to Color.Black.copy(alpha = 0.6f),
-                                    0.6f to Color.Black.copy(alpha = 0.3f),
-                                    1f to Color.Transparent
-                                )
+                                val fade = if (progressiveBar) {
+                                    Brush.verticalGradient(
+                                        0f to Color.Black.copy(alpha = 0.9f),
+                                        0.3f to Color.Black.copy(alpha = 0.6f),
+                                        0.6f to Color.Black.copy(alpha = 0.3f),
+                                        1f to Color.Transparent
+                                    )
+                                } else {
+                                    androidx.compose.ui.graphics.SolidColor(Color.Black.copy(alpha = com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha))
+                                }
                                 onDrawBehind {
                                     drawRect(brush = fade, alpha = heroScrollProgressProvider().coerceIn(0f, 1f))
                                 }
@@ -1931,7 +1936,7 @@ fun HomeScreen(
                                     scaleX = scale
                                     scaleY = scale
                                     transformOrigin = TransformOrigin(0f, 0.5f)
-                                    renderEffect = BlurEffectCache.get(topBarProgress * 15f)
+                                    renderEffect = BlurEffectCache.element(topBarProgress * 15f)
                                 }
                         )
 
@@ -1947,7 +1952,7 @@ fun HomeScreen(
                             maxLines = 1,
                             modifier = Modifier.graphicsLayer {
                                 alpha = topBarProgress
-                                renderEffect = BlurEffectCache.get((1f - topBarProgress) * 15f)
+                                renderEffect = BlurEffectCache.element((1f - topBarProgress) * 15f)
                             }
                         )
                     }

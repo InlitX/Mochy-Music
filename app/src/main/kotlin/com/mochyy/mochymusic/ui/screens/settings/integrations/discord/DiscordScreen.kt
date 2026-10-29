@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +53,7 @@ import com.mochyy.mochymusic.ui.screens.settings.integrations.IntegrationPageSub
 import com.mochyy.mochymusic.viewmodels.DiscordViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 const val DiscordRoute = "integrations_settings/discord"
 
@@ -107,7 +107,7 @@ fun DiscordScreen(
     }
 
     val density = LocalDensity.current
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val headerBottomPx = with(density) { (statusBarTop + HeaderHeight).toPx() }
     var previewBottomPx by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     val previewHidden by remember(headerBottomPx) { derivedStateOf { previewBottomPx < headerBottomPx } }

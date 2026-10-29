@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +37,7 @@ import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.player.PressScaleActionButton
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /** the player's menu item label, exactly as its chevron menu sets it */
 private val MenuLabelStyle = TextStyle(
@@ -198,7 +198,7 @@ internal fun MiddleEditor(
     val connection = LocalPlayerConnection.current ?: return
     val transport by connection.uiState.transportState.collectAsState()
     val density = LocalDensity.current
-    val statusTop = with(density) { WindowInsets.statusBars.asPaddingValues().calculateTopPadding().toPx() }
+    val statusTop = with(density) { WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding().toPx() }
     val navBottom = with(density) { WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().toPx() }
     val anchors = parts.anchors
     val measurer = rememberTextMeasurer()
@@ -328,7 +328,7 @@ private fun MenuItemButton(icon: Int, active: Boolean, badge: Boolean, center: (
                     translationY = c.y - basePx / 2f
                     if (android.os.Build.VERSION.SDK_INT >= 31) {
                         val blur = (1f - a) * 14.dp.toPx()
-                        renderEffect = if (blur > 0.5f) {
+                        renderEffect = if (blur > 0.5f && com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur) {
                             androidx.compose.ui.graphics.BlurEffect(blur, blur, androidx.compose.ui.graphics.TileMode.Clamp)
                         } else null
                     }

@@ -32,6 +32,7 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sqrt
+import com.mochyy.mochymusic.ui.utils.AppMotion
 
 // how far a page actually travels while it crossfades: a little drift reads as sliding,
 // a full-width slide is what made two covers look stacked on each other mid-swipe
@@ -175,7 +176,8 @@ private fun PageWipeCopy(
     DownscaledBlur(
         radius = {
             val a = abs(pageOffset())
-            if (a < PageWipeSettled || a >= PageWipeHidden) 0f else BlurEffectCache.effectiveRadius(a * blurPx)
+            // the wipe's soft edge is an element blur, it stays crisp with element blur off
+            if (a < PageWipeSettled || a >= PageWipeHidden || !AppMotion.elementBlur) 0f else BlurEffectCache.effectiveRadius(a * blurPx)
         },
         tileMode = Shader.TileMode.CLAMP,
         mask = null,

@@ -124,7 +124,7 @@ private fun Modifier.zoomBlurOut(exit: () -> Float): Modifier = graphicsLayer {
     scaleX = 1f - 0.2f * e
     scaleY = 1f - 0.2f * e
     alpha = 1f - e
-    renderEffect = BlurEffectCache.get(e * 70f)
+    renderEffect = BlurEffectCache.element(e * 70f)
 }
 
 @Composable

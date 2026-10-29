@@ -31,8 +31,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -111,6 +109,7 @@ import com.mochyy.mochymusic.utils.rememberPreference
 import kotlin.math.abs
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /**
  * How far the controls are pulled up over the artwork.
@@ -444,7 +443,7 @@ private fun PlayerSheet(
     var lyricsChevronRect by remember {
         mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
     }
-    val statusBarTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTopInset = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
 
     // The bar at the top of the open player, on every style: bright while it's touched, faint
@@ -553,7 +552,7 @@ private fun PlayerSheet(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenWidth = maxWidth
         val screenHeight = maxHeight
-        val studioStatusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val studioStatusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
         androidx.compose.runtime.SideEffect {
             studioParts.width = with(density) { screenWidth.toPx() }
             studioParts.height = with(density) { screenHeight.toPx() }
@@ -1831,7 +1830,7 @@ private fun ExpandMenuOverlay(
                                     renderEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                         // DECAL only exists on API 31+; keep the reference inside
                                         // the check so older devices never resolve it.
-                                        BlurEffectCache.get(blurPx, android.graphics.Shader.TileMode.DECAL)
+                                        BlurEffectCache.element(blurPx, android.graphics.Shader.TileMode.DECAL)
                                     } else {
                                         null
                                     }

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -51,6 +50,7 @@ import com.mochyy.mochymusic.ui.player.customize.isDisc
 import com.mochyy.mochymusic.ui.player.models.TrackInfo
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.rememberEnumPreference
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /** swallows every touch, so a preview shows its content without playing it */
 internal fun Modifier.inert(): Modifier = pointerInput(Unit) {
@@ -113,7 +113,7 @@ internal fun FlagshipPreview(
     val coverStyle = if (turntable) PlayerCoverStyle.TURNTABLE else flagshipCover
     val backgroundStyle by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.COVER_GRADIENT)
     val barStyle by rememberEnumPreference(PlayerBottomBarStyleKey, PlayerBottomBarStyle.STACK)
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     BoxWithConstraints(modifier = modifier.fillMaxSize().inert()) {
         PlayerBackgroundPreview(

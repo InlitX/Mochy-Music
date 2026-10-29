@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -75,10 +74,13 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.component.BlurDirection
+import com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha
+import com.mochyy.mochymusic.ui.component.rememberProgressiveBlur
 import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.ProgressiveGlassBackground
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.ui.component.containerTransformSource
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 val SearchHorizontalPadding = 24.dp
 
@@ -181,7 +183,7 @@ fun searchTopBarHeight(
     extra: Dp = 0.dp,
     titleBlockHeight: Dp = SearchTitleBlockHeight,
 ): Dp {
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBar = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     return statusBar + SearchTopClearance +
         (if (withTitle) titleBlockHeight else 0.dp) +
         SearchFieldHeight + extra + 32.dp
@@ -219,7 +221,7 @@ fun SearchGlassTopBar(
     below: (@Composable () -> Unit)? = null,
     field: @Composable () -> Unit,
 ) {
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBar = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val pageColor = SearchColors.page(pureBlack)
     val density = LocalDensity.current
     val titleTravelPx = with(density) { titleBlockHeight.toPx() }
@@ -249,6 +251,8 @@ fun SearchGlassTopBar(
                 )
             }
         }
+        // a flat bar only when there's glass under it, without blur the fade is all that keeps the title readable
+        val flatBar = blurActive && !rememberProgressiveBlur()
         if (showGlass) {
             Box(
                 modifier = Modifier
@@ -256,6 +260,10 @@ fun SearchGlassTopBar(
                     .drawWithCache {
                         onDrawBehind {
                             val p = progressProvider().coerceIn(0f, 1f)
+                            if (flatBar) {
+                                drawRect(pageColor.copy(alpha = p * FlatBarScrimAlpha))
+                                return@onDrawBehind
+                            }
 
                             val boost = if (blurActive) 1f else 1.12f
                             drawRect(
@@ -289,7 +297,7 @@ fun SearchGlassTopBar(
                             transformOrigin = TransformOrigin(0f, 0.5f)
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                                 val quantised = ((p * 14f) / 3f).toInt() * 3
-                                renderEffect = if (quantised > 0) {
+                                renderEffect = if (quantised > 0 && com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur) {
                                     blurCache.getOrPut(quantised) {
                                         android.graphics.RenderEffect.createBlurEffect(
                                             quantised.toFloat(),

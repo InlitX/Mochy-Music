@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -63,6 +62,7 @@ import com.mochyy.mochymusic.ui.player.styles.AlternatePlayerStyle
 import com.mochyy.mochymusic.ui.player.styles.StyleActions
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /** the selector's geometry at progress [e] (0 the full player, 1 cards) on a [w] x [h] screen */
 internal class CardGeometry(val e: Float, val w: Float, val h: Float, gapPx: Float) {
@@ -147,7 +147,7 @@ fun PlayerSelectorOverlay(
     if (active) BackHandler { studio.back() }
 
     val density = LocalDensity.current
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val previewActions = remember { StyleActions(onOtherMenu = {}, onEditPlayer = {}) }
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val currentOnSet by rememberUpdatedState(onSet)

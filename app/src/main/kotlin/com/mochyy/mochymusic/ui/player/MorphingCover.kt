@@ -20,7 +20,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -146,6 +145,7 @@ import com.mochyy.mochymusic.ui.component.GlassState
 import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.utils.rememberPreference
 import androidx.core.content.getSystemService
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 @Stable
 private class MorphEndpoints(
@@ -400,7 +400,7 @@ fun MorphingCover(
 ) {
     val playerConnection = LocalPlayerConnection.current
     val density = LocalDensity.current
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
 
     val isDiscStyle = coverStyle.isDisc && !alternateStyle
 

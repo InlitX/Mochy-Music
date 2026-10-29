@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +61,7 @@ import com.mochyy.mochymusic.lyrics.LyricsEntry
 import com.mochyy.mochymusic.lyrics.LyricsUtils
 import com.mochyy.mochymusic.utils.makeTimeString
 import com.mochyy.mochymusic.ui.player.carouselText
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /** the player's alternate styles, drawn as they look on the player or, [preview], on a selector card */
 @Composable
@@ -219,7 +219,7 @@ private class StyleInsets(val start: Dp, val top: Dp, val end: Dp, val bottom: D
 
 @Composable
 private fun styleInsets(landscape: Boolean): StyleInsets {
-    val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val status = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     return if (landscape) StyleInsets(start = status, top = 0.dp, end = nav, bottom = 0.dp)
     else StyleInsets(start = 0.dp, top = status, end = 0.dp, bottom = nav)

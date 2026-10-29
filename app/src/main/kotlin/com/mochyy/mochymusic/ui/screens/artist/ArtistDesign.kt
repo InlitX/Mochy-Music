@@ -38,8 +38,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -114,6 +112,8 @@ import com.mochyy.mochymusic.ui.player.CanvasArtworkPlayer
 import com.mochyy.mochymusic.ui.screens.search.SearchAvatar
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.viewmodels.ArtistRelease
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 // the round photo sits this far down the banner, and the page's header starts there
 internal const val ArtistAvatarAt = 0.45f
@@ -759,7 +759,7 @@ internal fun ArtistTopBar(
 ) {
     val density = LocalDensity.current
     val showChrome by remember { derivedStateOf { morph() > 0.01f } }
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
 
     Box(modifier = Modifier.fillMaxWidth()) {
         if (showChrome) {
@@ -780,7 +780,7 @@ internal fun ArtistTopBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .stableStatusBarsPadding()
                 .padding(top = 6.dp)
                 .height(47.dp)
                 .padding(start = 26.dp, end = 28.dp)

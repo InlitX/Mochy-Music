@@ -45,8 +45,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -131,7 +129,7 @@ import com.mochyy.mochymusic.ui.component.containerTransformCover
 import com.mochyy.mochymusic.ui.component.containerTransformTarget
 import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.ui.component.pressBounce
-import com.mochyy.mochymusic.ui.component.rememberCoverBlurAvailable
+import com.mochyy.mochymusic.ui.component.rememberElementBlurAvailable
 import com.mochyy.mochymusic.ui.component.smoothstep
 import com.mochyy.mochymusic.ui.player.BackdropBlurTransformation
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
@@ -139,12 +137,15 @@ import com.mochyy.mochymusic.ui.theme.rememberCoverThemeColor
 import com.mochyy.mochymusic.ui.utils.SoftBlurTransformation
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.utils.rememberEnumPreference
+import com.mochyy.mochymusic.utils.rememberPreference
 import com.music.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 // geometry and type from the Figma playlist frames (16:1162 open, 16:1354 scrolled). internal so
 // the album, artist and generated pages line up on the same inset and type
@@ -498,13 +499,12 @@ private fun PlaylistCoverBackdrop(
             .placeholderMemoryCacheKey(coverUrl?.resize(544, 544))
             .build()
     }
-    // where the whole frame can't be blurred (before android 12, or with blur turned off) the
-    // picture alone goes soft instead: a copy blurred once, small and off the main thread, that
-    // the scroll crossfades to
-    val frameBlur = rememberCoverBlurAvailable()
-    val softRequest = remember(coverUrl, frameBlur, cover != null) {
-        // a drawn cover is soft already
-        if (frameBlur || cover != null) {
+    // before android 12 the whole frame can't blur, so the picture alone goes soft from a copy blurred once off the main thread
+    val frameBlur = rememberElementBlurAvailable()
+    val (elementBlur) = rememberPreference(com.mochyy.mochymusic.constants.ElementBlurKey, defaultValue = true)
+    val softRequest = remember(coverUrl, frameBlur, elementBlur, cover != null) {
+        // a drawn cover is soft already, and with element blur off the cover stays sharp
+        if (frameBlur || !elementBlur || cover != null) {
             null
         } else {
             ImageRequest.Builder(context)
@@ -673,10 +673,10 @@ private fun PlaylistTopBar(
     mode: PlaylistModeBar? = null,
 ) {
     val showChrome by remember { derivedStateOf { morph() > 0.01f } }
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val barModifier = Modifier
         .fillMaxWidth()
-        .statusBarsPadding()
+        .stableStatusBarsPadding()
         .padding(top = 6.dp)
         .height(47.dp)
         .padding(start = 26.dp, end = 30.dp)
@@ -1049,7 +1049,7 @@ fun PlaylistHeader(
 /** where a compact header's title starts: under the status bar and the back button's row */
 @Composable
 fun playlistCompactHeaderTop(): Dp =
-    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 78.dp
+    WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding() + 78.dp
 
 /** a compact header's rough height, for [PlaylistDetailScaffold]'s headerHeight */
 @Composable

@@ -282,7 +282,16 @@ fun StatsScreen(navController: NavController) {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.7f), Color.Transparent))))
+            val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
+            Box(
+                Modifier.fillMaxSize().background(
+                    if (progressiveBar) {
+                        Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.7f), Color.Transparent))
+                    } else {
+                        androidx.compose.ui.graphics.SolidColor(Color.Black.copy(alpha = com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha))
+                    },
+                ),
+            )
         }
 
         // top row: the logo, which turns into "Stats" once the title scrolls away (one element
@@ -312,7 +321,7 @@ fun StatsScreen(navController: NavController) {
                             scaleX = k
                             scaleY = k
                             transformOrigin = TransformOrigin(0f, 0.5f)
-                            renderEffect = BlurEffectCache.get(morph * 15f)
+                            renderEffect = BlurEffectCache.element(morph * 15f)
                         },
                 )
                 Row(
@@ -320,7 +329,7 @@ fun StatsScreen(navController: NavController) {
                     modifier = Modifier
                         .graphicsLayer {
                             alpha = morph
-                            renderEffect = BlurEffectCache.get((1f - morph) * 15f)
+                            renderEffect = BlurEffectCache.element((1f - morph) * 15f)
                         }
                         .clickable(enabled = morph > 0.5f, onClick = ::openPicker),
                 ) {

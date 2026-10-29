@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -61,6 +60,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import timber.log.Timber
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 private const val LOGIN_URL = "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com"
 
@@ -88,7 +88,7 @@ fun YouTubeLoginScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .statusBarsPadding()
+            .stableStatusBarsPadding()
             .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom)),
     ) {
         Row(

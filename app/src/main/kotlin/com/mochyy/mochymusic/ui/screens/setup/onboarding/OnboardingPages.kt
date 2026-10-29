@@ -695,10 +695,17 @@ internal fun BlurWarningPage(
                 steps = 3,
                 modifier = Modifier.matchParentSize(),
             )
+            val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(Brush.verticalGradient(0f to Color.Transparent, 0.5f to Onb.Page.copy(alpha = 0.7f), 1f to Onb.Page)),
+                    .background(
+                        if (progressiveBar) {
+                            Brush.verticalGradient(0f to Color.Transparent, 0.5f to Onb.Page.copy(alpha = 0.7f), 1f to Onb.Page)
+                        } else {
+                            androidx.compose.ui.graphics.SolidColor(Onb.Page.copy(alpha = 0.6f))
+                        },
+                    ),
             )
             OnbButton(
                 text = if (disableBlur) "continue" else "no, continue",

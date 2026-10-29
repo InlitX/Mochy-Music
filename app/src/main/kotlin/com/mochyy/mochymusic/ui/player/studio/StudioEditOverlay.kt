@@ -32,8 +32,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -97,6 +95,8 @@ import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.utils.makeTimeString
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 internal val PlayerBackgroundStyle.studioName: String
     get() = when (this) {
@@ -189,7 +189,7 @@ fun StudioEditOverlay(
 @Composable
 private fun StudioTopBar(studio: PlayerStudioState, glassState: GlassState) {
     val r = rememberResponsive()
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val title by remember(studio) {
         derivedStateOf {
             when (studio.stage) {
@@ -221,19 +221,25 @@ private fun StudioTopBar(studio: PlayerStudioState, glassState: GlassState) {
                 .height(statusTop + 92.dp)
                 .graphicsLayer { alpha = (1f - studio.backdrop.value * studio.cover.value).coerceIn(0f, 1f) },
         )
+        val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(statusTop + 112.dp)
+                // a flat bar's tint stops at its hairline, the fade ran a little past it
+                .height(statusTop + if (progressiveBar) 112.dp else 92.dp)
                 .drawBehind {
-                    drawRect(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.5f), 1f to Color.Transparent))
+                    if (progressiveBar) {
+                        drawRect(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.5f), 1f to Color.Transparent))
+                    } else {
+                        drawRect(Color.Black.copy(alpha = 0.3f))
+                    }
                 },
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .stableStatusBarsPadding()
                 .padding(top = 10.dp)
                 .height(40.dp)
                 .padding(start = 22.dp, end = 22.dp),
@@ -300,7 +306,7 @@ private fun CoverEditor(
     val density = LocalDensity.current
     val r = rememberResponsive()
     val touchSlop = LocalViewConfiguration.current.touchSlop
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val currentCovers by rememberUpdatedState(coverStyles)
     val currentBackgrounds by rememberUpdatedState(backgroundStyles)

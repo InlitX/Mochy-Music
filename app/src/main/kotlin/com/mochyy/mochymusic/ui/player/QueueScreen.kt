@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -70,6 +69,7 @@ import com.mochyy.mochymusic.ui.utils.resize
 import kotlinx.coroutines.delay
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 private val RowArtSize = 44.dp
 
@@ -259,7 +259,7 @@ fun QueueScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .stableStatusBarsPadding()
                 .padding(start = LyricsHeaderArtX, end = PlayerHorizontalPadding)
                 .padding(top = LyricsHeaderArtTopFromStatusBar, bottom = 10.dp),
         ) {

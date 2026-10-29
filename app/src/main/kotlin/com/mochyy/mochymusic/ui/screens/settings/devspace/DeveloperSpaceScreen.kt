@@ -146,10 +146,17 @@ fun DeveloperSpaceScreen(navController: NavController, initialPage: Int = 0) {
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.7f), Color.Transparent))),
+                    .background(
+                        if (progressiveBar) {
+                            Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 0.7f), Color.Transparent))
+                        } else {
+                            androidx.compose.ui.graphics.SolidColor(Color.Black.copy(alpha = com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha))
+                        },
+                    ),
             )
         }
 

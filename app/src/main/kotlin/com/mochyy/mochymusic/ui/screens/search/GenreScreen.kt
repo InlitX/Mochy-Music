@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -75,6 +74,7 @@ import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.ui.utils.resize
 import com.mochyy.mochymusic.viewmodels.CommunityPlaylistItem
 import com.mochyy.mochymusic.viewmodels.GenreViewModel
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 private val HeaderHeight = 300.dp
 
@@ -91,7 +91,7 @@ fun GenreScreen(
     val listState = rememberLazyListState()
     val glassState = remember { GlassState() }
     val density = LocalDensity.current
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBar = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
 
     val enterPx = with(density) { (HeaderHeight - statusBar - 96.dp).toPx().coerceAtLeast(1f) }
@@ -386,7 +386,7 @@ private fun GenreTopBar(
     pureBlack: Boolean,
     onBack: () -> Unit,
 ) {
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBar = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val pageColor = SearchColors.page(pureBlack)
     val density = LocalDensity.current
     val risePx = with(density) { 18.dp.toPx() }
@@ -408,12 +408,17 @@ private fun GenreTopBar(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+            val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .drawWithCache {
                         onDrawBehind {
                             val p = progressProvider().coerceIn(0f, 1f)
+                            if (!progressiveBar) {
+                                drawRect(pageColor.copy(alpha = p * com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha))
+                                return@onDrawBehind
+                            }
                             drawRect(
                                 brush = Brush.verticalGradient(
                                     0f to pageColor.copy(alpha = p * 0.95f),

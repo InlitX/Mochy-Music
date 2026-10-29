@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -44,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -63,6 +63,7 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.screens.search.rememberScrollCollapseProgress
 import kotlin.math.PI
 import kotlin.math.sin
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 private val PagePadding = 20.dp
 private val BackButtonSize = 40.dp
@@ -108,7 +109,7 @@ fun SubSettingsScaffold(
 
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues()
 
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val totalHeaderHeight = statusBarTop + ExpandedHeaderHeight
 
     var searchOverlayVisible by remember { mutableStateOf(false) }
@@ -168,16 +169,21 @@ fun SubSettingsScaffold(
                 modifier = Modifier.fillMaxSize()
             )
 
+            val progressive = rememberProgressiveBlur()
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .drawWithCache {
-                        val gradient = Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0.90f),
-                            0.20f to Color.Black.copy(alpha = 0.50f),
-                            0.45f to Color.Black.copy(alpha = 0.18f),
-                            0.75f to Color.Transparent,
-                        )
+                        val gradient = if (progressive) {
+                            Brush.verticalGradient(
+                                0f to Color.Black.copy(alpha = 0.90f),
+                                0.20f to Color.Black.copy(alpha = 0.50f),
+                                0.45f to Color.Black.copy(alpha = 0.18f),
+                                0.75f to Color.Transparent,
+                            )
+                        } else {
+                            SolidColor(Color.Black.copy(alpha = FlatBarScrimAlpha))
+                        }
                         onDrawBehind { drawRect(brush = gradient) }
                     }
             )
@@ -252,7 +258,7 @@ fun SubSettingsScaffold(
                         // Android 11 and older the first time the header drew: every settings
                         // page crashed on opening. Below 31 there's no blur either way.
                         renderEffect = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                            BlurEffectCache.get(blurPx, android.graphics.Shader.TileMode.DECAL)
+                            BlurEffectCache.element(blurPx, android.graphics.Shader.TileMode.DECAL)
                         } else {
                             null
                         }

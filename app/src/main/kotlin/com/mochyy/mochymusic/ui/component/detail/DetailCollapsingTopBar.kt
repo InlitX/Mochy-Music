@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -56,6 +55,7 @@ import com.mochyy.mochymusic.ui.component.ProgressiveGlassBackground
 import kotlin.math.PI
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 private val DetailCollapseEasing = androidx.compose.animation.core.CubicBezierEasing(0.59f, 0.53f, 0f, 1f)
 private const val DetailMorphDurationMs = 1000
@@ -161,7 +161,7 @@ fun DetailCollapsingTopBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .stableStatusBarsPadding()
                 .padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 8.dp)
         ) {
             Box(
@@ -257,7 +257,7 @@ fun DetailCollapsingTopBar(
                             // DECAL is API 31: read only behind the check, or Android 11 and
                             // older throw NoSuchFieldError here (no blur below 31 either way)
                             renderEffect = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                com.mochyy.mochymusic.ui.component.BlurEffectCache.get(
+                                com.mochyy.mochymusic.ui.component.BlurEffectCache.element(
                                     motionBlurRadius,
                                     android.graphics.Shader.TileMode.DECAL
                                 )

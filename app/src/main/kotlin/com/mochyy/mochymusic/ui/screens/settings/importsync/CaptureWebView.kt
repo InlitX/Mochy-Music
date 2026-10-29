@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
@@ -59,6 +58,7 @@ import com.mochyy.mochymusic.importer.account.DESKTOP_USER_AGENT
 import com.mochyy.mochymusic.importer.account.WEB_PLAYER_QUERY_HEADER
 import kotlinx.coroutines.delay
 import timber.log.Timber
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 /** the page-side name of CaptureBridge, scripts the app runs in the page report through it too */
 internal const val BRIDGE_NAME = "MochyCapture"
@@ -208,7 +208,7 @@ fun CaptureWebView(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .statusBarsPadding()
+            .stableStatusBarsPadding()
             .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom)),
     ) {
         WebLoginHeader(title = title, subtitle = subtitle, onBack = onExit)

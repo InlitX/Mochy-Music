@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mochyy.mochymusic.ui.component.BlurEffectCache
 import com.mochyy.mochymusic.ui.component.damageBoundary
-import com.mochyy.mochymusic.ui.component.rememberCoverBlurAvailable
+import com.mochyy.mochymusic.ui.component.rememberElementBlurAvailable
 import kotlin.math.PI
 import kotlin.math.floor
 
@@ -58,7 +58,7 @@ fun VersionRing(
     textColor: Color = Color.White.copy(alpha = 0.3f),
     turnMillis: Int = 26_000,
 ) {
-    val canBlur = rememberCoverBlurAvailable()
+    val canBlur = rememberElementBlurAvailable()
     val latestProgress = rememberUpdatedState(scrollProgress)
     val spinning by remember { derivedStateOf { latestProgress.value() < 0.99f } }
     val turn = if (spinning) {

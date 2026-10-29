@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +63,7 @@ import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.component.BlurEffectCache
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /** the backdrop behind the sheet, and the sheet itself */
 private val PageBackdrop = Color(0xFF141416)
@@ -96,7 +96,7 @@ fun AudioLabPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scroll = rememberScrollState()
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
 
     BoxWithConstraints(
@@ -194,7 +194,7 @@ private fun LabBackdrop(scroll: ScrollState, headerHeight: Int, content: @Compos
                 clip = covered > 0f
                 // DECAL is android 12's, named outside this check it fails to load on older phones
                 renderEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    BlurEffectCache.get(18.dp.toPx() * covered, android.graphics.Shader.TileMode.DECAL)
+                    BlurEffectCache.element(18.dp.toPx() * covered, android.graphics.Shader.TileMode.DECAL)
                 } else {
                     null
                 }

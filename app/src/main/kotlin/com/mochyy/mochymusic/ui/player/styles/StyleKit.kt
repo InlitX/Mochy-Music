@@ -741,7 +741,7 @@ fun RotatingFrame(
                                 alpha = if (arriving) smooth((t - 0.3f) / 0.45f) else 1f - smooth((t - 0.1f) / 0.45f)
                                 if (android.os.Build.VERSION.SDK_INT >= 31) {
                                     val blur = 14.dp.toPx() * sin01(t)
-                                    renderEffect = if (blur > 0.5f) {
+                                    renderEffect = if (blur > 0.5f && com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur) {
                                         androidx.compose.ui.graphics.BlurEffect(blur, blur, androidx.compose.ui.graphics.TileMode.Clamp)
                                     } else null
                                 }

@@ -643,7 +643,7 @@ fun ProfileScreen(navController: NavController) {
                                         alpha = 1f - w
                                         scaleX = 1f - 0.3f * w
                                         scaleY = 1f - 0.3f * w
-                                        renderEffect = BlurEffectCache.get(w * 14f)
+                                        renderEffect = BlurEffectCache.element(w * 14f)
                                     },
                             )
                             if (recapWaiting) {
@@ -656,7 +656,7 @@ fun ProfileScreen(navController: NavController) {
                                         alpha = w
                                         scaleX = 0.85f + 0.15f * w
                                         scaleY = 0.85f + 0.15f * w
-                                        renderEffect = BlurEffectCache.get((1f - w) * 14f)
+                                        renderEffect = BlurEffectCache.element((1f - w) * 14f)
                                     },
                                 )
                             }
@@ -751,13 +751,18 @@ fun ProfileScreen(navController: NavController) {
                             .fillMaxSize()
                             .graphicsLayer { alpha = (collapseProgress * 1.5f).coerceIn(0f, 1f) },
                     )
+                    val progressiveBar = com.mochyy.mochymusic.ui.component.rememberProgressiveBlur()
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(
-                                Brush.verticalGradient(
-                                    listOf(Color.Black, Color.Black.copy(alpha = 0.85f * collapseProgress), Color.Transparent),
-                                ),
+                                if (progressiveBar) {
+                                    Brush.verticalGradient(
+                                        listOf(Color.Black, Color.Black.copy(alpha = 0.85f * collapseProgress), Color.Transparent),
+                                    )
+                                } else {
+                                    androidx.compose.ui.graphics.SolidColor(Color.Black.copy(alpha = com.mochyy.mochymusic.ui.component.FlatBarScrimAlpha))
+                                },
                             ),
                     )
                 }

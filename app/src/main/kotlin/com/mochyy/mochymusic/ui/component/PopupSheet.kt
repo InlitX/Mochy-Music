@@ -67,7 +67,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -117,6 +116,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.mochyy.mochymusic.ui.utils.stableStatusBars
 
 /**
  * Backing state for a popup sheet stack. Three composition-local instances of this exist
@@ -673,7 +673,7 @@ private fun BoxWithConstraintsScope.sheetSizeModifier(isTablet: Boolean): Modifi
     } else {
         // On short screens 86% reaches the status bar once a covered sheet rises to peek above
         // this one; keep the whole stack, peek strip included, below it.
-        val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val statusBar = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
         val belowStatusBar = maxHeight - statusBar - StatusBarGap - PeekHeight
         Modifier
             .fillMaxWidth()

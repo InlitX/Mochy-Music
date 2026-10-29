@@ -340,7 +340,7 @@ fun LaunchIntroOverlay(state: LaunchIntroState, essentialsReady: Boolean) {
                 }
                 .graphicsLayer {
                     val t = state.flight.value
-                    renderEffect = BlurEffectCache.get(BlurPeak * bell((t - 0.04f) / 0.76f) * frame.unit)
+                    renderEffect = BlurEffectCache.element(BlurPeak * bell((t - 0.04f) / 0.76f) * frame.unit)
                 }
                 .drawBehind {
                     val t = state.flight.value
