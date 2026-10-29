@@ -74,7 +74,7 @@ enum class AboutSource(val id: String, val label: String) {
     YouTube("youtube", "YouTube"),
 }
 
-/** "About song": the song's facts, what it's about, who made it and where else it plays */
+/** "about song": the song's facts, what it's about, who made it and where else it plays */
 @Composable
 fun AboutSongSheet(
     song: MediaMetadata,
@@ -193,61 +193,65 @@ private fun AboutCard(about: SongAbout, source: AboutSource, onSwitch: (AboutSou
     val uriHandler = LocalUriHandler.current
     val text = textFor(about, source)
     val done = doneFor(about, source)
-    InfoCard(modifier = Modifier.heightIn(min = 170.dp)) {
-        AnimatedContent(
-            targetState = Triple(source, done, text),
-            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
-            label = "aboutText",
-            modifier = Modifier.weight(1f, fill = false),
-        ) { (shownSource, shownDone, shownText) ->
-            Column {
-                when {
-                    !shownDone -> {
-                        LoadingBar(width = 240.dp)
-                        Spacer(Modifier.height(10.dp))
-                        LoadingBar(width = 200.dp)
-                        Spacer(Modifier.height(10.dp))
-                        LoadingBar(width = 220.dp)
-                    }
-                    shownText != null -> Text(
-                        text = shownText,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    else -> {
-                        Text(
-                            text = "${shownSource.label} doesn't have anything about this song yet.",
-                            color = InfoMuted,
+    InfoCard {
+        // no weight here: inside the scrolling sheet a weighted text got only the card's minimum height and long ones were cut off
+        Column(verticalArrangement = Arrangement.SpaceBetween, modifier = Modifier.heightIn(min = 130.dp)) {
+            AnimatedContent(
+                targetState = Triple(source, done, text),
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                label = "aboutText",
+            ) { (shownSource, shownDone, shownText) ->
+                Column {
+                    when {
+                        !shownDone -> {
+                            LoadingBar(width = 240.dp)
+                            Spacer(Modifier.height(10.dp))
+                            LoadingBar(width = 200.dp)
+                            Spacer(Modifier.height(10.dp))
+                            LoadingBar(width = 220.dp)
+                        }
+                        shownText != null -> Text(
+                            text = shownText,
+                            color = Color.White,
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
                         )
-                        val other = AboutSource.entries.first { it != shownSource }
-                        if (textFor(about, other) != null) {
-                            Spacer(Modifier.height(12.dp))
-                            InfoPill(text = "Read it on ${other.label}", filled = true, onClick = { onSwitch(other) })
+                        else -> {
+                            Text(
+                                text = "${shownSource.label} doesn't have anything about this song yet.",
+                                color = InfoMuted,
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                            )
+                            val other = AboutSource.entries.first { it != shownSource }
+                            if (textFor(about, other) != null) {
+                                Spacer(Modifier.height(12.dp))
+                                InfoPill(text = "Read it on ${other.label}", filled = true, onClick = { onSwitch(other) })
+                            }
                         }
                     }
                 }
             }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(18.dp))
+                val pageUrl = about.musixmatch?.pageUrl.takeIf { source == AboutSource.Musixmatch }
+                Text(
+                    text = "provided by ${source.label.lowercase()}",
+                    color = InfoMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (pageUrl != null) {
+                                Modifier.clickable(interactionSource = null, indication = null) { runCatching { uriHandler.openUri(pageUrl) } }
+                            } else Modifier,
+                        ),
+                )
+            }
         }
-        Spacer(Modifier.height(18.dp))
-        val pageUrl = about.musixmatch?.pageUrl.takeIf { source == AboutSource.Musixmatch }
-        Text(
-            text = "provided by ${source.label.lowercase()}",
-            color = InfoMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.End,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (pageUrl != null) {
-                        Modifier.clickable(interactionSource = null, indication = null) { runCatching { uriHandler.openUri(pageUrl) } }
-                    } else Modifier,
-                ),
-        )
     }
 }
 
