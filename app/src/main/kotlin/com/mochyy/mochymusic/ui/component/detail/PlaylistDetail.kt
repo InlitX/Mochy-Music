@@ -93,6 +93,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -1377,8 +1379,13 @@ fun PlaylistTrackRow(
     songId: String? = null,
     /** picked while selecting: the row sits on a soft band */
     selected: Boolean = false,
+    /** Optional like action; hidden when a selection-mode trailing control is present. */
+    liked: Boolean? = null,
+    onLikeClick: (() -> Unit)? = null,
 ) {
     val band by animateFloatAsState(if (selected) 1f else 0f, tween(180), label = "selectedBand")
+    // Keep album rows as compact as the other tracks while giving the heart a 48dp tap target.
+    val verticalPadding = if (trailing == null && liked != null && onLikeClick != null) 5.dp else 9.dp
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -1390,7 +1397,7 @@ fun PlaylistTrackRow(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .padding(start = PlaylistInset, end = 24.dp, top = 9.dp, bottom = 9.dp)
+            .padding(start = PlaylistInset, end = 24.dp, top = verticalPadding, bottom = verticalPadding)
     ) {
         Box(
             modifier = Modifier
@@ -1428,6 +1435,22 @@ fun PlaylistTrackRow(
             )
         }
         com.mochyy.mochymusic.ui.component.OnDeviceMarks(songId, modifier = Modifier.padding(end = 2.dp))
+        if (trailing == null && liked != null && onLikeClick != null) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(role = Role.Button, onClick = onLikeClick),
+            ) {
+                Icon(
+                    painter = painterResource(if (liked) R.drawable.favorite else R.drawable.favorite_border),
+                    contentDescription = stringResource(if (liked) R.string.action_remove_like else R.string.action_like),
+                    tint = if (liked) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         if (trailing != null) {
             trailing()
         } else {
@@ -1440,7 +1463,7 @@ fun PlaylistTrackRow(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.more_horiz),
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.more_options),
                     tint = Color.White.copy(alpha = 0.78f),
                     modifier = Modifier.size(20.dp),
                 )
