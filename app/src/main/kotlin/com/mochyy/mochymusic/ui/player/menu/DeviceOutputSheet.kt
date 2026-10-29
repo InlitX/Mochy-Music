@@ -334,17 +334,18 @@ private fun DeviceRow(
                 text = label,
                 color = Color.White,
                 fontSize = 14.sp,
+                lineHeight = 18.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (detail != null) {
+                // a dac's line (kind, rates, bit depth, passthrough) runs long: it wraps instead of losing its end
                 Text(
                     text = detail,
                     color = Color.White.copy(alpha = 0.5f),
                     fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp,
                 )
             }
         }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -261,16 +262,18 @@ internal fun doneFor(about: SongAbout, source: AboutSource): Boolean = when (sou
 }
 
 @Composable
-private fun ArtistRow(artists: List<AboutArtist>, onOpenArtist: (String) -> Unit) {
+private fun ArtistRow(artists: List<AboutArtist>, onOpenArtist: (String) -> Unit) = BoxWithConstraints(Modifier.fillMaxWidth()) {
+    // about three across on a phone, a little bigger on a tablet, never so big a name has no room
+    val circle = ((maxWidth - ArtistGap * 2) / 2.9f).coerceIn(80.dp, 128.dp)
     Row(
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(ArtistGap),
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
     ) {
         artists.forEach { artist ->
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .width(104.dp)
+                    .width(circle)
                     .clickable(
                         enabled = !artist.id.isNullOrBlank(),
                         interactionSource = null,
@@ -279,7 +282,7 @@ private fun ArtistRow(artists: List<AboutArtist>, onOpenArtist: (String) -> Unit
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(104.dp).clip(CircleShape).background(MenuRowSurface),
+                    modifier = Modifier.size(circle).clip(CircleShape).background(MenuRowSurface),
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.person),
@@ -292,7 +295,7 @@ private fun ArtistRow(artists: List<AboutArtist>, onOpenArtist: (String) -> Unit
                             model = artist.imageUrl,
                             contentDescription = artist.name,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(104.dp),
+                            modifier = Modifier.size(circle),
                         )
                     }
                 }
@@ -312,19 +315,21 @@ private fun ArtistRow(artists: List<AboutArtist>, onOpenArtist: (String) -> Unit
 }
 
 @Composable
-private fun StoreRow(links: List<StoreLink>) {
+private fun StoreRow(links: List<StoreLink>) = BoxWithConstraints(Modifier.fillMaxWidth()) {
     val uriHandler = LocalUriHandler.current
+    // three and a bit showing, like the mock, so it's plain the row scrolls to the rest
+    val tile = ((maxWidth - StoreGap * 3) / 3.4f).coerceIn(72.dp, 120.dp)
     Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(StoreGap),
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
     ) {
         links.forEach { link ->
             Column(
                 modifier = Modifier
-                    .width(94.dp)
+                    .width(tile)
                     .clickable(interactionSource = null, indication = null) { runCatching { uriHandler.openUri(link.url) } },
             ) {
-                ProviderSquircle(service = link.service, size = 94.dp)
+                ProviderSquircle(service = link.service, size = tile)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = link.service.label,
@@ -338,3 +343,6 @@ private fun StoreRow(links: List<StoreLink>) {
         }
     }
 }
+
+private val ArtistGap = 20.dp
+private val StoreGap = 12.dp

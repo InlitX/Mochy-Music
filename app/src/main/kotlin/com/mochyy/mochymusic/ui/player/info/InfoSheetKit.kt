@@ -27,7 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -49,9 +52,9 @@ internal fun InfoSheetTitle(text: String) {
         text = text,
         color = Color.White,
         fontSize = 28.sp,
+        lineHeight = 32.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.03).em,
-        maxLines = 1,
     )
 }
 
@@ -62,9 +65,10 @@ internal fun InfoSectionTitle(text: String, modifier: Modifier = Modifier, trail
             text = text,
             color = Color.White,
             fontSize = 21.sp,
+            lineHeight = 25.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.02).em,
-            maxLines = 1,
+            modifier = Modifier.weight(1f, fill = false),
         )
         Spacer(Modifier.width(10.dp))
         trailing()
@@ -137,15 +141,17 @@ internal fun StatLine(label: String, value: String) {
             text = label,
             color = InfoMuted,
             fontSize = 13.sp,
+            lineHeight = 17.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(112.dp),
+            modifier = Modifier.weight(0.4f).padding(end = 10.dp),
         )
         Text(
             text = value,
             color = Color.White,
             fontSize = 13.sp,
+            lineHeight = 17.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(0.6f),
         )
     }
 }
@@ -193,23 +199,18 @@ internal fun LoadingBar(width: Dp, height: Dp = 12.dp) {
 
 @Composable
 internal fun InfoBullet(label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
-        Box(Modifier.size(9.dp).clip(CircleShape).background(InfoMuted))
+    Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 3.dp)) {
+        Box(Modifier.padding(top = 5.dp).size(9.dp).clip(CircleShape).background(InfoMuted))
         Spacer(Modifier.width(9.dp))
         Text(
-            text = label,
-            color = InfoMuted,
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = InfoMuted)) { append(label) }
+                append("  ")
+                withStyle(SpanStyle(color = Color.White)) { append(value) }
+            },
             fontSize = 14.sp,
+            lineHeight = 19.sp,
             fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = value,
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }

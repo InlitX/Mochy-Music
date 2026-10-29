@@ -182,8 +182,10 @@ internal fun SongHeader(song: MediaMetadata) {
                 text = song.title,
                 color = Color.White,
                 fontSize = 16.sp,
+                lineHeight = 20.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
+                // two lines before it gives up: long titles and features were cut halfway through a word
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             val artists = song.artists.joinToString(", ") { it.name }
@@ -192,7 +194,8 @@ internal fun SongHeader(song: MediaMetadata) {
                     text = artists,
                     color = Color(0xFFB3B3B3),
                     fontSize = 12.sp,
-                    maxLines = 1,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
