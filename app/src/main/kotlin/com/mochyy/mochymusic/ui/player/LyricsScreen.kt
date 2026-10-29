@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -116,7 +115,6 @@ import com.mochyy.mochymusic.constants.LyricsRomanizePunjabiKey
 import com.mochyy.mochymusic.constants.LyricsRomanizeRussianKey
 import com.mochyy.mochymusic.constants.LyricsRomanizeSerbianKey
 import com.mochyy.mochymusic.constants.LyricsRomanizeUkrainianKey
-import com.mochyy.mochymusic.constants.LyricsWaveAnimationKey
 import com.mochyy.mochymusic.constants.TranslateLanguageKey
 import com.mochyy.mochymusic.constants.TranslateLyricsKey
 import com.mochyy.mochymusic.constants.TranslateSourceLanguageKey
@@ -134,6 +132,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.mochyy.mochymusic.ui.utils.stableStatusBarsPadding
 
 private const val ActiveLineViewportFraction = 0.055f
 
@@ -180,7 +179,7 @@ internal val LyricsRecenterEasing = CubicBezierEasing(0.5f, 0.45f, 0f, 1f)
 internal val LyricsSmoothRecenterEasing = CubicBezierEasing(0.42f, 0f, 0.16f, 1f)
 
 internal fun recenterEasingFor(style: com.mochyy.mochymusic.constants.LyricsMotionStyle) =
-    if (style == com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION) LyricsSmoothRecenterEasing else LyricsRecenterEasing
+    if (style.risesWords) LyricsSmoothRecenterEasing else LyricsRecenterEasing
 
 private const val ScrollDirectionThresholdPx = 6L
 
@@ -343,7 +342,7 @@ fun LyricsScreen(
         com.mochyy.mochymusic.constants.LyricsMotionStyleKey,
         defaultValue = com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION,
     )
-    val cascade = motionStyle == com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION
+    val cascade = motionStyle.risesWords
 
     // Opens already on the playing line. Starting at the top and scrolling down to it fought the
     // open transition - the line the card grows into would still be moving.
@@ -517,11 +516,10 @@ fun LyricsScreen(
             .size > 1
     }
 
-    val (lyricsWaveAnimation) = rememberPreference(LyricsWaveAnimationKey, defaultValue = true)
-    // the lines' blur by their distance from the sung one is an element blur: off with blur turned
-    // off (Settings > Appearance > Disable blur), and with animations turned off (#10)
-    val (disableBlur) = rememberPreference(com.mochyy.mochymusic.constants.DisableBlurKey, defaultValue = false)
-    val lineBlurAllowed = !disableBlur && com.mochyy.mochymusic.ui.utils.AppMotion.enabled
+    // the boring and plain styles are styles 1 and 2 with the shader left out
+    val lyricsWaveAnimation = motionStyle.shaded
+    // the lines' blur by their distance from the sung one is an element blur, the glass blur switch doesn't touch it
+    val (lineBlurAllowed) = rememberPreference(com.mochyy.mochymusic.constants.ElementBlurKey, defaultValue = true)
     val (lyricsHighBloom) = rememberPreference(LyricsHighBloomKey, defaultValue = true)
 
     // Drives the per-line loading dots and lifts the readings out of the way. The button that
@@ -571,7 +569,7 @@ fun LyricsScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .stableStatusBarsPadding()
                 .padding(horizontal = LyricsHeaderArtX)
                 // Matches where the morph layer actually draws the cover, so the hitbox sits on
                 // the artwork and the menu centres against it.

@@ -64,7 +64,6 @@ import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.constants.LyricsHighBloomKey
 import com.mochyy.mochymusic.constants.LyricsMotionStyle
 import com.mochyy.mochymusic.constants.LyricsMotionStyleKey
-import com.mochyy.mochymusic.constants.LyricsWaveAnimationKey
 import com.mochyy.mochymusic.lyrics.LyricsEntry
 import com.mochyy.mochymusic.lyrics.RubyToken
 import com.mochyy.mochymusic.lyrics.LyricsUtils
@@ -75,6 +74,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.combine
 import kotlin.math.roundToInt
+import com.mochyy.mochymusic.ui.utils.AppMotion
 
 private val TickerFontSize = 17.sp
 private val TickerLineHeight = 22.sp
@@ -229,7 +229,7 @@ internal fun MiniLyricsTicker(
     }.collectAsState(initial = tickerSlot(lines, positionProvider()))
 
     val (motionStyle) = rememberEnumPreference(LyricsMotionStyleKey, defaultValue = LyricsMotionStyle.MOTION)
-    val (waveEnabled) = rememberPreference(LyricsWaveAnimationKey, defaultValue = true)
+    val waveEnabled = motionStyle.shaded
     val (highBloom) = rememberPreference(LyricsHighBloomKey, defaultValue = true)
 
     // Still looking the lyrics up is its own state, so the dots hand over to the first line (or to
@@ -483,7 +483,7 @@ private fun UpcomingLine(text: String, alpha: Float, blur: Dp) {
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .graphicsLayer { this.alpha = shownAlpha.value }
-            .blur(blur, BlurredEdgeTreatment.Unbounded),
+            .blur(if (AppMotion.elementBlur) blur else 0.dp, BlurredEdgeTreatment.Unbounded),
     )
 }
 

@@ -113,8 +113,10 @@ private const val BlurQuantStepPx = 0.5f
 private val BlurEffectCache: Array<androidx.compose.ui.graphics.RenderEffect?> =
     arrayOfNulls((BlurStageRadii.max() / BlurQuantStepPx).toInt() + 2)
 
+// a lyric line's or a note's own blur, so it goes with element blur switched off
 internal fun blurEffectForRadius(radius: Float): androidx.compose.ui.graphics.RenderEffect? {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || radius <= 0.05f) return null
+    if (!com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur) return null
     val step = (radius / BlurQuantStepPx).roundToInt().coerceIn(1, BlurEffectCache.lastIndex)
     BlurEffectCache[step]?.let { return it }
     val quantised = step * BlurQuantStepPx
@@ -225,14 +227,14 @@ fun LyricsGlowLine(
      */
     translationLoading: Boolean = false,
 
-    /** Style 1 (words rise, held notes swell) or Style 2 (the original wave). */
+    /** style 1 or boring (words rise, held notes swell), or style 2 or plain (the original wave) */
     motionStyle: com.mochyy.mochymusic.constants.LyricsMotionStyle =
         com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION,
 
     /** Holding the line: the lyrics page opens sharing with it. */
     onLongClick: (() -> Unit)? = null,
 ) {
-    val wordMotion = motionStyle == com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION
+    val wordMotion = motionStyle.risesWords
     val targetAlpha = restingAlphaOf(state)
     val targetScale = restingScaleOf(state)
 
@@ -989,7 +991,7 @@ internal fun KaraokeSweepText(
     motionScale: Float = 1f,
     probe: SweepProbe? = null,
 ) {
-    val wordMotion = motionStyle == com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION
+    val wordMotion = motionStyle.risesWords
     val head = rememberKaraokeHead(text, words, positionProvider, wordMotion)
 
     val hasRuby = !ruby.isNullOrEmpty()
@@ -1277,7 +1279,7 @@ private fun BackingVocalLine(
 ) {
 
     val expand = rememberBackingExpand(words, positionProvider, expandProvider)
-    val wordMotion = motionStyle == com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION
+    val wordMotion = motionStyle.risesWords
 
     // Keep the sweep for as long as the backing line is on screen. It used to drop back to the
     // plain copy the moment the main line finished, while a backing vocal that trails the line
