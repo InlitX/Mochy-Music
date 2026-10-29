@@ -6,6 +6,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import android.widget.Toast
 import androidx.datastore.preferences.core.edit
@@ -25,6 +26,7 @@ import com.music.innertube.models.YouTubeLocale
 import com.music.kugou.KuGou
 import com.mochyy.mochymusic.constants.*
 import com.mochyy.mochymusic.di.ApplicationScope
+import com.mochyy.mochymusic.i18n.AppLanguage
 import com.mochyy.mochymusic.extensions.toEnum
 import com.mochyy.mochymusic.extensions.toInetSocketAddress
 import com.mochyy.mochymusic.utils.CrashHandler
@@ -46,7 +48,6 @@ import timber.log.Timber
 import java.net.Authenticator
 import java.net.PasswordAuthentication
 import java.net.Proxy
-import java.util.Locale
 import javax.inject.Inject
 
 // how long after the launch intro the PoToken WebView may boot (Home's reveal runs ~1s)
@@ -67,6 +68,7 @@ class App : Application(), SingletonImageLoader.Factory {
         com.mochyy.mochymusic.importer.transfer.TransferRestore.applyPending(this)
         super.onCreate()
 
+        AppLanguage.initialize(this)
         CrashHandler.install(this)
 
         CipherDeobfuscator.initialize(this)
@@ -137,10 +139,15 @@ class App : Application(), SingletonImageLoader.Factory {
         }
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        AppLanguage.refreshApplicationResources(this)
+    }
+
     private suspend fun initializeSettings() {
         val settings = dataStore.data.first()
         com.mochyy.mochymusic.utils.OfflineMode.set(settings[OfflineModeKey] ?: false)
-        val locale = Locale.getDefault()
+        val locale = AppLanguage.systemLocale(this)
         val languageTag = locale.language
 
         YouTube.locale = YouTubeLocale(
@@ -251,23 +258,18 @@ class App : Application(), SingletonImageLoader.Factory {
 
         applicationScope.launch(Dispatchers.IO) {
             dataStore.data
-                .map { Triple(it[ContentCountryKey], it[ContentLanguageKey], it[AppLanguageKey]) }
+                .map { it[ContentCountryKey] to it[ContentLanguageKey] }
                 .distinctUntilChanged()
-                .collect { (contentCountry, contentLanguage, appLanguage) ->
-                    val systemLocale = Locale.getDefault()
-                    val effectiveAppLocale = appLanguage
-                        ?.takeUnless { it == SYSTEM_DEFAULT }
-                        ?.let { Locale.forLanguageTag(it) }
-                        ?: systemLocale
-
+                .collect { (contentCountry, contentLanguage) ->
+                    // UI language must not silently change content preferences.
+                    val systemLocale = AppLanguage.systemLocale(this@App)
                     YouTube.locale = YouTubeLocale(
                         gl = contentCountry?.takeIf { it != SYSTEM_DEFAULT }
-                            ?: effectiveAppLocale.country.takeIf { it in CountryCodeToName }
                             ?: systemLocale.country.takeIf { it in CountryCodeToName }
                             ?: "US",
                         hl = contentLanguage?.takeIf { it != SYSTEM_DEFAULT }
-                            ?: effectiveAppLocale.toLanguageTag().takeIf { it in LanguageCodeToName }
-                            ?: effectiveAppLocale.language.takeIf { it in LanguageCodeToName }
+                            ?: systemLocale.toLanguageTag().takeIf { it in LanguageCodeToName }
+                            ?: systemLocale.language.takeIf { it in LanguageCodeToName }
                             ?: "en"
                     )
                 }

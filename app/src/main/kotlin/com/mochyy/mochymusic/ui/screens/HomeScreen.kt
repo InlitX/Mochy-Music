@@ -626,7 +626,7 @@ private fun HomeShell() {
                         model = profileImageUrl,
                         placeholder = painterResource(R.drawable.person),
                         error = painterResource(R.drawable.person),
-                        contentDescription = "Profile",
+                        contentDescription = stringResource(R.string.profile_label),
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape),
@@ -642,7 +642,7 @@ private fun HomeShell() {
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.person),
-                            contentDescription = "Profile",
+                            contentDescription = stringResource(R.string.profile_label),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -1427,7 +1427,7 @@ fun HomeScreen(
                                         HomeCompactTopBones(isHopIn = false)
                                     }
                                 } else if (startListeningSongs.isNotEmpty()) {
-                                    HomeSectionTitle(title = "Start listening now")
+                                    HomeSectionTitle(title = stringResource(R.string.home_start_listening))
                                     HomeTrackGrid(
                                         items = startListeningSongs,
                                         state = startListeningGridState,
@@ -1453,7 +1453,7 @@ fun HomeScreen(
                                         HomeCompactTopBones(isHopIn = true)
                                     }
                                 } else if (hopInLocalItems.isNotEmpty()) {
-                                    HomeSectionTitle(title = "Hop in")
+                                    HomeSectionTitle(title = stringResource(R.string.home_hop_in))
                                     val visibleItems = hopInLocalItems.take(hopInColumns * 2)
                                     Column(
                                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1677,7 +1677,7 @@ fun HomeScreen(
                                 homeItem("account_playlists_title", revealSeen, "title") {
                                     Box {
                                         HomeSectionTitle(
-                                            label = "Your Playlists",
+                                            label = stringResource(R.string.home_your_playlists),
                                             title = accountName,
                                             thumbnail = {
                                                 if (profileImageUrl != null) {
@@ -1941,7 +1941,7 @@ fun HomeScreen(
                         )
 
                         Text(
-                            text = "Home",
+                            text = stringResource(R.string.home),
                             style = TextStyle(
                                 fontFamily = InterFontFamily,
                                 fontWeight = FontWeight.Bold,
@@ -1981,7 +1981,7 @@ fun HomeScreen(
                                     model = profileImageRequest,
                                     placeholder = painterResource(R.drawable.person),
                                     error = painterResource(R.drawable.person),
-                                    contentDescription = "Profile",
+                                    contentDescription = stringResource(R.string.profile_label),
                                     modifier = avatarBoundsModifier
                                         .size(36.dp)
                                         .clip(CircleShape),
@@ -1997,7 +1997,7 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.person),
-                                        contentDescription = "Profile",
+                                        contentDescription = stringResource(R.string.profile_label),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(20.dp)
                                     )

@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -70,9 +72,52 @@ private data class SettingsEntry(
     val page: String,
     val route: String,
     val keywords: String = "",
+    val titleRes: Int? = null,
+    val pageRes: Int? = null,
 ) {
     val highlightKey: String get() = title
 }
+
+// search ids stay english so rows can find themselves, what's shown and matched follows the app's language
+private val LocalizedSettingsTitles = mapOf(
+    "Customisation" to R.string.settings_customisation_category,
+    "Blur" to R.string.appearance_blur,
+    "Progressive blur" to R.string.appearance_progressive_blur,
+    "Blur quality" to R.string.appearance_blur_quality,
+    "Blur strength" to R.string.appearance_blur_strength,
+    "Animation" to R.string.appearance_animation,
+    "Lyrics animation" to R.string.appearance_lyrics_animation,
+    "Disable App Updates notice" to R.string.settings_updates_notice,
+    "Offline mode" to R.string.settings_offline_mode,
+    "Keep playing even when closed" to R.string.playback_keep_playing,
+    "Save Player's last state" to R.string.playback_save_state,
+    "Local song auto metadata" to R.string.settings_local_auto_metadata,
+    "Disable auto-playing YouTube video" to R.string.settings_disable_video_autoplay,
+    "Translations from YouTube" to R.string.settings_youtube_translations,
+    "Sync lyrics to music videos" to R.string.settings_sync_lyrics_video,
+    "Don't skip on failure" to R.string.settings_dont_skip_failure,
+    "Skip timeout failure" to R.string.settings_skip_timeout,
+    "Skip Silence" to R.string.playback_skip_silence,
+    "Audio format badge" to R.string.appearance_format_badge,
+    "Show sample rate" to R.string.appearance_sample_rate,
+    "Always enable Youtube background" to R.string.appearance_youtube_background,
+    "Enable animated canvas" to R.string.appearance_canvas,
+    "High quality bloom" to R.string.appearance_bloom,
+    "Prefer USB DAC" to R.string.playback_usb_prefer,
+    "USB DAC passthrough" to R.string.playback_usb_passthrough,
+    "Hi-res output" to R.string.playback_hires,
+    "Hi-fi resampler" to R.string.playback_hifi,
+    "Audio Lab" to R.string.settings_audio_lab_category,
+    "Modules" to R.string.settings_modules_category,
+    "Storage" to R.string.storage,
+)
+private val LocalizedSettingsPages = mapOf(
+    "Customisation" to R.string.settings_customisation_category,
+    "Storage" to R.string.storage,
+    "Audio Lab" to R.string.settings_audio_lab_category,
+    "Modules" to R.string.settings_modules_category,
+    "Integrations" to R.string.integrations,
+)
 
 private val SettingsIndex = listOf(
     // Customisation
@@ -97,6 +142,7 @@ private val SettingsIndex = listOf(
 
     // App behaviour
     SettingsEntry("App behaviour", "App behaviour", "general_settings", "general playback player behaviour"),
+    SettingsEntry("App language", "App behaviour", "general_settings", "language bahasa locale device system indonesia english translate", R.string.app_language),
     SettingsEntry("Disable App Updates notice", "App behaviour", "general_settings", "update popup notification updater"),
     SettingsEntry("Offline mode", "App behaviour", "general_settings", "play downloaded cache offline"),
     SettingsEntry("Keep playing even when closed", "App behaviour", "general_settings", "background close stop playback"),
@@ -221,13 +267,16 @@ fun MochySettingsScreen(navController: NavController) {
 
     val recommendedItem = remember { RecommendedOptions.random() }
 
-    val results = remember(query.text) {
+    val context = LocalContext.current
+    val results = remember(query.text, context) {
         val q = query.text.trim()
         if (q.isBlank()) {
             emptyList()
         } else {
             SettingsIndex.filter {
                 it.title.contains(q, ignoreCase = true) ||
+                    (it.titleRes ?: LocalizedSettingsTitles[it.title])?.let { id -> context.getString(id).contains(q, ignoreCase = true) } == true ||
+                    (it.pageRes ?: LocalizedSettingsPages[it.page])?.let { id -> context.getString(id).contains(q, ignoreCase = true) } == true ||
                     it.keywords.contains(q, ignoreCase = true) ||
                     it.page.contains(q, ignoreCase = true)
             }
@@ -282,7 +331,7 @@ fun MochySettingsScreen(navController: NavController) {
                 ) {
                     if (results.isEmpty()) {
                         Text(
-                            text = "Nothing matches \"${query.text}\".",
+                            text = stringResource(R.string.settings_nothing_matches, query.text),
                             fontFamily = InterFontFamily,
                             fontSize = 15.sp,
                             color = Color.White.copy(alpha = 0.6f),
@@ -319,14 +368,14 @@ fun MochySettingsScreen(navController: NavController) {
                                     Spacer(modifier = Modifier.width(11.dp))
                                     Column {
                                         Text(
-                                            text = entry.title,
+                                            text = (entry.titleRes ?: LocalizedSettingsTitles[entry.title])?.let { stringResource(it) } ?: entry.title,
                                             fontFamily = InterFontFamily,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 16.sp,
                                             color = Color.White
                                         )
                                         Text(
-                                            text = entry.page,
+                                            text = (entry.pageRes ?: LocalizedSettingsPages[entry.page])?.let { stringResource(it) } ?: entry.page,
                                             fontFamily = InterFontFamily,
                                             fontSize = 12.sp,
                                             color = Color.White.copy(alpha = 0.55f)
@@ -358,7 +407,7 @@ fun MochySettingsScreen(navController: NavController) {
                     ) {
                         Column {
                             Text(
-                                text = "Reccomended item",
+                                text = stringResource(R.string.settings_recommended_item),
                                 fontFamily = InterFontFamily,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 13.sp,
@@ -429,7 +478,7 @@ fun MochySettingsScreen(navController: NavController) {
                     ) {
                         // in the order of the design: sound first, then how the app acts and looks, then the rest
                         CategoryBubble(
-                            title = "Audio Lab",
+                            title = stringResource(R.string.settings_audio_lab_category),
                             iconRes = R.drawable.equalizer,
                             onClick = { navController.navigate("audio_lab") }
                         )
@@ -441,25 +490,25 @@ fun MochySettingsScreen(navController: NavController) {
                         )
 
                         CategoryBubble(
-                            title = "Customisation",
+                            title = stringResource(R.string.settings_customisation_category),
                             iconRes = R.drawable.palette,
                             onClick = { navController.navigate("customisation_settings") }
                         )
 
                         CategoryBubble(
-                            title = "Storage",
+                            title = stringResource(R.string.storage),
                             iconRes = R.drawable.storage,
                             onClick = { navController.navigate("storage_settings") }
                         )
 
                         CategoryBubble(
-                            title = "Integrations",
+                            title = stringResource(R.string.integrations),
                             iconRes = R.drawable.integration,
                             onClick = { navController.navigate(IntegrationsRoute) }
                         )
 
                         CategoryBubble(
-                            title = "Modules",
+                            title = stringResource(R.string.settings_modules_category),
                             iconRes = R.drawable.library_add,
                             onClick = { navController.navigate("modules") }
                         )
@@ -506,14 +555,14 @@ fun MochySettingsScreen(navController: NavController) {
                 value = query,
                 onValueChange = { query = it },
                 onSearch = {},
-                placeholder = "Search any settings",
+                placeholder = stringResource(R.string.settings_search_placeholder),
                 focused = isSearchFocused,
                 onFocusChanged = { isSearchFocused = it },
                 trailing = if (query.text.isNotEmpty()) {
                     {
                         Icon(
                             painter = painterResource(R.drawable.close),
-                            contentDescription = "Clear",
+                            contentDescription = stringResource(R.string.settings_clear_search),
                             tint = Color.White.copy(alpha = 0.7f),
                             modifier = Modifier
                                 .size(20.dp)

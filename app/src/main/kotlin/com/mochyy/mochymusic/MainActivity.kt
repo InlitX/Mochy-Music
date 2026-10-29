@@ -6,6 +6,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
@@ -139,7 +140,6 @@ import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.AppBarHeight
-import com.mochyy.mochymusic.constants.AppLanguageKey
 import com.mochyy.mochymusic.constants.DarkModeKey
 import com.mochyy.mochymusic.ui.utils.defaultMotionEnter
 import com.mochyy.mochymusic.ui.utils.defaultMotionExit
@@ -171,7 +171,6 @@ import com.mochyy.mochymusic.ui.component.glassRoot
 import com.mochyy.mochymusic.constants.PauseListenHistoryKey
 import com.mochyy.mochymusic.constants.PauseSearchHistoryKey
 import com.mochyy.mochymusic.constants.PureBlackKey
-import com.mochyy.mochymusic.constants.SYSTEM_DEFAULT
 import com.mochyy.mochymusic.constants.SelectedThemeColorKey
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.db.entities.SearchHistory
@@ -217,7 +216,6 @@ import com.mochyy.mochymusic.utils.get
 import com.mochyy.mochymusic.utils.rememberEnumPreference
 import com.mochyy.mochymusic.utils.rememberPreference
 import com.mochyy.mochymusic.utils.reportException
-import com.mochyy.mochymusic.utils.setAppLocale
 import com.valentinilk.shimmer.LocalShimmerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import com.mochyy.mochymusic.ui.screens.setup.SetupWizardContainer
@@ -232,7 +230,6 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.net.URLDecoder
 import java.net.URLEncoder
-import java.util.Locale
 import javax.inject.Inject
 
 private const val BackgroundZoomOnExpand = true
@@ -267,6 +264,9 @@ internal fun markOnboardedOnThisInstall(context: android.content.Context) {
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(com.mochyy.mochymusic.i18n.AppLanguage.wrapActivityContext(newBase))
+    }
     companion object {
         private const val ACTION_SEARCH = "com.mochyy.mochymusic.action.SEARCH"
         private const val ACTION_LIBRARY = "com.mochyy.mochymusic.action.LIBRARY"
@@ -402,14 +402,6 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         systemScaleObserver = com.mochyy.mochymusic.ui.utils.AppMotion.followSystemScale(this)
         moveOffOldLyricsShaderSwitch()
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            val locale = dataStore[AppLanguageKey]
-                ?.takeUnless { it == SYSTEM_DEFAULT }
-                ?.let { Locale.forLanguageTag(it) }
-                ?: Locale.getDefault()
-            setAppLocale(this, locale)
-        }
 
         lifecycleScope.launch {
             dataStore.data

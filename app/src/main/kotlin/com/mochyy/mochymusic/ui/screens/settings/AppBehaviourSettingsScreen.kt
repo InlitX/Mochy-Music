@@ -1,6 +1,7 @@
 package com.mochyy.mochymusic.ui.screens.settings
 
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +53,7 @@ import com.mochyy.mochymusic.constants.OfflineModeKey
 import com.mochyy.mochymusic.constants.PersistentQueueKey
 import com.mochyy.mochymusic.constants.PlayVideoBackgroundKey
 import com.mochyy.mochymusic.constants.PreferUsbDacKey
+import com.mochyy.mochymusic.constants.SYSTEM_DEFAULT
 import com.mochyy.mochymusic.constants.ShowFormatBadgeKey
 import com.mochyy.mochymusic.constants.ShowFormatSampleRateKey
 import com.mochyy.mochymusic.constants.SkipSilenceKey
@@ -60,6 +64,8 @@ import com.mochyy.mochymusic.constants.UsbPassthroughKey
 import com.mochyy.mochymusic.constants.YouTubeCaptionTranslationKey
 import com.mochyy.mochymusic.constants.YtVideoBackgroundLyricsSyncKey
 import com.mochyy.mochymusic.core.updater.saveUpdateNotificationsSetting
+import com.mochyy.mochymusic.i18n.AppLanguage
+import com.mochyy.mochymusic.i18n.activityOrNull
 import com.mochyy.mochymusic.playback.audio.AudioOutputs
 import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.component.DefaultPlayerSeekBarSlider
@@ -72,7 +78,9 @@ import com.mochyy.mochymusic.ui.component.SubSettingsSearchBar
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.utils.rememberEnumPreference
 import com.mochyy.mochymusic.utils.rememberPreference
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 // settings > app behaviour: how the app and the player act, what used to be general, playback and most of appearance
 @Composable
@@ -133,6 +141,7 @@ private fun generalItems(): List<SettingsItem> {
         saveUpdateNotificationsSetting(context, !hidden)
     }
     return listOf(
+        languageItem(),
         switchItem(
             title = "Disable App Updates notice",
             description = "No popup will appear except if you open the updater",
@@ -163,6 +172,47 @@ private fun generalItems(): List<SettingsItem> {
             checked = persistentQueue,
             onCheckedChange = onPersistentQueueChange,
         ),
+    )
+}
+
+// the app's own language, apart from the phone's; android 13+ keeps it in the system's per-app setting too
+@Composable
+private fun languageItem(): SettingsItem {
+    var showDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val activity = remember(context) { context.activityOrNull() }
+    val language = remember(context) { AppLanguage.selection(context) }
+    val languageName = if (language == SYSTEM_DEFAULT) stringResource(R.string.system_default) else appLanguageNativeName(language)
+    val failure = stringResource(R.string.app_language_update_failed)
+    val scope = rememberCoroutineScope()
+    if (showDialog) {
+        AppLanguageDialog(
+            selected = language,
+            onDismiss = { showDialog = false },
+            onSelect = { tag ->
+                showDialog = false
+                if (tag != language && activity != null) {
+                    scope.launch {
+                        try {
+                            AppLanguage.select(activity, tag)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            Toast.makeText(context, failure, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            },
+        )
+    }
+    return SettingsItem(
+        title = { Text(stringResource(R.string.app_language)) },
+        highlightKey = "App language",
+        descriptionText = languageName,
+        icon = painterResource(R.drawable.translate),
+        iconShape = CircleShape,
+        enabled = activity != null,
+        onClick = { showDialog = true },
     )
 }
 
