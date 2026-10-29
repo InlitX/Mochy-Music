@@ -9,19 +9,27 @@ import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.db.entities.LyricsEntity
 import com.mochyy.mochymusic.models.MediaMetadata
 import com.mochyy.mochymusic.utils.OfflineMode
+import com.mochyy.mochymusic.utils.SongVersions
 import com.mochyy.mochymusic.utils.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-// lyrics are timed to the album audio, so when the track is a music video they get moved onto the video, found through its auto captions
+// lyrics are timed to the album audio, so when the track is a music video they get moved onto the video: by listening to the album version against it, or through its captions
 object VideoLyricsSync {
 
     // lyrics already looked at this session, so replaying a video doesn't ask youtube again
     private val checked by lazy { LruCache<String, Boolean>(64) }
 
-    suspend fun syncIfNeeded(context: Context, database: MusicDatabase, metadata: MediaMetadata, entity: LyricsEntity) {
+    // matchAudio finds where an album song sits inside the playing video, by listening to both
+    suspend fun syncIfNeeded(
+        context: Context,
+        database: MusicDatabase,
+        metadata: MediaMetadata,
+        entity: LyricsEntity,
+        matchAudio: suspend (albumSongId: String) -> SongVideoMap?,
+    ) {
         if (!metadata.isVideoSong || metadata.id != entity.id || OfflineMode.isOn) return
         val raw = entity.lyrics
         if (raw.isBlank() || raw == LyricsEntity.LYRICS_NOT_FOUND || entity.provider in VideoTimedProviders) return
@@ -33,22 +41,25 @@ object VideoLyricsSync {
 
         val lines = withContext(Dispatchers.Default) { LyricsUtils.parseLyrics(raw) }
         if (lines.size < 4 || LyricsUtils.isUnsynced(lines)) return
-        // not marked until youtube has answered: a dropped connection gets another go next time
-        val captions = VideoCaptionSource.captions(entity.id) ?: return
-        val aligned = VideoCaptionSource.align(captions, lines)
-        checked.put(key, true)
-        if (aligned == null || !aligned.alignment.map.isShifted) return
 
-        val retimed = withContext(Dispatchers.Default) { retime(raw, lines, aligned.alignment.map) } ?: return
+        // the album version heard against the video is exact and works however long the intro is; captions only when there's no album version to hear
+        val albumSongId = SongVersions.songVersionId(metadata.title, metadata.artists.joinToString { it.name })
+        val map = albumSongId?.let { matchAudio(it) }
+            ?: captionMap(entity.id, lines)
+        checked.put(key, true)
+        android.util.Log.i("VideoLyricsSync", "${entity.id} against ${albumSongId ?: "its captions"}: ${map ?: "no match"}")
+        if (map == null || !map.isShifted) return
+
+        val retimed = withContext(Dispatchers.Default) { retime(raw, lines, map) } ?: return
         checked.put("${entity.id}|${retimed.hashCode()}", true)
-        android.util.Log.i(
-            "VideoLyricsSync",
-            "${entity.id}: ${aligned.alignment.matchedLines}/${aligned.alignment.usableLines} lines found in the " +
-                "${aligned.track.languageCode} captions, shifts ${aligned.alignment.map}",
-        )
-        // the lyrics may have been swapped for another source while youtube was asked
+        // the lyrics may have been swapped for another source while this ran
         if (database.lyrics(entity.id).first()?.lyrics != raw) return
         database.query { upsert(entity.copy(lyrics = retimed)) }
+    }
+
+    private suspend fun captionMap(videoId: String, lines: List<LyricsEntry>): SongVideoMap? {
+        val captions = VideoCaptionSource.captions(videoId) ?: return null
+        return VideoCaptionSource.align(captions, lines)?.alignment?.map
     }
 
     // every timestamp moved onto the video, a line's word timings moving with it; null when something would land past what lrc can write

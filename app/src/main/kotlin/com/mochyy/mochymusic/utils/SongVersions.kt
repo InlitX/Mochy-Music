@@ -60,9 +60,14 @@ object SongVersions {
         return result
     }
 
-    private suspend fun findSong(video: SongItem): SongItem? {
-        val artist = normalizeCanvasArtistName(video.artists.joinToString { it.name })
-        val title = normalizeCanvasSongTitle(stripArtistPrefix(video.title, artist))
+    // the album version of a music video known only by its name and artists, for lining the video up with it; null when there isn't one
+    suspend fun songVersionId(videoTitle: String, artists: String): String? = gate.withPermit { findSong(videoTitle, artists) }?.id
+
+    private suspend fun findSong(video: SongItem): SongItem? = findSong(video.title, video.artists.joinToString { it.name })
+
+    private suspend fun findSong(videoTitle: String, artists: String): SongItem? {
+        val artist = normalizeCanvasArtistName(artists)
+        val title = normalizeCanvasSongTitle(stripArtistPrefix(videoTitle, artist))
         if (title.length < 2 || artist.length < 2) return null
 
         val songs = YouTube.search("$title $artist", YouTube.SearchFilter.FILTER_SONG).getOrNull()

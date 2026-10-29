@@ -479,6 +479,27 @@ class MusicService :
     /** the stream each song was handed to the player as, when it wasn't the plain YouTube one */
     private val playingStreams = java.util.concurrent.ConcurrentHashMap<String, com.mochyy.mochymusic.playback.custom.CustomStreamResult>()
 
+    // streams opened only to be listened to (a music video matched against its song); a failure there isn't the user's playback failing
+    private val listeningOnlyStreams: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    // matches a song's recording against its music video's, for the video background and for a music video's lyrics
+    private val videoAudioSync by lazy {
+        com.mochyy.mochymusic.lyrics.VideoAudioSync({ createDataSourceFactory() }, listeningOnlyStreams)
+    }
+
+    // where songId's recording sits inside videoId's, found by listening to both; null when they don't share it
+    suspend fun matchSongToVideo(songId: String, videoId: String): com.mochyy.mochymusic.lyrics.SongVideoMap? {
+        val current = withContext(Dispatchers.Main) { player.currentMediaItem }
+        fun sourceOf(id: String): com.mochyy.mochymusic.lyrics.VideoAudioSync.Source {
+            if (current != null && current.mediaId == id) {
+                val (uri, key) = lyricsAudioSource(current)
+                return com.mochyy.mochymusic.lyrics.VideoAudioSync.Source(uri, key, listeningOnly = false)
+            }
+            return com.mochyy.mochymusic.lyrics.VideoAudioSync.Source(id.toUri(), id, listeningOnly = true)
+        }
+        return videoAudioSync.match(sourceOf(songId), sourceOf(videoId))
+    }
+
     /** Lyrics auto offset; the lyrics offset sheet starts it and shows how it's going. */
     val lyricsAutoSync by lazy {
         com.mochyy.mochymusic.lyrics.LyricsAutoSync(
@@ -3568,10 +3589,12 @@ class MusicService :
                     else -> {
                         // Surface the reason rather than a silent stall; the media notification
                         // channel is silent by design so errors get their own.
-                        notifyPlaybackError(
-                            getString(R.string.error_stream_unavailable_title),
-                            throwable.message ?: getString(R.string.error_unknown),
-                        )
+                        if (mediaId !in listeningOnlyStreams) {
+                            notifyPlaybackError(
+                                getString(R.string.error_stream_unavailable_title),
+                                throwable.message ?: getString(R.string.error_unknown),
+                            )
+                        }
                         throw PlaybackException(
                             getString(R.string.error_unknown),
                             throwable,

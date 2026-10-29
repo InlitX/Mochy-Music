@@ -605,7 +605,7 @@ fun MorphingCover(
     val lyricsSyncEnabled by rememberPreference(YtVideoBackgroundLyricsSyncKey, defaultValue = true)
     val currentLyrics by playerConnection?.currentLyrics?.collectAsState(initial = null)
         ?: androidx.compose.runtime.mutableStateOf(null)
-    // the video plays as soon as it loads, then moves into step with the song once its captions are lined up with the lyrics
+    // the video plays as soon as it loads, then a first guess at where the song is from its captions and the lyrics
     var lyricVideoTimeline by remember(trackInfo.mediaId) { mutableStateOf<LyricVideoTimeline?>(null) }
     LaunchedEffect(videoInfo?.videoId, currentLyrics?.lyrics, lyricsSyncEnabled) {
         val mediaId = trackInfo.mediaId
@@ -632,11 +632,24 @@ fun MorphingCover(
         LyricVideoTimelineCache.put(key, timeline)
         lyricVideoTimeline = timeline
     }
-    // the lyrics' own offset counts too: it's what puts the lyrics, and so the video, on the song
-    val videoPositionAt = remember(lyricVideoTimeline) {
-        lyricVideoTimeline?.let { timeline ->
-            { songMs: Long -> timeline.videoMsAt(songMs + (playerConnection?.lyricsOffsetMs?.value ?: 0)) }
+    // then the exact answer: the song and the video listened to side by side, which needs no captions or lyrics at all
+    var audioVideoMap by remember(trackInfo.mediaId) { mutableStateOf<com.mochyy.mochymusic.lyrics.SongVideoMap?>(null) }
+    LaunchedEffect(trackInfo.mediaId, videoInfo?.videoId, lyricsSyncEnabled) {
+        val mediaId = trackInfo.mediaId
+        val videoId = videoInfo?.videoId
+        val service = playerConnection?.service
+        if (!lyricsSyncEnabled || videoId == null || videoId == mediaId || service == null) {
+            audioVideoMap = null
+            return@LaunchedEffect
         }
+        audioVideoMap = service.matchSongToVideo(mediaId, videoId)
+    }
+    val videoPositionAt = remember(lyricVideoTimeline, audioVideoMap) {
+        audioVideoMap?.let { map -> { songMs: Long -> map.videoMsAt(songMs) } }
+            ?: lyricVideoTimeline?.let { timeline ->
+                // the lyrics' own offset counts too: it's what puts the lyrics, and so the video, on the song
+                { songMs: Long -> timeline.videoMsAt(songMs + (playerConnection?.lyricsOffsetMs?.value ?: 0)) }
+            }
     }
 
     val videoGlassState = remember(trackInfo.mediaId) { GlassState() }

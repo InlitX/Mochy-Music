@@ -1,31 +1,27 @@
-// DonateSheet.kt
+// the "arigatou! :3" sheet with the actual places to donate, opened from donate us! or a dev's profile
 
 package com.mochyy.mochymusic.ui.screens.donate
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.foundation.Image
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -33,207 +29,180 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.component.PopupSheetState
+import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.player.menu.MenuRowSurface
-import com.mochyy.mochymusic.ui.theme.InterFontFamily
+import com.mochyy.mochymusic.ui.screens.update.VersionRing
+import com.mochyy.mochymusic.ui.screens.update.openUrl
 
 const val KofiUrl = "https://ko-fi.com/realidkroo"
 const val SocialBuzzUrl = "https://sociabuzz.com/realidkroo/tribe"
 const val BuyMeACoffeeUrl = "https://buymeacoffee.com/realkeichii"
 
-/** Shows Donate as a plain PopupSheet - see docs/popup-sheet.skill.md before copying this file. */
+// the title tucks up over her faded bottom by this much, like the mock
+private val TitleOverlap = 18.dp
+
+/** shows the donate sheet, on top of the support sheet when that's what opened it */
 fun PopupSheetState.showDonateSheet() {
-    show(buttonBar = { DonateDoneButton(onClick = ::dismiss) }) {
+    val popup = this
+    show(
+        fullBleed = true,
+        buttonBar = { DonatePillButton(text = "what no i dont want to", onClick = popup::dismiss, quiet = true) },
+    ) {
         DonateSheetContent()
     }
 }
 
 @Composable
-private fun DonateDoneButton(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .clip(CircleShape)
-            .background(MenuRowSurface)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Done",
-            fontFamily = InterFontFamily,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-@Composable
-private fun ColumnScope.DonateSheetContent() {
+private fun DonateSheetContent() {
     val context = LocalContext.current
+    val scroll = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val characterWidth = characterWidth(maxWidth, maxHeight)
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    // Author Profile Picture
-    Box(
-        modifier = Modifier
-            .size(88.dp)
-            .clip(CircleShape)
-            .background(Color(0xFF333333)),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(
-            painter = painterResource(R.drawable.frame_51_3),
-            contentDescription = "roo profile picture",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+        VersionRing(
+            text = "MOCHY MUSIC",
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                // centred just in from the top-right corner so the sheet's edge cuts it off, and takes no room of its own
+                .layout { measurable, constraints ->
+                    val loose = constraints.copy(minWidth = 0, minHeight = 0, maxWidth = Constraints.Infinity, maxHeight = Constraints.Infinity)
+                    val placeable = measurable.measure(loose)
+                    layout(0, 0) { placeable.place(x = (-198).dp.roundToPx(), y = (-109).dp.roundToPx()) }
+                }
+                .graphicsLayer { translationY = -scroll.value.toFloat() },
         )
-    }
 
-    Spacer(modifier = Modifier.height(20.dp))
-
-    Text(
-        text = "Donate Me!",
-        fontFamily = InterFontFamily,
-        fontSize = 32.sp,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.5).sp,
-    )
-
-    Spacer(modifier = Modifier.height(6.dp))
-
-    Text(
-        text = "Or buy me a coffee! thanks for donating :3 your donation, no matter how small it is is very meaninfful for me, a solo developer",
-        fontFamily = InterFontFamily,
-        fontSize = 13.5.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.Bold,
-    )
-
-    Spacer(modifier = Modifier.height(24.dp))
-
-    DonateOptionRow(
-        title = "Support me on KoFi!",
-        onClick = { context.openBrowserUrl(KofiUrl) },
-        iconContent = {
-            Image(
-                painter = painterResource(R.drawable.ic_kofi),
-                contentDescription = "Ko-fi",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(22.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scroll)
+                .padding(horizontal = 26.dp),
+        ) {
+            Spacer(Modifier.height(CharacterTop))
+            DonateCharacter(
+                width = characterWidth,
+                overlapBelow = TitleOverlap,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
-        }
-    )
-
-    Spacer(modifier = Modifier.height(10.dp))
-
-    DonateOptionRow(
-        title = "Support me with SocialBuzz!",
-        subtitle = "reccomended for some SEA and LATAM countries",
-        onClick = { context.openBrowserUrl(SocialBuzzUrl) },
-        iconContent = {
-            Icon(
-                painter = painterResource(R.drawable.link),
-                contentDescription = "SocialBuzz",
-                tint = Color.Black,
-                modifier = Modifier.size(16.dp)
+            Text(
+                text = "Arigatou! :3",
+                fontSize = 36.sp,
+                lineHeight = 40.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-1.2).sp,
+                color = Color.White,
             )
-        }
-    )
-
-    Spacer(modifier = Modifier.height(10.dp))
-
-    DonateOptionRow(
-        title = "Buy me a coffee!",
-        onClick = { context.openBrowserUrl(BuyMeACoffeeUrl) },
-        iconContent = {
-            Icon(
-                painter = painterResource(R.drawable.ic_bmc_logo),
-                contentDescription = "Buy me a coffee",
-                tint = Color.Unspecified,
-                modifier = Modifier.size(20.dp)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Here’s a way to support and donate to us!",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.3).sp,
+                color = DonateSoftText,
             )
-        }
-    )
 
-    Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(24.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                DonateLinkRow(
+                    title = "Support us on Ko-fi",
+                    icon = R.drawable.ic_kofi,
+                    iconSize = 22.dp,
+                    onClick = { context.openUrl(KofiUrl) },
+                )
+                DonateLinkRow(
+                    title = "Support us on SociaBuzz",
+                    subtitle = "Recommended for some SEA and LATAM countries",
+                    icon = R.drawable.link,
+                    iconSize = 16.dp,
+                    iconTint = Color.Black,
+                    onClick = { context.openUrl(SocialBuzzUrl) },
+                )
+                DonateLinkRow(
+                    title = "Support us on Buy Me a Coffee",
+                    icon = R.drawable.ic_bmc_logo,
+                    iconSize = 20.dp,
+                    onClick = { context.openUrl(BuyMeACoffeeUrl) },
+                )
+            }
+
+            Spacer(Modifier.height(22.dp))
+            Text(
+                text = "your donation, no matter how small it is, will always be very very useful for us :3",
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.3).sp,
+                color = DonateSoftText,
+            )
+            Spacer(Modifier.height(12.dp))
+        }
     }
 }
 
 @Composable
-private fun DonateOptionRow(
+private fun DonateLinkRow(
     title: String,
+    @DrawableRes icon: Int,
+    iconSize: Dp,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
     subtitle: String? = null,
-    iconContent: @Composable () -> Unit,
+    iconTint: Color = Color.Unspecified,
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Row(
-        modifier = modifier
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .pressBounce(interaction, pressedScale = 0.97f)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .heightIn(min = 54.dp)
+            .clip(RoundedCornerShape(18.dp))
             .background(MenuRowSurface)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 16.dp, vertical = if (subtitle != null) 12.dp else 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 10.dp),
     ) {
-        // Small icon circle - fixed white, not themed: the brand marks inside (Ko-fi, BMC,
-        // SocialBuzz) are only legible against a light badge regardless of app theme.
+        // plain white, not themed: the brand marks inside only read on a light badge
         Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(Color.White),
-            contentAlignment = Alignment.Center
         ) {
-            iconContent()
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(iconSize),
+            )
         }
-
-        Spacer(modifier = Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
+        Spacer(Modifier.width(18.dp))
+        Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontFamily = InterFontFamily,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.3).sp,
+                color = Color.White.copy(alpha = 0.88f),
             )
             if (subtitle != null) {
-                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontFamily = InterFontFamily,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.45f),
                 )
             }
         }
     }
-}
-
-private fun Context.openBrowserUrl(url: String) {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        startActivity(intent)
-    } catch (_: Exception) {}
 }

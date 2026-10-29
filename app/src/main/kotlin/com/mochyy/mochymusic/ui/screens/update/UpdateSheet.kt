@@ -87,6 +87,7 @@ import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.player.menu.MenuRowSurface
 import com.mochyy.mochymusic.ui.player.menu.MenuSurface
+import com.mochyy.mochymusic.ui.screens.donate.showSupportSheet
 import kotlinx.coroutines.launch
 
 @Composable
@@ -267,6 +268,11 @@ private fun ColumnScope.UpdateSheetContent(
                     icon = R.drawable.info,
                     label = "About app",
                     onClick = { popup.showAboutSheet(onOpenDevSpace = onOpenDevSpace) },
+                )
+                ActionRow(
+                    icon = R.drawable.favorite,
+                    label = "Help us!",
+                    onClick = { popup.showSupportSheet() },
                 )
             }
             Spacer(Modifier.height(6.dp))

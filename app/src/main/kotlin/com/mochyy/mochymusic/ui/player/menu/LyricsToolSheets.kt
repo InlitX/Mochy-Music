@@ -407,7 +407,7 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
     val status by LyricsTranslationHelper.status.collectAsState()
     val translationOn by LyricsTranslationHelper.translationOn.collectAsState()
     val isTranslating = status is LyricsTranslationHelper.TranslationStatus.Translating
-    val hasYouTubeTranslation = rememberYouTubeTranslationAvailable(target)
+    val youtubeLanguages = rememberYouTubeTranslationLanguages()
 
     MenuSheetSurface(onDismiss = onDismiss, wrapHeight = true) { _ ->
         val closeSheet = LocalMenuSheetClose.current
@@ -444,7 +444,18 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
             PillButton(
                 label = TranslationTargets.firstOrNull { it.first == target }?.second ?: "unselected",
                 onClick = { picking = true },
+                trailing = if (target in youtubeLanguages) ({ YouTubeTick() }) else null,
             )
+            AnimatedVisibility(visible = youtubeLanguages.isNotEmpty(), enter = fadeIn() + expandVertically()) {
+                Text(
+                    text = "A green tick means the video has its own captions in that language, so they're used as " +
+                        "the translation. You can turn this off in Settings > General.",
+                    color = Color(0xFF9A9A9A),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
+                )
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
             Text(text = "And", color = Color(0xFF9A9A9A), fontSize = 12.sp)
@@ -468,13 +479,6 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 AppSwitch(checked = sessionWide, onCheckedChange = setSessionWide)
-            }
-
-            AnimatedVisibility(visible = hasYouTubeTranslation, enter = fadeIn() + expandVertically()) {
-                YouTubeTranslationNote(
-                    languageName = TranslationTargets.firstOrNull { it.first == target }?.second ?: target,
-                    modifier = Modifier.padding(top = 18.dp),
-                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -541,6 +545,7 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
         LanguagePickerSheet(
             title = "Translate to",
             selected = target,
+            marked = youtubeLanguages,
             // The picker closes itself (animated) after a pick; onDismiss then drops it. While a
             // translation is showing, the lyrics screen re-translates into the new language.
             onPick = { setTarget(it) },
@@ -558,75 +563,47 @@ fun LyricsTranslationSheet(onDismiss: () -> Unit) {
     }
 }
 
-// whether the playing song's video has its own uploaded captions in target, asked when the sheet opens (and shared with the lyrics, so it's asked once)
+// the languages the playing song's video has its own uploaded captions in, asked once when the sheet opens
 @Composable
-private fun rememberYouTubeTranslationAvailable(target: String): Boolean {
+private fun rememberYouTubeTranslationLanguages(): Set<String> {
     val playerConnection = LocalPlayerConnection.current
     val (enabled) = rememberPreference(YouTubeCaptionTranslationKey, defaultValue = true)
-    var available by remember { mutableStateOf(false) }
-    LaunchedEffect(target, enabled) {
-        available = false
-        if (!enabled || target.isBlank() || playerConnection == null) return@LaunchedEffect
+    var languages by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(enabled) {
+        languages = emptySet()
+        if (!enabled || playerConnection == null) return@LaunchedEffect
         val metadata = playerConnection.mediaMetadata.value ?: return@LaunchedEffect
         val raw = playerConnection.currentLyrics.first()?.lyrics
             ?.takeIf { it.isNotBlank() && it != LYRICS_NOT_FOUND } ?: return@LaunchedEffect
         val lines = withContext(Dispatchers.Default) { LyricsUtils.parseLyricsCached(raw) }
-        available = YouTubeCaptionTranslation.translate(
-            YouTubeCaptionTranslation.Request(
-                songId = metadata.id,
-                title = metadata.title,
-                artist = metadata.artists.joinToString { it.name },
-                isVideo = metadata.isVideoSong,
-                lines = lines,
-                targetLanguage = target,
-            ),
-        ) != null
+        languages = YouTubeCaptionTranslation.availableTargets(
+            songId = metadata.id,
+            title = metadata.title,
+            artist = metadata.artists.joinToString { it.name },
+            isVideo = metadata.isVideoSong,
+            lines = lines,
+            targets = TranslationTargets.map { it.first },
+        )
     }
-    return available
+    return languages
 }
 
-// the green tick that says the translation comes from the video's own captions, and where to turn that off
+// the green tick on the right of a language's pill when the video has captions in it
 @Composable
-private fun YouTubeTranslationNote(languageName: String, modifier: Modifier = Modifier) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(MenuRowSurface)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+private fun YouTubeTick() {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(YouTubeTranslationGreen),
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(YouTubeTranslationGreen),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.check),
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Translation from YouTube",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "This video has its own $languageName captions, so they're used as the translation. " +
-                    "You can turn this off in Settings > General.",
-                color = Color(0xFF9A9A9A),
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            )
-        }
+        Icon(
+            painter = painterResource(R.drawable.check),
+            contentDescription = "Captions on YouTube",
+            tint = Color.White,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -645,6 +622,7 @@ private fun LanguagePickerSheet(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
     options: List<Pair<String, String>> = TranslationTargets,
+    marked: Set<String> = emptySet(),
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(query, options) {
@@ -714,7 +692,8 @@ private fun LanguagePickerSheet(
                                 onPick(code)
                                 closeSheet()
                             }
-                            .padding(horizontal = 18.dp, vertical = 13.dp)
+                            .padding(start = 18.dp, end = 10.dp)
+                            .height(46.dp)
                     ) {
                         Text(
                             text = label,
@@ -723,7 +702,11 @@ private fun LanguagePickerSheet(
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(end = 36.dp),
                         )
+                        if (code in marked) {
+                            Box(modifier = Modifier.align(Alignment.CenterEnd)) { YouTubeTick() }
+                        }
                     }
                 }
             }
@@ -737,6 +720,7 @@ internal fun PillButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
     highlighted: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val alpha = if (enabled) 1f else 0.4f
     Box(
@@ -759,5 +743,8 @@ internal fun PillButton(
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
         )
+        if (trailing != null) {
+            Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 9.dp)) { trailing() }
+        }
     }
 }

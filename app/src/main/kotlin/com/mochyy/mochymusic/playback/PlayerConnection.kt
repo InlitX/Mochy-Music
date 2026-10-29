@@ -163,7 +163,7 @@ class PlayerConnection(
         scope.launch(kotlinx.coroutines.Dispatchers.Default) {
             currentLyrics.map { it?.lyrics }.distinctUntilChanged().collect(LyricsUtils::warmParsedLyrics)
         }
-        // a music video shows its lyrics straight away, then they move onto the video's own timing once youtube's captions are in
+        // a music video shows its lyrics straight away, then they move onto the video's own timing once it's been listened to
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             combine(mediaMetadata, currentLyrics) { metadata, lyrics -> metadata to lyrics }
                 .distinctUntilChanged()
@@ -171,7 +171,11 @@ class PlayerConnection(
                     if (metadata == null || lyrics == null) return@collectLatest
                     // a song skipped straight past never asks youtube anything
                     delay(VideoLyricsSyncDelayMs)
-                    runCatching { VideoLyricsSync.syncIfNeeded(context, database, metadata, lyrics) }
+                    runCatching {
+                        VideoLyricsSync.syncIfNeeded(context, database, metadata, lyrics) { albumSongId ->
+                            service.matchSongToVideo(albumSongId, metadata.id)
+                        }
+                    }
                         .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it else reportException(it) }
                 }
         }

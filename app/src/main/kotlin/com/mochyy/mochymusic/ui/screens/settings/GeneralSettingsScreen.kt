@@ -162,8 +162,8 @@ fun GeneralSettingsScreen(navController: NavController) {
             SettingsItem(
                 title = { Text("Sync lyrics to music videos") },
                 highlightKey = "Sync lyrics to music videos",
-                descriptionText = "Line lyrics up with the video's own captions",
-                detail = "Lyrics are usually timed to the album version. When a music video plays, they're moved to match the video once its captions load",
+                descriptionText = "Line lyrics up with the video's intro, skits and cuts",
+                detail = "Lyrics are usually timed to the album version. When a music video plays, the app listens to it next to the album version and moves the lyrics to match",
                 icon = painterResource(R.drawable.lyrics),
                 iconShape = CircleShape,
                 onClick = { onSyncLyricsToVideoChange(!syncLyricsToVideo) },
