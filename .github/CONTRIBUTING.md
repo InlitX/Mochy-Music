@@ -1,5 +1,4 @@
 # Contributing to Mochy
-<img width="1582" height="669" alt="646914032-4f3c9a47-fc47-4e5e-844d-8b5a71a39219" src="https://github.com/user-attachments/assets/59cb416c-0d9b-4aef-bf94-ef21031dda30" />
 
 Yooo, thanks for wanting to help out. This thing is small, so the process here is kept light
 
@@ -36,6 +35,8 @@ Yooo, thanks for wanting to help out. This thing is small, so the process here i
 7. **Open the pull request.** Fill in the PR template, link the issue it fixes, and add screenshots or a screen recording for anything visual.
 
 8. **Test the app and profile it, compare, record the jitter before and after** if you make any visual changes/optimisation, thanks!
+
+9. **do not fully vibecoded it** if you can, please.. :3
 
 Commit messages should be short and say what changed. Conventional prefixes (`fix:`, `feat:`, `refactor:`) are welcome but not required. just make it simple, ok? 
 
