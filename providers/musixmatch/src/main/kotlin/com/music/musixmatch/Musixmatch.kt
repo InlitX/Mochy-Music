@@ -60,7 +60,7 @@ object Musixmatch {
         val app = context.applicationContext
         appContext = app
         val prefs = app.getSharedPreferences("musixmatch", Context.MODE_PRIVATE)
-        MusixmatchGate.restore(prefs.getString("user_agent", null))
+        MusixmatchBrowser.restore(prefs.getString("user_agent", null))
         prefs.getString("signing_key", null)?.let { signingKey = it }
     }
 
@@ -128,17 +128,17 @@ object Musixmatch {
         return score
     }
 
-    // one signed call: a stale key is read again from the site, a bot check is passed in the webview, each once
+    // one signed call; a stale key is read again from the site, once
     private suspend fun api(method: String, vararg params: Pair<String, String>): JsonObject? {
         repeat(2) { attempt ->
             val query = (listOf("app_id" to AppId, "format" to "json") + params)
                 .joinToString("&") { (k, v) -> "$k=${encode(v)}" }
-            val response = get(sign("$ApiBase$method?$query"), "application/json")
+            val reply = get(sign("$ApiBase$method?$query"), "application/json") ?: return null
             // a stale key gets a plain http 401 with no body worth reading
-            if (response == Unauthorized) {
+            if (reply.code == 401) {
                 if (attempt == 0 && refreshSigningKey()) return@repeat else return null
             }
-            val message = response?.let(::parse)?.obj("message") ?: return null
+            val message = reply.body?.let(::parse)?.obj("message") ?: return null
             val status = message.obj("header")?.int("status_code")
             when (status) {
                 200 -> return message.obj("body")
@@ -159,9 +159,9 @@ object Musixmatch {
 
     // the key ships in the site's app bundle as reversed base64
     private suspend fun refreshSigningKey(): Boolean {
-        val home = get("$Site/search?query=lyrics", "text/html") ?: return false
+        val home = get("$Site/search?query=lyrics", "text/html")?.body ?: return false
         val bundle = AppBundle.find(home)?.groupValues?.get(1) ?: return false
-        val script = get(if (bundle.startsWith("http")) bundle else "$Site$bundle", "*/*") ?: return false
+        val script = get(if (bundle.startsWith("http")) bundle else "$Site$bundle", "*/*")?.body ?: return false
         val key = KeyPatterns.asSequence()
             .flatMap { it.findAll(script) }
             .mapNotNull { match ->
@@ -178,7 +178,7 @@ object Musixmatch {
     // ---- the song page ----------------------------------------------------------------------
 
     private suspend fun page(path: String): JsonObject? {
-        val html = get("$Site$path", "text/html,application/xhtml+xml") ?: return null
+        val html = get("$Site$path", "text/html,application/xhtml+xml")?.body ?: return null
         val data = NextData.find(html)?.groupValues?.get(1) ?: return null
         return parse(data)?.obj("props")?.obj("pageProps")?.obj("data")
             ?.obj("trackInfo")?.obj("data")?.obj("track")
@@ -237,36 +237,40 @@ object Musixmatch {
 
     // ---- http -------------------------------------------------------------------------------
 
-    // a challenged answer sends the webview through the bot check once, then the same request goes again
-    private suspend fun get(url: String, accept: String): String? {
-        repeat(2) { attempt ->
-            val cookiesBefore = MusixmatchGate.cookies()
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", MusixmatchGate.userAgent ?: FallbackUserAgent)
-                .header("Accept", accept)
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Referer", "$Site/")
-                .apply { if (accept.contains("json")) header("Origin", Site) }
-                .apply { cookiesBefore?.let { header("Cookie", it) } }
-                .build()
-            val (code, body, challenged) = client.newCall(request).execute().use { response ->
-                val challenged = response.header("x-amzn-waf-action") != null || response.code == 202 || response.code == 405
-                Triple(response.code, if (response.isSuccessful && !challenged) response.body.string() else null, challenged)
-            }
-            if (body != null) return body
-            if (code == 401) return Unauthorized
-            if (!challenged || attempt > 0) {
-                Timber.tag(Tag).d("$code for ${url.substringBefore('?')}")
-                return null
-            }
-            val context = appContext ?: return null
-            if (!MusixmatchGate.clear(context, "$Site/search?query=lyrics", cookiesBefore)) return null
-            MusixmatchGate.userAgent?.let { agent ->
-                context.getSharedPreferences("musixmatch", Context.MODE_PRIVATE).edit().putString("user_agent", agent).apply()
-            }
+    /** one answer from the site: its status, and its body when it's a success */
+    private class Reply(val code: Int, val body: String?)
+
+    // plain http first; when the bot check turns it away, the very same request goes through the hidden browser
+    private suspend fun get(url: String, accept: String): Reply? {
+        val direct = runCatching { directGet(url, accept) }
+            .onFailure { Timber.tag(Tag).d("${it.message} for ${url.substringBefore('?')}") }
+            .getOrNull()
+            // no connection at all: the browser wouldn't get through either, and would only make the sheet wait
+            ?: return null
+        if (direct.code !in Blocked || !url.startsWith(Site)) return direct
+        val context = appContext ?: return direct
+        val (code, body) = MusixmatchBrowser.fetch(context, url, accept) ?: return null
+        MusixmatchBrowser.userAgent?.let { agent ->
+            context.getSharedPreferences("musixmatch", Context.MODE_PRIVATE).edit().putString("user_agent", agent).apply()
         }
-        return null
+        return Reply(code, body.takeIf { code in 200..299 })
+    }
+
+    private fun directGet(url: String, accept: String): Reply {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", MusixmatchBrowser.userAgent ?: FallbackUserAgent)
+            .header("Accept", accept)
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Referer", "$Site/")
+            .apply { if (accept.contains("json")) header("Origin", Site) }
+            .apply { MusixmatchBrowser.cookies()?.let { header("Cookie", it) } }
+            .build()
+        return client.newCall(request).execute().use { response ->
+            // the check's page can come back as a 200 too; its header gives it away
+            val code = if (response.header("x-amzn-waf-action") != null && response.isSuccessful) 202 else response.code
+            Reply(code, if (code in 200..299) response.body.string() else null)
+        }
     }
 
     private fun parse(text: String): JsonObject? = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull()
@@ -291,7 +295,8 @@ object Musixmatch {
 
     private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.intOrNull?.let { n -> n == 1 } }
 
-    private const val Unauthorized = "\u0000unauthorized"
+    // what the bot check answers with: a challenge, a refusal, a captcha, or too many requests
+    private val Blocked = setOf(202, 403, 405, 429)
 
     private val NextData = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
     private val AppBundle = Regex("""src="([^"]*/_next/static/chunks/pages/_app-[^"]+\.js)"""")
