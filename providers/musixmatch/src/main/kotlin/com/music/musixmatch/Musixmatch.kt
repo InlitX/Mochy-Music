@@ -29,7 +29,8 @@ import kotlin.math.abs
 object Musixmatch {
     private const val Site = "https://www.musixmatch.com"
     private const val ApiBase = "$Site/ws/1.1/"
-    private const val AppId = "community-app-v1.0"
+    // what the site's own pages call themselves since its 1.42 release
+    private const val AppId = "mxm-com-v1.0"
     // the site's signing key as of its last bundle; a stale one gets a 401 and is read again from the site
     private const val DefaultSigningKey = "e96ddc8a77ab4d745906ff46323346df"
     private const val FallbackUserAgent =
@@ -52,8 +53,17 @@ object Musixmatch {
             .build()
     }
 
-    // a song asked for twice in one run (sheet closed and opened again) isn't fetched twice; null means not found
-    private val songs = ConcurrentHashMap<String, Result<MusixmatchSong?>>()
+    /** how one lookup ended: only [Found] and [Missing] are real answers worth keeping */
+    private sealed interface Lookup {
+        data class Found(val song: MusixmatchSong) : Lookup
+        /** musixmatch answered, and doesn't have the song */
+        data object Missing : Lookup
+        /** couldn't ask: no connection, or the bot check held every road */
+        data object Failed : Lookup
+    }
+
+    // a song asked for twice in one run (sheet closed and opened again) isn't looked up twice
+    private val songs = ConcurrentHashMap<String, Lookup>()
 
     fun init(context: Context) {
         if (appContext != null) return
@@ -64,29 +74,87 @@ object Musixmatch {
         prefs.getString("signing_key", null)?.let { signingKey = it }
     }
 
-    // the best match for this song and everything its page says, or null when musixmatch doesn't have it
+    // the best match for this song and everything its page says, or null when musixmatch doesn't have it (or couldn't be asked)
     suspend fun song(title: String, artist: String, durationSeconds: Int? = null): MusixmatchSong? = withContext(Dispatchers.IO) {
         val key = "${title.lowercase()}|${artist.lowercase()}"
-        songs[key]?.getOrNull()?.let { return@withContext it }
-        val result = runCatching { fetchSong(title, artist, durationSeconds) }
+        songs[key]?.let { return@withContext (it as? Lookup.Found)?.song }
+        val lookup = runCatching { lookUp(title, artist, durationSeconds) }
             .onFailure { Timber.tag(Tag).w(it, "couldn't read $title by $artist") }
-        // only a real answer is kept: a blocked or offline try is asked again next time
-        if (result.isSuccess) songs[key] = result
-        result.getOrNull()
+            .getOrDefault(Lookup.Failed)
+        // a blocked or offline try is asked again the next time the sheet opens
+        if (lookup !is Lookup.Failed) songs[key] = lookup
+        Timber.tag(Tag).d("$title by $artist: ${lookup::class.simpleName}")
+        (lookup as? Lookup.Found)?.song
     }
 
-    private suspend fun fetchSong(title: String, artist: String, durationSeconds: Int?): MusixmatchSong? {
-        val found = search(cleanTitle(title), artist, durationSeconds) ?: return null
-        val vanity = found.string("commontrack_vanity_id") ?: return fromSearch(found)
-        val page = runCatching { page("/lyrics/$vanity") }
-            .onFailure { Timber.tag(Tag).w(it, "page for $vanity didn't load") }
+    private suspend fun lookUp(title: String, artist: String, durationSeconds: Int?): Lookup {
+        val wanted = cleanTitle(title)
+        // the api is quick when plain http gets through; the site's own search page when the bot check holds it
+        val (path, base) = when (val api = search(wanted, artist, durationSeconds)) {
+            is ApiSearch.Hit -> {
+                val vanity = api.track.string("commontrack_vanity_id") ?: return Lookup.Found(fromSearch(api.track))
+                "/lyrics/$vanity" to fromSearch(api.track)
+            }
+            // an empty api answer isn't trusted on its own: the site's search page gets the last word
+            ApiSearch.Missing, ApiSearch.Blocked -> when (val hit = browserSearch(wanted, artist)) {
+                null -> return Lookup.Failed
+                "" -> return Lookup.Missing
+                else -> hit to MusixmatchSong(title = title, artist = artist)
+            }
+        }
+        val page = runCatching { page(path) }
+            .onFailure { Timber.tag(Tag).w(it, "page $path didn't load") }
             .getOrNull()
-        return merge(found, page, "$Site/lyrics/$vanity")
+            ?: return if (base.album != null) Lookup.Found(base.copy(pageUrl = "$Site$path")) else Lookup.Failed
+        return Lookup.Found(merge(base, page, "$Site$path"))
     }
+
+    // ---- the site's own search, through the hidden browser -------------------------------------
+
+    /** the best result's page path, "" when the site found nothing like it, null when it couldn't be searched */
+    private suspend fun browserSearch(title: String, artist: String): String? {
+        val context = appContext ?: return null
+        val leadArtist = artist.substringBefore(",").substringBefore("&").trim()
+        val hits = MusixmatchBrowser.search(context, "$leadArtist $title") { found ->
+            found.any { hitScore(it, title, leadArtist) >= GoodMatch }
+        } ?: return null
+        return hits
+            .map { it to hitScore(it, title, leadArtist) }
+            .filter { it.second >= GoodMatch }
+            .maxByOrNull { it.second }
+            ?.first?.path
+            ?: ""
+    }
+
+    // a result's link names the artist and song ("/lyrics/eill-3/Finale"), the number only tells artists of one name apart
+    private fun hitScore(hit: MusixmatchBrowser.Hit, title: String, artist: String): Int {
+        val parts = hit.path.removePrefix("/lyrics/").split('/')
+        if (parts.size < 2) return 0
+        val linkArtist = normalize(decode(parts[0]).replace(Regex("-\\d+$"), "").replace('-', ' '))
+        val linkTitle = normalize(decode(parts[1]).replace('-', ' '))
+        val wantedTitle = normalize(title)
+        val wantedArtist = normalize(artist)
+        var score = when {
+            linkTitle == wantedTitle -> 80
+            linkTitle.isNotEmpty() && (linkTitle.contains(wantedTitle) || wantedTitle.contains(linkTitle)) -> 40
+            normalize(hit.text).contains(wantedTitle) -> 30
+            else -> 0
+        }
+        if (wantedArtist.isNotEmpty() && (linkArtist == wantedArtist || linkArtist.contains(wantedArtist) || normalize(hit.text).contains(wantedArtist))) score += 40
+        return score
+    }
+
+    private fun decode(value: String): String = runCatching { java.net.URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
 
     // ---- the api ----------------------------------------------------------------------------
 
-    private suspend fun search(title: String, artist: String, durationSeconds: Int?): JsonObject? {
+    private sealed interface ApiSearch {
+        data class Hit(val track: JsonObject) : ApiSearch
+        data object Missing : ApiSearch
+        data object Blocked : ApiSearch
+    }
+
+    private suspend fun search(title: String, artist: String, durationSeconds: Int?): ApiSearch {
         val body = api(
             "track.search",
             "q_track" to title,
@@ -94,14 +162,15 @@ object Musixmatch {
             "page_size" to "10",
             "page" to "1",
             "s_track_rating" to "desc",
-        ) ?: return null
+        ) ?: return ApiSearch.Blocked
         val tracks = (body["track_list"] as? JsonArray).orEmpty()
             .mapNotNull { (it as? JsonObject)?.obj("track") }
         return tracks
             .map { it to score(it, title, artist, durationSeconds) }
-            .filter { it.second >= 60 }
+            .filter { it.second >= GoodMatch }
             .maxByOrNull { it.second }
-            ?.first
+            ?.first?.let { ApiSearch.Hit(it) }
+            ?: ApiSearch.Missing
     }
 
     private fun score(track: JsonObject, title: String, artist: String, durationSeconds: Int?): Int {
@@ -133,7 +202,9 @@ object Musixmatch {
         repeat(2) { attempt ->
             val query = (listOf("app_id" to AppId, "format" to "json") + params)
                 .joinToString("&") { (k, v) -> "$k=${encode(v)}" }
-            val reply = get(sign("$ApiBase$method?$query"), "application/json") ?: return null
+            // plain http only: the api is held at the bot check unless the pass cookie gets through, and then the search page takes over
+            val reply = runCatching { directGet(sign("$ApiBase$method?$query"), "application/json") }.getOrNull() ?: return null
+            if (reply.code in Blocked) return null
             // a stale key gets a plain http 401 with no body worth reading
             if (reply.code == 401) {
                 if (attempt == 0 && refreshSigningKey()) return@repeat else return null
@@ -184,9 +255,7 @@ object Musixmatch {
             ?.obj("trackInfo")?.obj("data")?.obj("track")
     }
 
-    private fun merge(found: JsonObject, page: JsonObject?, pageUrl: String): MusixmatchSong {
-        val base = fromSearch(found)
-        if (page == null) return base.copy(pageUrl = pageUrl)
+    private fun merge(base: MusixmatchSong, page: JsonObject, pageUrl: String): MusixmatchSong {
         val lens = page.obj("lens")
         val artists = (page["artists"] as? JsonArray).orEmpty().mapNotNull { element ->
             val artist = element as? JsonObject ?: return@mapNotNull null
@@ -277,7 +346,7 @@ object Musixmatch {
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
-    // "(Remastered 2011)" and "- Live" keep a song from matching its plain self
+    // "(remastered 2011)" and "- live" keep a song from matching its plain self
     private fun cleanTitle(title: String): String = title
         .replace(Regex("""\s*[(\[][^)\]]*(remaster|live|version|edit|mix|feat|ft\.|from|official|audio|video)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE), "")
         .replace(Regex("""\s+-\s+.*(remaster|live|version|edit|mix).*$""", RegexOption.IGNORE_CASE), "")
@@ -294,6 +363,9 @@ object Musixmatch {
     private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
 
     private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.intOrNull?.let { n -> n == 1 } }
+
+    // a title match (80 or 40) plus the artist (40): anything less is a different song
+    private const val GoodMatch = 60
 
     // what the bot check answers with: a challenge, a refusal, a captcha, or too many requests
     private val Blocked = setOf(202, 403, 405, 429)

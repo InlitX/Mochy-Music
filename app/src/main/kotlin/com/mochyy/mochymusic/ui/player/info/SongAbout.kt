@@ -62,7 +62,8 @@ object SongAboutLoader {
         send(state.value)
         fun publish(change: (SongAbout) -> SongAbout) {
             state.update(change)
-            cache[song.id] = state.value
+            // no musixmatch text is kept as "still to ask": a real miss is remembered by musixmatch, a blocked try gets another go
+            cache[song.id] = state.value.let { if (it.musixmatch == null) it.copy(musixmatchDone = false) else it }
             trySend(state.value)
         }
 
