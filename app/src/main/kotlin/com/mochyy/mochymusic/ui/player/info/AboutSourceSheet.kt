@@ -94,7 +94,9 @@ private fun SourceRow(source: AboutSource, preview: String, isSelected: Boolean,
     ) {
         when (source) {
             AboutSource.YouTube -> ProviderSquircle(service = AccountService.YOUTUBE_MUSIC, size = 40.dp)
-            AboutSource.Musixmatch -> MusixmatchMark()
+            AboutSource.Musixmatch -> SourceMark("M", Color(0xFFFF6050), Color.White)
+            AboutSource.Genius -> SourceMark("G", Color(0xFFFFFF64), Color.Black)
+            AboutSource.Wikipedia -> SourceMark("W", Color.White, Color.Black)
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -121,16 +123,16 @@ private fun SourceRow(source: AboutSource, preview: String, isSelected: Boolean,
     }
 }
 
-// there's no musixmatch logo in the app, so a plain lettermark stands in rather than a redrawn one
+// the app has no logos for these, so a plain lettermark in each one's colour stands in rather than a redrawn logo
 @Composable
-private fun MusixmatchMark() {
+private fun SourceMark(letter: String, background: Color, foreground: Color) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(11.dp))
-            .background(Color(0xFFFF6050)),
+            .background(background),
     ) {
-        Text(text = "M", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Text(text = letter, color = foreground, fontSize = 18.sp, fontWeight = FontWeight.Black)
     }
 }

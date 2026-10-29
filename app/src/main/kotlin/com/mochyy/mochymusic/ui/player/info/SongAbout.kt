@@ -10,6 +10,10 @@ import com.mochyy.mochymusic.ui.utils.resize
 import com.music.innertube.YouTube
 import com.music.musixmatch.Musixmatch
 import com.music.musixmatch.MusixmatchSong
+import com.music.genius.Genius
+import com.music.genius.GeniusSong
+import com.music.wikipedia.WikiSong
+import com.music.wikipedia.Wikipedia
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -22,30 +26,48 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.concurrent.ConcurrentHashMap
 
-/** everything the about sheet shows for one song; what's still loading or unknown stays null */
+/** everything the about sheet shows for one song, as each source said it; the facts shown are picked from them */
 data class SongAbout(
-    val genre: String? = null,
-    val released: String? = null,
-    val album: String? = null,
     val artist: String? = null,
     val lengthSeconds: Int? = null,
+    val libraryYear: Int? = null,
+    val libraryAlbum: String? = null,
     val musixmatchDone: Boolean = false,
     val musixmatch: MusixmatchSong? = null,
+    val geniusDone: Boolean = false,
+    val genius: GeniusSong? = null,
+    val wikiDone: Boolean = false,
+    val wiki: WikiSong? = null,
     val youtubeDone: Boolean = false,
     val youtubeDescription: String? = null,
     val artists: List<AboutArtist> = emptyList(),
     val links: List<StoreLink> = emptyList(),
-)
+) {
+    /** every source that can fill in the facts has answered (or given up) */
+    val factsDone: Boolean get() = musixmatchDone && geniusDone && wikiDone
+
+    // each fact from the first source that has it: musixmatch, then wikipedia, then genius, then the library
+    val genre: String?
+        get() = listOf(musixmatch?.genres, wiki?.genres, genius?.genres).firstOrNull { !it.isNullOrEmpty() }
+            ?.take(2)?.joinToString(", ") { it.replaceFirstChar(Char::titlecase) }
+    val released: String?
+        get() = (musixmatch?.releaseDate ?: wiki?.releaseDate ?: genius?.releaseDate)?.let(::readableDate) ?: libraryYear?.toString()
+    val album: String? get() = libraryAlbum ?: musixmatch?.album ?: genius?.album
+    val writtenBy: String? get() = genius?.writers.orEmpty().ifEmpty { wiki?.writers.orEmpty() }.joinToString(", ").ifBlank { null }
+    val producedBy: String? get() = genius?.producers.orEmpty().ifEmpty { wiki?.producers.orEmpty() }.joinToString(", ").ifBlank { null }
+    val label: String? get() = wiki?.label
+}
 
 data class AboutArtist(val id: String?, val name: String, val imageUrl: String?)
 
 data class StoreLink(val service: AccountService, val url: String)
 
-/** gathers [SongAbout] off the main thread: the library first, then youtube and musixmatch side by side */
+/** gathers [SongAbout] off the main thread: the library first, then every source side by side */
 object SongAboutLoader {
     // kept for the run, so closing and opening the sheet again is instant
     private val cache = ConcurrentHashMap<String, SongAbout>()
@@ -54,7 +76,7 @@ object SongAboutLoader {
         // here rather than at app start: it reads its saved key from disk, which belongs off the main thread
         Musixmatch.init(context)
         val cached = cache[song.id]
-        if (cached != null && cached.musixmatchDone && cached.youtubeDone) {
+        if (cached != null && cached.factsDone && cached.youtubeDone) {
             send(cached)
             return@channelFlow
         }
@@ -62,8 +84,10 @@ object SongAboutLoader {
         send(state.value)
         fun publish(change: (SongAbout) -> SongAbout) {
             state.update(change)
-            // no musixmatch text is kept as "still to ask": a real miss is remembered by musixmatch, a blocked try gets another go
-            cache[song.id] = state.value.let { if (it.musixmatch == null) it.copy(musixmatchDone = false) else it }
+            // a source that said nothing is kept as "still to ask": each remembers a real miss itself, a failed try gets another go
+            cache[song.id] = state.value.let {
+                it.copy(musixmatchDone = it.musixmatch != null, geniusDone = it.genius != null, wikiDone = it.wiki != null)
+            }
             trySend(state.value)
         }
 
@@ -75,7 +99,15 @@ object SongAboutLoader {
         }
         launch {
             val found = if (artistName.isBlank()) null else Musixmatch.song(song.title, artistName, song.duration.takeIf { d -> d > 0 })
-            publish { about -> about.withMusixmatch(found, song) }
+            publish { about -> about.withMusixmatch(found).withLinks(song) }
+        }
+        launch {
+            val found = if (artistName.isBlank()) null else Genius.song(song.title, artistName)
+            publish { about -> about.withGenius(found).withLinks(song) }
+        }
+        launch {
+            val found = if (artistName.isBlank()) null else Wikipedia.song(song.title, artistName)
+            publish { it.copy(wikiDone = true, wiki = found) }
         }
         launch {
             val photos = artistPhotos(song, database)
@@ -85,30 +117,40 @@ object SongAboutLoader {
 
     private suspend fun fromLibrary(song: MediaMetadata, database: MusicDatabase): SongAbout {
         val stored = database.song(song.id).first()
-        val year = stored?.song?.year ?: stored?.album?.year
         return SongAbout(
-            released = year?.toString(),
-            album = song.album?.title ?: stored?.song?.albumName,
             artist = song.artists.joinToString(", ") { it.name }.ifBlank { null },
             lengthSeconds = song.duration.takeIf { it > 0 },
+            libraryYear = stored?.song?.year ?: stored?.album?.year,
+            libraryAlbum = song.album?.title ?: stored?.song?.albumName,
             artists = song.artists.map { AboutArtist(it.id, it.name, null) },
-            links = linksFor(song, null),
-        )
+        ).withLinks(song)
     }
 
-    private fun SongAbout.withMusixmatch(found: MusixmatchSong?, song: MediaMetadata): SongAbout {
-        if (found == null) return copy(musixmatchDone = true)
-        val byName = found.artists.associateBy { it.name.lowercase() }
+    private fun SongAbout.withMusixmatch(found: MusixmatchSong?): SongAbout {
+        val byName = found?.artists.orEmpty().associateBy { it.name.lowercase() }
         return copy(
             musixmatchDone = true,
             musixmatch = found,
-            genre = found.genres.take(2).joinToString(", ").ifBlank { null } ?: genre,
-            released = found.releaseDate?.let(::readableDate) ?: released,
-            album = album ?: found.album,
             artists = artists.map { a -> if (a.imageUrl == null) a.copy(imageUrl = byName[a.name.lowercase()]?.imageUrl) else a },
-            links = linksFor(song, found),
         )
     }
+
+    // genius names its artist "eill (jpn)": its photo stands in for the first artist when nothing else had one
+    private fun SongAbout.withGenius(found: GeniusSong?): SongAbout {
+        val photo = found?.artistImageUrl
+        val lead = artists.firstOrNull()
+        val sameArtist = lead != null && found != null &&
+            found.artist.substringBefore(" (").trim().equals(lead.name.trim(), ignoreCase = true)
+        return copy(
+            geniusDone = true,
+            genius = found,
+            artists = if (sameArtist && lead!!.imageUrl == null && photo != null) listOf(lead.copy(imageUrl = photo)) + artists.drop(1) else artists,
+        )
+    }
+
+    private fun SongAbout.withLinks(song: MediaMetadata): SongAbout = copy(
+        links = linksFor(song, musixmatch?.spotifyId ?: genius?.spotifyId, musixmatch?.appleMusicId ?: genius?.appleMusicId),
+    )
 
     // the library's photo when the artist is in it, otherwise their youtube music page's, in parallel
     private suspend fun artistPhotos(song: MediaMetadata, database: MusicDatabase): Map<String, String> = coroutineScope {
@@ -123,24 +165,28 @@ object SongAboutLoader {
         }.mapNotNull { it.await() }.toMap()
     }
 
-    // a store's own song page when musixmatch knows its id, its search otherwise
-    private fun linksFor(song: MediaMetadata, found: MusixmatchSong?): List<StoreLink> {
+    // a store's own song page when a source knows its id, its search otherwise
+    private fun linksFor(song: MediaMetadata, spotifyId: String?, appleMusicId: String?): List<StoreLink> {
         val query = URLEncoder.encode("${song.title} ${song.artists.firstOrNull()?.name.orEmpty()}".trim(), "UTF-8")
         return listOfNotNull(
             StoreLink(
                 AccountService.SPOTIFY,
-                found?.spotifyId?.let { "https://open.spotify.com/track/$it" } ?: "https://open.spotify.com/search/$query",
+                spotifyId?.let { "https://open.spotify.com/track/$it" } ?: "https://open.spotify.com/search/$query",
             ),
             StoreLink(AccountService.YOUTUBE_MUSIC, "https://music.youtube.com/watch?v=${song.id}").takeIf { !song.id.startsWith("LOCAL_") },
             StoreLink(
                 AccountService.APPLE_MUSIC,
-                found?.appleMusicId?.let { "https://music.apple.com/song/$it" } ?: "https://music.apple.com/search?term=$query",
+                appleMusicId?.let { "https://music.apple.com/song/$it" } ?: "https://music.apple.com/search?term=$query",
             ),
             StoreLink(AccountService.TIDAL, "https://listen.tidal.com/search?q=$query"),
         )
     }
 
-    private fun readableDate(iso: String): String? = runCatching {
-        LocalDate.parse(iso).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
-    }.getOrNull() ?: iso.take(4).takeIf { it.all(Char::isDigit) }
 }
+
+// "2014-03-17" as the phone writes dates, "2014-03" as a month and year, "2014" as it is
+private fun readableDate(iso: String): String? = runCatching {
+    LocalDate.parse(iso).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+}.recoverCatching {
+    YearMonth.parse(iso).format(DateTimeFormatter.ofPattern("MMM yyyy"))
+}.getOrNull() ?: iso.take(4).takeIf { it.length == 4 && it.all(Char::isDigit) }

@@ -71,6 +71,8 @@ import com.mochyy.mochymusic.utils.rememberPreference
 /** where the "about" text comes from; the chip beside the title swaps it */
 enum class AboutSource(val id: String, val label: String) {
     Musixmatch("musixmatch", "Musixmatch"),
+    Genius("genius", "Genius"),
+    Wikipedia("wikipedia", "Wikipedia"),
     YouTube("youtube", "YouTube"),
 }
 
@@ -144,13 +146,16 @@ private fun GeneralInformation(about: SongAbout) {
     InfoSectionTitle("General Information")
     Spacer(Modifier.height(8.dp))
     // a fact still on its way gets a placeholder; one nobody had is left out rather than shown as "-"
-    val waiting = !about.musixmatchDone
+    val waiting = !about.factsDone
     val genre = about.genre
     if (genre != null) InfoBullet("Genre", genre) else if (waiting) LoadingBullet("Genre")
     val released = about.released
     if (released != null) InfoBullet("Date released", released) else if (waiting) LoadingBullet("Date released")
     about.album?.let { InfoBullet("Album", it) }
     about.artist?.let { InfoBullet("Artist", it) }
+    about.writtenBy?.let { InfoBullet("Written by", it) }
+    about.producedBy?.let { InfoBullet("Produced by", it) }
+    about.label?.let { InfoBullet("Label", it) }
     about.lengthSeconds?.let { InfoBullet("Length", makeTimeString(it * 1000L)) }
 }
 
@@ -224,8 +229,9 @@ private fun AboutCard(about: SongAbout, source: AboutSource, onSwitch: (AboutSou
                                 fontSize = 14.sp,
                                 lineHeight = 20.sp,
                             )
-                            val other = AboutSource.entries.first { it != shownSource }
-                            if (textFor(about, other) != null) {
+                            // the first other source that does have something, so the button never leads to another empty card
+                            val other = AboutSource.entries.firstOrNull { it != shownSource && textFor(about, it) != null }
+                            if (other != null) {
                                 Spacer(Modifier.height(12.dp))
                                 InfoPill(text = "Read it on ${other.label}", filled = true, onClick = { onSwitch(other) })
                             }
@@ -235,7 +241,7 @@ private fun AboutCard(about: SongAbout, source: AboutSource, onSwitch: (AboutSou
             }
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.height(18.dp))
-                val pageUrl = about.musixmatch?.pageUrl.takeIf { source == AboutSource.Musixmatch }
+                val pageUrl = pageFor(about, source)
                 Text(
                     text = "provided by ${source.label.lowercase()}",
                     color = InfoMuted,
@@ -257,12 +263,24 @@ private fun AboutCard(about: SongAbout, source: AboutSource, onSwitch: (AboutSou
 
 internal fun textFor(about: SongAbout, source: AboutSource): String? = when (source) {
     AboutSource.Musixmatch -> about.musixmatch?.meaning
+    AboutSource.Genius -> about.genius?.about
+    AboutSource.Wikipedia -> about.wiki?.about
     AboutSource.YouTube -> about.youtubeDescription
 }
 
 internal fun doneFor(about: SongAbout, source: AboutSource): Boolean = when (source) {
     AboutSource.Musixmatch -> about.musixmatchDone
+    AboutSource.Genius -> about.geniusDone
+    AboutSource.Wikipedia -> about.wikiDone
     AboutSource.YouTube -> about.youtubeDone
+}
+
+// where "provided by" leads: the page the text came from (wikipedia's text is shared on the condition it's credited this way)
+private fun pageFor(about: SongAbout, source: AboutSource): String? = when (source) {
+    AboutSource.Musixmatch -> about.musixmatch?.pageUrl
+    AboutSource.Genius -> about.genius?.pageUrl?.takeIf { it.isNotEmpty() }
+    AboutSource.Wikipedia -> about.wiki?.articleUrl
+    AboutSource.YouTube -> null
 }
 
 @Composable
