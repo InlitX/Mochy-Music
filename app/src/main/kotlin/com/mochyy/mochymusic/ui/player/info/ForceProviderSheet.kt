@@ -59,7 +59,7 @@ import kotlinx.coroutines.delay
 
 private val YouTubeQualities = listOf(AudioQuality.AUTO, AudioQuality.HIGH, AudioQuality.MEDIUM, AudioQuality.LOW)
 
-/** "Force change": plays this song from another of the providers that are switched on, at the quality picked */
+/** "force change": plays this song from another of the providers that are switched on, at the quality picked */
 @Composable
 fun ForceProviderSheet(currentProviderId: String?, onDismiss: () -> Unit) {
     val service = LocalPlayerConnection.current?.service ?: return

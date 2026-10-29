@@ -220,7 +220,7 @@ private fun line(label: String, value: String?): Pair<String, String>? = value?.
 private val LosslessCodecs = setOf("FLAC", "ALAC", "PCM")
 private val FixedRateKinds = setOf(AudioOutputs.Kind.PHONE, AudioOutputs.Kind.WIRED)
 
-// ".Flac" like the mock, but acronyms people say letter by letter stay in capitals
+// a dot and the codec like the mock (".flac" shown as .Flac), but acronyms said letter by letter stay in capitals
 private fun formatTitle(codec: String): String =
     if (codec in setOf("FLAC", "OPUS", "VORBIS", "ALAC")) ".${codec.lowercase().replaceFirstChar { it.uppercase() }}" else ".$codec"
 

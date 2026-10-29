@@ -55,11 +55,7 @@ data class StreamDetails(
     val dithered: Boolean = false,
 )
 
-/**
- * Listens to one player and keeps what it learns, filed under the song each event belongs to:
- * gapless playback reads the next song's format before the current one ends, and filing it under
- * the playing song wiped what the next one had told us. Everything here runs on the main thread.
- */
+/** one player's stats for nerds, each event filed under its own song since gapless reads the next one early */
 @OptIn(UnstableApi::class)
 class StreamInspector : AnalyticsListener {
     private val _details = MutableStateFlow(StreamDetails())

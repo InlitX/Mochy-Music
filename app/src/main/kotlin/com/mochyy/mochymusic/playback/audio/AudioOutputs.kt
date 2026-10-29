@@ -18,11 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 
-/**
- * Where the music comes out: the outputs plugged in or paired, the one picked in the player's
- * device sheet, a usb dac when it should win, and (android 14+) the dac's own mixer set to the
- * song's rate or to bit-perfect. The why behind the rules is in docs/notes/audio-output.md.
- */
+/** where the music comes out: picked device, usb dac first, the dac's own mixer on android 14+ (why: docs/notes/audio-output.md) */
 class AudioOutputs(private val context: Context) {
 
     enum class Kind { PHONE, WIRED, USB, BLUETOOTH, HDMI }
@@ -91,11 +87,7 @@ class AudioOutputs(private val context: Context) {
             routeChanged()
         }
 
-    /**
-     * The rate the sound will be mixed at, when it's known for sure and the resampler is on: the
-     * speaker and the headphone jack run at the phone's own mixer rate. Bluetooth isn't (its rate
-     * depends on the codec, and android doesn't say), nor usb, which has passthrough instead.
-     */
+    /** the mixer's rate where it's known for sure with the resampler on: speaker and headphone jack, not bluetooth or usb */
     @Volatile
     var fixedOutputRate: Int? = null
         private set
@@ -162,11 +154,7 @@ class AudioOutputs(private val context: Context) {
             ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
     }
 
-    /**
-     * Called on the playback thread right before an audio track opens for a new format. With
-     * passthrough on and a usb dac playing, the dac's mixer is set to the song's own rate, and to
-     * bit-perfect when the dac takes exactly what the track will write.
-     */
+    /** sets the usb dac's mixer to the song's rate (bit-perfect when it takes exactly our format) just before a track opens */
     fun prepareMixer(sampleRate: Int, channels: Int, encoding: Int) {
         if (!passthrough || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
         val device = activeDevice()?.takeIf { kindOf(it.type) == Kind.USB }
@@ -283,7 +271,7 @@ private object UsbMixer {
         val bitPerfect = atRate.firstOrNull {
             it.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT && it.format.encoding == encoding
         }
-        // no bit-perfect match: the song's own rate still spares it the resample to 48 kHz
+        // no bit-perfect match: the song's own rate still spares it the resample to 48 khz
         val pick = bitPerfect ?: atRate
             .filter { it.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_DEFAULT }
             .maxByOrNull { AudioOutputs.bitDepthOf(it.format.encoding) ?: 0 }

@@ -63,7 +63,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
-/** "Stream Info": where the playing song comes from, and its whole road to the speaker */
+/** "stream info": where the playing song comes from, and its whole road to the speaker */
 @Composable
 fun StreamInfoSheet(onDismiss: () -> Unit) {
     val playerConnection = LocalPlayerConnection.current ?: return

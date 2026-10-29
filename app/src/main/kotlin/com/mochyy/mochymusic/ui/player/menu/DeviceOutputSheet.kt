@@ -61,11 +61,7 @@ import com.mochyy.mochymusic.ui.component.SheetIcon
 import com.mochyy.mochymusic.utils.rememberPreference
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/**
- * "Change playback": the phone and music volumes, then every output the song can go to. Picking
- * one moves the playing song there on the spot (each player follows it, crossmix's and crossfade's
- * too); cast receivers on the network play it from there instead.
- */
+/** "change playback": both volumes, then every output; picking one moves the song there, cast receivers play it themselves */
 @Composable
 fun DeviceOutputSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current

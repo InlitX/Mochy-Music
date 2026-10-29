@@ -8,11 +8,7 @@ import kotlin.math.ceil
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/**
- * Changes a song's sample rate with a polyphase, kaiser-windowed sinc filter: flat to about 20 kHz
- * and [StopbandDb] down by the lower rate's nyquist, so nothing above it folds back as aliasing.
- * Float in, float out, one instance per channel layout and pair of rates, run on the playback thread.
- */
+/** polyphase kaiser-windowed sinc resampler: flat to ~20 khz, 120 db down past the lower nyquist, float in and out */
 class SincResampler private constructor(
     val inRate: Int,
     val outRate: Int,
@@ -21,7 +17,7 @@ class SincResampler private constructor(
 ) {
     /** the filter's taps per output sample, which is what decides its steepness */
     val taps: Int get() = table.taps
-    /** where the passband ends, in Hz */
+    /** where the passband ends, in hz */
     val passbandHz: Double get() = table.passbandHz
     /** the lower rate's nyquist, where the stopband starts */
     val stopbandHz: Double get() = minOf(inRate, outRate) / 2.0
@@ -50,10 +46,7 @@ class SincResampler private constructor(
     /** how many output frames at most [frames] more input can give, for sizing buffers */
     fun maxOutputFrames(frames: Int): Int = ((frames.toLong() + 2) * table.up / table.down + 2).toInt()
 
-    /**
-     * Takes [frames] frames of [input] (one array per channel) and writes what's ready into [output],
-     * returning how many frames it wrote.
-     */
+    /** resamples [frames] of [input] (one array per channel) into [output] and says how many frames it wrote */
     fun process(input: Array<FloatArray>, frames: Int, output: Array<FloatArray>): Int {
         append(input, frames)
         val taps = table.taps
@@ -107,8 +100,7 @@ class SincResampler private constructor(
         // taps for a straight 1:1 band; going down in rate scales it up so the slope stays as steep
         private const val BaseTaps = 192
         private const val InitialCapacity = 8192
-        // the filter is designed on the playback thread when a song opens: a strange rate pair (44056 to 48000)
-        // would take long enough to stutter, so android's mixer handles those
+        // designed on the playback thread as a song opens: a strange rate pair would stutter, so android's mixer takes those
         private const val MaxCoefficients = 200_000
 
         private val tables = ConcurrentHashMap<Long, Table>()
@@ -128,7 +120,7 @@ class SincResampler private constructor(
             val length = up.toLong() * taps
             if (length > MaxCoefficients) return null
 
-            // kaiser's estimate: how wide the transition is for this length and attenuation, in Hz at the input rate
+            // kaiser's estimate: how wide the transition is for this length and attenuation, in hz at the input rate
             val transitionHz = (StopbandDb - 7.95) / (2.285 * 2 * PI * taps) * inRate
             val stopHz = minOf(inRate, outRate) / 2.0
             val passbandHz = stopHz - transitionHz

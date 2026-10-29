@@ -14,14 +14,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
-/**
- * Decides, song by song, what reaches the audio track: 32-bit float or 16-bit, at the song's rate
- * or (with the hi-fi resampler) at the output's own. The sink under it is built with float on, but
- * media3's float road skips every audio processor, so float only goes through while
- * [AudioOutputs.floatAllowed] says nothing would be lost. Otherwise anything finer than 16-bit is
- * dithered down to 16-bit here and takes the usual road with every effect. The long story is in
- * docs/notes/audio-output.md.
- */
+/** decides per song what reaches the track: float or dithered 16-bit, at the song's rate or the output's (docs/notes/audio-output.md) */
 @UnstableApi
 class PrecisionSink(
     delegate: AudioSink,

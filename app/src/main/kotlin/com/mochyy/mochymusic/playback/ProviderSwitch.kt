@@ -18,7 +18,7 @@ data class PlayingFrom(
     /** a module id, "youtube", or one of [Device] and [Downloads] */
     val providerId: String,
     val name: String,
-    /** the module's own words for the stream ("FLAC 24-bit"), when it said */
+    /** the module's own words for the stream ("flac 24-bit"), when it said */
     val quality: String? = null,
     /** what the module matched the song to, when it's a module */
     val matchedId: String? = null,
@@ -40,11 +40,7 @@ sealed interface ProviderSwitchState {
     data class Done(val providerId: String) : ProviderSwitchState
 }
 
-/**
- * Moves the playing song to the provider picked in stream info: playback stops, the provider is
- * asked up to [MaxTries] times within [DeadlineMs], and only when it answers is the song reloaded
- * from it, at the same spot. When it never answers, the song carries on where it was.
- */
+/** moves the playing song to a picked provider: stop, ask up to 20 times in a minute, reload at the same spot or carry on */
 // the service's scope is read on every switch: it's replaced when the service comes back after being stopped
 class ProviderSwitch(private val scope: () -> CoroutineScope, private val host: Host) {
 
