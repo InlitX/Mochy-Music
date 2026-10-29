@@ -385,12 +385,9 @@ fun NavGraphBuilder.navigationBuilder(
         com.mochyy.mochymusic.ui.screens.settings.MochySettingsScreen(navController = navController)
     }
 
+    // app behaviour kept general's route, so old links and search results still land on it
     composable("general_settings") {
-        com.mochyy.mochymusic.ui.screens.settings.GeneralSettingsScreen(navController = navController)
-    }
-
-    composable("appearance_settings") {
-        com.mochyy.mochymusic.ui.screens.settings.AppearanceSettingsScreen(navController = navController)
+        com.mochyy.mochymusic.ui.screens.settings.AppBehaviourSettingsScreen(navController = navController)
     }
 
     composable(com.mochyy.mochymusic.ui.screens.settings.integrations.IntegrationsRoute) {
@@ -409,10 +406,6 @@ fun NavGraphBuilder.navigationBuilder(
             .find { it.name == entry.arguments?.getString("site") }
             ?: com.mochyy.mochymusic.scrobble.ScrobbleSite.LASTFM
         com.mochyy.mochymusic.ui.screens.settings.integrations.ScrobbleServiceScreen(navController = navController, site = site)
-    }
-
-    composable("playback_settings") {
-        com.mochyy.mochymusic.ui.screens.settings.PlaybackSettingsScreen(navController = navController)
     }
 
     composable("crossmix_settings") {

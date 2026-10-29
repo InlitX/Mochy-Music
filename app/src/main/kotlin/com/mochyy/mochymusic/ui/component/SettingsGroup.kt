@@ -204,6 +204,11 @@ private fun SettingsItemRow(
     item: SettingsItem,
     style: SettingsGroupStyle,
 ) {
+    // app behaviour can hide the line under each title, holding the row still shows it
+    val (hideDescriptions) = com.mochyy.mochymusic.utils.rememberPreference(
+        com.mochyy.mochymusic.constants.HideSettingsDescriptionsKey,
+        defaultValue = false,
+    )
     // A row arrived at from settings search claims the request the first time it composes, flashes
     // briefly, then clears it - so the highlight fires once rather than every time the page opens.
     val key = item.highlightKey
@@ -328,7 +333,7 @@ private fun SettingsItemRow(
                 MaterialTheme.colorScheme.onSurfaceVariant
             }
 
-            if (item.descriptionText != null) {
+            if (item.descriptionText != null && !hideDescriptions) {
                 Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = item.descriptionText,
@@ -337,7 +342,7 @@ private fun SettingsItemRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-            } else {
+            } else if (item.descriptionText == null) {
                 item.description?.let { desc ->
                     Spacer(modifier = Modifier.height(2.dp))
                     ProvideTextStyle(

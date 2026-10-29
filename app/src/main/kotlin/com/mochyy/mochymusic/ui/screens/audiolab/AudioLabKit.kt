@@ -144,6 +144,10 @@ fun LabToggleRow(
     enabled: Boolean = true,
     leadingDot: Boolean = false,
 ) {
+    val (hideDescriptions) = com.mochyy.mochymusic.utils.rememberPreference(
+        com.mochyy.mochymusic.constants.HideSettingsDescriptionsKey,
+        defaultValue = false,
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -170,7 +174,7 @@ fun LabToggleRow(
                 fontSize = 15.sp,
                 color = if (enabled) LabColors.Primary else LabColors.Faint,
             )
-            if (subtitle != null) {
+            if (subtitle != null && !hideDescriptions) {
                 Text(
                     text = subtitle,
                     fontFamily = InterFontFamily,

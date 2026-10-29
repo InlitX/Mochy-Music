@@ -125,8 +125,6 @@ private val RouteOwners: List<Pair<String, String>> = listOf(
     "playback_diagnostics" to "settings",
     "mochy_settings" to "settings",
     "general_settings" to "settings",
-    "appearance_settings" to "settings",
-    "playback_settings" to "settings",
     "experimental_settings" to "settings",
     "developer_space" to "settings",
     "developer_playground" to "settings",

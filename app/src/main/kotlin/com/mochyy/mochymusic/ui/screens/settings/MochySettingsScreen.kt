@@ -75,28 +75,49 @@ private data class SettingsEntry(
 }
 
 private val SettingsIndex = listOf(
-    // Appearance
-    SettingsEntry("Customize player", "Appearance", "appearance_settings", "player customise cover style"),
-    SettingsEntry("Customize lyrics tab", "Appearance", "appearance_settings", "lyrics letter typography font"),
-    SettingsEntry("Lyrics Shader", "Appearance", "appearance_settings", "lyrics glow wave letters bloom shader"),
-    SettingsEntry("High quality bloom", "Appearance", "appearance_settings", "lyrics bloom quality extra soft pass"),
-    SettingsEntry("Always enable Youtube background", "Appearance", "appearance_settings", "youtube video background canvas"),
-    SettingsEntry("Enable animated canvas", "Appearance", "appearance_settings", "canvas animation spotify looping visual"),
-    SettingsEntry("Audio format badge", "Appearance", "appearance_settings", "format codec opus aac flac badge title quality"),
-    SettingsEntry("Show sample rate", "Appearance", "appearance_settings", "sample rate khz hz format badge quality"),
-    SettingsEntry("Blur", "Appearance", "appearance_settings", "blur glass performance lag strength"),
-    SettingsEntry("Animation", "Appearance", "appearance_settings", "element blur animator transition animation"),
-
     // Customisation
-    SettingsEntry("Customisation", "Customisation", "customisation_settings", "customize cover rounding playlist player home styles gesture swipe"),
+    SettingsEntry("Customisation", "Customisation", "customisation_settings", "customize cover rounding playlist player home styles gesture swipe blur animation lyrics"),
     SettingsEntry("Cover rounding", "Customisation", "customisation_settings", "square rounded corner radius px thumbnail art"),
     SettingsEntry("Playlist styles", "Customisation", "customisation_settings", "flow classic minimal header layout"),
-    SettingsEntry("Player styles", "Customisation", "customisation_settings", "flagship turntable ipod poster timeline lyrics studio"),
+    SettingsEntry("Player styles", "Customisation", "customisation_settings", "flagship turntable ipod poster timeline lyrics studio customize player cover"),
     SettingsEntry("Home styles", "Customisation", "customisation_settings", "mochyy listen now hop in hero layout grid"),
+    SettingsEntry("Blur", "Customisation", "customisation_settings", "blur glass frosted performance lag"),
+    SettingsEntry("Progressive blur", "Customisation", "customisation_settings", "gradient fade top bar hairline flat"),
+    SettingsEntry("Blur quality", "Customisation", "customisation_settings", "low high glass performance"),
+    SettingsEntry("Blur strength", "Customisation", "customisation_settings", "radius px glass amount"),
+    SettingsEntry("Element blur", "Customisation", "customisation_settings", "lyrics line blur cover zoom title morph menu page wipe"),
+    SettingsEntry("Animation", "Customisation", "customisation_settings", "transition motion off reduce disable"),
+    SettingsEntry("Animation speed", "Customisation", "customisation_settings", "faster slower duration scale motion"),
+    SettingsEntry("Lyrics animation", "Customisation", "customisation_settings", "lyrics style 1 2 boring plain shader glow wave agsl letters"),
+    SettingsEntry("Top Bar on player", "Customisation", "customisation_settings", "status bar hide clock battery player top"),
     SettingsEntry("Gesture", "Customisation", "customisation_settings", "swipe slide song list left right queue library download play next playlist details"),
     SettingsEntry("Swipe right", "Customisation", "customisation_settings", "slide song list queue library download play next playlist details action"),
     SettingsEntry("Swipe left", "Customisation", "customisation_settings", "slide song list queue library download play next playlist details action"),
     SettingsEntry("Swipe down anywhere to close", "Customisation", "customisation_settings", "player close dismiss swipe down pull gesture anywhere"),
+
+    // App behaviour
+    SettingsEntry("App behaviour", "App behaviour", "general_settings", "general playback player behaviour"),
+    SettingsEntry("Disable App Updates notice", "App behaviour", "general_settings", "update popup notification updater"),
+    SettingsEntry("Offline mode", "App behaviour", "general_settings", "play downloaded cache offline"),
+    SettingsEntry("Keep playing even when closed", "App behaviour", "general_settings", "background close stop playback"),
+    SettingsEntry("Save Player's last state", "App behaviour", "general_settings", "persistent queue restore track state"),
+    SettingsEntry("Local song auto metadata", "App behaviour", "general_settings", "match tags id3 covers lyrics"),
+    SettingsEntry("Disable auto-playing YouTube video", "App behaviour", "general_settings", "music video live autoplay cover"),
+    SettingsEntry("Translations from YouTube", "App behaviour", "general_settings", "captions translate lyrics language"),
+    SettingsEntry("Sync lyrics to music videos", "App behaviour", "general_settings", "lyrics video timing intro skit"),
+    SettingsEntry("Don't skip on failure", "App behaviour", "general_settings", "fail stream error stay skip"),
+    SettingsEntry("Skip timeout failure", "App behaviour", "general_settings", "skip timeout seconds failed stream"),
+    SettingsEntry("Skip Silence", "App behaviour", "general_settings", "silence trim gap interval"),
+    SettingsEntry("Audio format badge", "App behaviour", "general_settings", "format codec opus aac flac badge title quality"),
+    SettingsEntry("Show sample rate", "App behaviour", "general_settings", "sample rate khz hz format badge quality"),
+    SettingsEntry("Always enable Youtube background", "App behaviour", "general_settings", "youtube video background canvas"),
+    SettingsEntry("Enable animated canvas", "App behaviour", "general_settings", "canvas animation spotify looping visual"),
+    SettingsEntry("High quality bloom", "App behaviour", "general_settings", "lyrics bloom quality extra soft pass glow"),
+    SettingsEntry("Prefer USB DAC", "App behaviour", "general_settings", "usb dac headphones output external audio"),
+    SettingsEntry("USB DAC passthrough", "App behaviour", "general_settings", "bit perfect bitperfect passthrough sample rate dac usb resample"),
+    SettingsEntry("Hi-res output", "App behaviour", "general_settings", "hi res 24 bit float precision lossless flac quality"),
+    SettingsEntry("Hi-fi resampler", "App behaviour", "general_settings", "resample sample rate 44.1 48 khz sinc src quality filter"),
+    SettingsEntry("Disable description on settings", "App behaviour", "general_settings", "hide subtitle text rows titles only"),
 
     // Audio Lab
     SettingsEntry("Audio Lab", "Audio Lab", "audio_lab", "sound effects equalizer fx quality"),
@@ -123,21 +144,6 @@ private val SettingsIndex = listOf(
     SettingsEntry("Libre.fm", "Integrations", scrobbleServiceRoute(ScrobbleSite.LIBREFM), "librefm scrobble scrobbling history stats account sign in"),
     SettingsEntry("Now Playing", "Integrations", scrobbleServiceRoute(ScrobbleSite.LASTFM), "scrobble now playing status profile lastfm librefm"),
     SettingsEntry("Send likes", "Integrations", scrobbleServiceRoute(ScrobbleSite.LASTFM), "love loved songs lastfm librefm scrobble"),
-
-    // Playback
-    SettingsEntry("Keep playing even when closed", "Playback", "playback_settings", "background close stop playback"),
-    SettingsEntry("Save Player's last state", "Playback", "playback_settings", "persistent queue restore track state"),
-    SettingsEntry("Skip Silence", "Playback", "playback_settings", "silence trim gap interval"),
-    SettingsEntry("Prefer USB DAC", "Playback", "playback_settings", "usb dac headphones output external audio"),
-    SettingsEntry("USB DAC passthrough", "Playback", "playback_settings", "bit perfect bitperfect passthrough sample rate dac usb resample"),
-    SettingsEntry("Hi-res output", "Playback", "playback_settings", "hi res 24 bit float precision lossless flac quality"),
-    SettingsEntry("Hi-fi resampler", "Playback", "playback_settings", "resample sample rate 44.1 48 khz sinc src quality filter"),
-
-    // General
-    SettingsEntry("Import Data", "General", "general_settings", "backup restore transfer library spotify"),
-    SettingsEntry("Edit profile", "General", "general_settings", "username avatar account"),
-    SettingsEntry("Offline mode", "General", "general_settings", "play downloaded cache offline"),
-    SettingsEntry("Local song auto metadata", "General", "general_settings", "match tags id3 covers lyrics"),
 
     // Storage
     SettingsEntry("Storage", "Storage", "storage_settings", "space disk size cache downloads clear free junk delete"),
@@ -166,11 +172,11 @@ private data class RecommendedSetting(
 private val RecommendedOptions = listOf(
     RecommendedSetting(
         title = "Configure Blur settings",
-        breadcrumb = "settings>appearance",
+        breadcrumb = "settings>customisation",
         iconRes = R.drawable.contrast,
         onClick = { nav ->
             SettingsHighlight.pending = "Blur"
-            nav.navigate("appearance_settings")
+            nav.navigate("customisation_settings")
         }
     ),
     RecommendedSetting(
@@ -421,22 +427,17 @@ fun MochySettingsScreen(navController: NavController) {
                             .padding(horizontal = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // in the order of the design: sound first, then how the app acts and looks, then the rest
                         CategoryBubble(
-                            title = "General",
+                            title = "Audio Lab",
+                            iconRes = R.drawable.equalizer,
+                            onClick = { navController.navigate("audio_lab") }
+                        )
+
+                        CategoryBubble(
+                            title = "App Behaviour",
                             iconRes = R.drawable.settings,
                             onClick = { navController.navigate("general_settings") }
-                        )
-
-                        CategoryBubble(
-                            title = "Appearance",
-                            iconRes = R.drawable.contrast,
-                            onClick = { navController.navigate("appearance_settings") }
-                        )
-
-                        CategoryBubble(
-                            title = "Playback",
-                            iconRes = R.drawable.play,
-                            onClick = { navController.navigate("playback_settings") }
                         )
 
                         CategoryBubble(
@@ -452,21 +453,15 @@ fun MochySettingsScreen(navController: NavController) {
                         )
 
                         CategoryBubble(
-                            title = "Audio Lab",
-                            iconRes = R.drawable.equalizer,
-                            onClick = { navController.navigate("audio_lab") }
+                            title = "Integrations",
+                            iconRes = R.drawable.integration,
+                            onClick = { navController.navigate(IntegrationsRoute) }
                         )
 
                         CategoryBubble(
                             title = "Modules",
                             iconRes = R.drawable.library_add,
                             onClick = { navController.navigate("modules") }
-                        )
-
-                        CategoryBubble(
-                            title = "Integrations",
-                            iconRes = R.drawable.integration,
-                            onClick = { navController.navigate(IntegrationsRoute) }
                         )
                     }
                 }
