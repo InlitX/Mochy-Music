@@ -380,5 +380,7 @@ data class SettingsItem(
     val isSubOption: Boolean = false,
     /** Identifier used by settings search to flash this row when the user arrives from a result. */
     val highlightKey: String? = null,
+    // the title as shown in the app's language, so a page's own search finds it in any language
+    val searchText: String? = null,
     val onClick: (() -> Unit)? = null
 )

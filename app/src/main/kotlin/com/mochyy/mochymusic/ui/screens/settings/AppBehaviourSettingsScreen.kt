@@ -88,17 +88,17 @@ fun AppBehaviourSettingsScreen(navController: NavController) {
     var query by remember { mutableStateOf("") }
 
     SubSettingsScaffold(
-        title = "App behaviour",
+        title = stringResource(R.string.settings_app_behaviour),
         onBack = { navController.navigateUp() },
         searchBar = { SubSettingsSearchBar(query = query, onQueryChange = { query = it }) },
     ) {
-        Section("Generally app settings", generalItems().matching(query))
-        Section("Local settings", localItems().matching(query))
-        Section("Player behaviour", playerBehaviourItems().matching(query))
-        Section("On the player", playerLookItems().matching(query))
-        Section("Output", outputItems().matching(query))
-        Section("Other", otherItems().matching(query))
-        Section("Related", relatedItems(navController).matching(query))
+        Section(stringResource(R.string.general_app_settings), generalItems().matching(query))
+        Section(stringResource(R.string.settings_local_section), localItems().matching(query))
+        Section(stringResource(R.string.settings_player_behaviour), playerBehaviourItems().matching(query))
+        Section(stringResource(R.string.settings_on_the_player), playerLookItems().matching(query))
+        Section(stringResource(R.string.playback_output), outputItems().matching(query))
+        Section(stringResource(R.string.settings_other), otherItems().matching(query))
+        Section(stringResource(R.string.settings_related), relatedItems(navController).matching(query))
         Spacer(Modifier.height(140.dp))
     }
 }
@@ -123,6 +123,7 @@ private fun List<SettingsItem>.matching(query: String): List<SettingsItem> {
     if (query.isBlank()) return this
     return filter {
         it.highlightKey?.contains(query, ignoreCase = true) == true ||
+            it.searchText?.contains(query, ignoreCase = true) == true ||
             it.descriptionText?.contains(query, ignoreCase = true) == true ||
             it.detail?.contains(query, ignoreCase = true) == true
     }
@@ -143,31 +144,35 @@ private fun generalItems(): List<SettingsItem> {
     return listOf(
         languageItem(),
         switchItem(
-            title = "Disable App Updates notice",
-            description = "No popup will appear except if you open the updater",
+            key = "Disable App Updates notice",
+            title = stringResource(R.string.settings_updates_notice),
+            description = stringResource(R.string.settings_updates_notice_desc),
             icon = painterResource(R.drawable.update),
             checked = noticeHidden,
             onCheckedChange = setNoticeHidden,
         ),
         switchItem(
-            title = "Offline mode",
-            description = "Play downloaded music only",
+            key = "Offline mode",
+            title = stringResource(R.string.settings_offline_mode),
+            description = stringResource(R.string.settings_offline_mode_desc),
             icon = painterResource(R.drawable.download),
             checked = offlineMode,
             onCheckedChange = onOfflineModeChange,
         ),
         switchItem(
-            title = "Keep playing even when closed",
-            description = "Keep playing after the app is cleared",
-            detail = "Continue playback in background when app is cleared from recents",
+            key = "Keep playing even when closed",
+            title = stringResource(R.string.playback_keep_playing),
+            description = stringResource(R.string.playback_keep_playing_desc),
+            detail = stringResource(R.string.playback_keep_playing_detail),
             icon = painterResource(R.drawable.clear_all),
             checked = !stopOnTaskRemoved,
             onCheckedChange = { onStopOnTaskRemoved(!it) },
         ),
         switchItem(
-            title = "Save Player's last state",
-            description = "Off clears played tracks on close",
-            detail = "Turning this off removes the songs you already played when you close the app",
+            key = "Save Player's last state",
+            title = stringResource(R.string.playback_save_state),
+            description = stringResource(R.string.playback_save_state_desc),
+            detail = stringResource(R.string.playback_save_state_detail),
             icon = painterResource(R.drawable.cached),
             checked = persistentQueue,
             onCheckedChange = onPersistentQueueChange,
@@ -209,6 +214,7 @@ private fun languageItem(): SettingsItem {
         title = { Text(stringResource(R.string.app_language)) },
         highlightKey = "App language",
         descriptionText = languageName,
+        searchText = stringResource(R.string.app_language),
         icon = painterResource(R.drawable.translate),
         iconShape = CircleShape,
         enabled = activity != null,
@@ -221,8 +227,9 @@ private fun localItems(): List<SettingsItem> {
     val (autoMetadata, onAutoMetadataChange) = rememberPreference(LocalSongAutoMetadataKey, defaultValue = true)
     return listOf(
         switchItem(
-            title = "Local song auto metadata",
-            description = "Automatically match local tracks with online metadata",
+            key = "Local song auto metadata",
+            title = stringResource(R.string.settings_local_auto_metadata),
+            description = stringResource(R.string.settings_local_auto_metadata_desc),
             icon = painterResource(R.drawable.cached),
             checked = autoMetadata,
             onCheckedChange = onAutoMetadataChange,
@@ -240,39 +247,44 @@ private fun playerBehaviourItems(): List<SettingsItem> {
     val (skipSilence, onSkipSilenceChange) = rememberPreference(SkipSilenceKey, defaultValue = false)
     return listOf(
         switchItem(
-            title = "Disable auto-playing YouTube video",
-            description = "Music videos and live shows play with their cover instead of the video",
+            key = "Disable auto-playing YouTube video",
+            title = stringResource(R.string.settings_disable_video_autoplay),
+            description = stringResource(R.string.settings_disable_video_autoplay_desc),
             icon = painterResource(R.drawable.slow_motion_video),
             checked = disableVideoAutoplay,
             onCheckedChange = onDisableVideoAutoplayChange,
         ),
         switchItem(
-            title = "Translations from YouTube",
-            description = "Use a video's own translated captions when you translate lyrics",
-            detail = "When the song's video has captions someone made in your language, they're used instead of a machine translation",
+            key = "Translations from YouTube",
+            title = stringResource(R.string.settings_youtube_translations),
+            description = stringResource(R.string.settings_youtube_translations_desc),
+            detail = stringResource(R.string.settings_youtube_translations_detail),
             icon = painterResource(R.drawable.translate),
             checked = youtubeTranslations,
             onCheckedChange = onYoutubeTranslationsChange,
         ),
         switchItem(
-            title = "Sync lyrics to music videos",
-            description = "Line lyrics up with the video's intro, skits and cuts",
-            detail = "Lyrics are usually timed to the album version. When a music video plays, the app listens to it next to the album version and moves the lyrics to match",
+            key = "Sync lyrics to music videos",
+            title = stringResource(R.string.settings_sync_lyrics_video),
+            description = stringResource(R.string.settings_sync_lyrics_video_desc),
+            detail = stringResource(R.string.settings_sync_lyrics_video_detail),
             icon = painterResource(R.drawable.lyrics),
             checked = syncLyricsToVideo,
             onCheckedChange = onSyncLyricsToVideoChange,
         ),
         switchItem(
-            title = "Don't skip on failure",
-            description = "Stay on a failed stream instead of skipping",
-            detail = "When a stream fails, stay on it instead of skipping to the next track after a few seconds",
+            key = "Don't skip on failure",
+            title = stringResource(R.string.settings_dont_skip_failure),
+            description = stringResource(R.string.settings_dont_skip_failure_desc),
+            detail = stringResource(R.string.settings_dont_skip_failure_detail),
             icon = painterResource(R.drawable.skip_next),
             checked = dontSkipOnFailure,
             onCheckedChange = onDontSkipOnFailureChange,
         ),
         SettingsItem(
-            title = { ValueTitle("Skip timeout", "${failureTimeout}s") },
+            title = { ValueTitle(stringResource(R.string.settings_skip_timeout), stringResource(R.string.settings_seconds_short, failureTimeout)) },
             highlightKey = "Skip timeout failure",
+            searchText = stringResource(R.string.settings_skip_timeout),
             description = {
                 DefaultPlayerSeekBarSlider(
                     value = failureTimeout.toFloat(),
@@ -288,8 +300,9 @@ private fun playerBehaviourItems(): List<SettingsItem> {
             isSubOption = true,
         ),
         switchItem(
-            title = "Skip Silence",
-            description = "Jump over the quiet gaps in songs",
+            key = "Skip Silence",
+            title = stringResource(R.string.playback_skip_silence),
+            description = stringResource(R.string.playback_skip_silence_desc),
             icon = painterResource(R.drawable.skip_next),
             checked = skipSilence,
             onCheckedChange = onSkipSilenceChange,
@@ -309,45 +322,51 @@ private fun playerLookItems(): List<SettingsItem> {
     val (lyricsStyle) = rememberEnumPreference(LyricsMotionStyleKey, defaultValue = LyricsMotionStyle.MOTION)
     return listOf(
         switchItem(
-            title = "Audio format badge",
-            description = "What the song is playing as, beside its title",
+            key = "Audio format badge",
+            title = stringResource(R.string.appearance_format_badge),
+            description = stringResource(R.string.appearance_format_badge_desc),
             icon = painterResource(R.drawable.graphic_eq),
             checked = formatBadge,
             onCheckedChange = onFormatBadgeChange,
         ),
         switchItem(
-            title = "Show sample rate",
-            description = "The stream's sample rate after its format",
+            key = "Show sample rate",
+            title = stringResource(R.string.appearance_sample_rate),
+            description = stringResource(R.string.appearance_sample_rate_desc),
             icon = painterResource(R.drawable.speed),
             checked = formatSampleRate,
             onCheckedChange = onFormatSampleRateChange,
             subOptionOf = formatBadge,
         ),
         switchItem(
-            title = "Always enable Youtube background",
-            description = "Stream video background on player when available",
+            key = "Always enable Youtube background",
+            title = stringResource(R.string.appearance_youtube_background),
+            description = stringResource(R.string.appearance_youtube_background_desc),
             icon = painterResource(R.drawable.slow_motion_video),
             checked = playVideoBackground,
             onCheckedChange = onPlayVideoBackgroundChange,
         ),
         switchItem(
-            title = "Timestamp matching",
-            description = "Based on subtitle",
+            key = "Timestamp matching",
+            title = stringResource(R.string.appearance_timestamp_matching),
+            description = stringResource(R.string.appearance_timestamp_matching_desc),
             icon = painterResource(R.drawable.lyrics),
             checked = lyricsSync,
             onCheckedChange = onLyricsSyncChange,
             subOptionOf = playVideoBackground,
         ),
         switchItem(
-            title = "Enable animated canvas",
-            description = "Looping visuals for supported tracks",
+            key = "Enable animated canvas",
+            title = stringResource(R.string.appearance_canvas),
+            description = stringResource(R.string.appearance_canvas_desc),
             icon = painterResource(R.drawable.sparks),
             checked = canvasEnabled,
             onCheckedChange = onCanvasEnabledChange,
         ),
         switchItem(
-            title = "Canvas on Wi-Fi only",
-            description = "Skip mobile data",
+            key = "Canvas on Wi-Fi only",
+            title = stringResource(R.string.appearance_canvas_wifi),
+            description = stringResource(R.string.appearance_canvas_wifi_desc),
             icon = painterResource(R.drawable.wifi_proxy),
             checked = canvasWifiOnly,
             onCheckedChange = onCanvasWifiOnlyChange,
@@ -355,8 +374,9 @@ private fun playerLookItems(): List<SettingsItem> {
         ),
         // only the shaded lyric styles have a bloom to make softer
         switchItem(
-            title = "High quality bloom",
-            description = "Extra soft bloom pass on the lyrics glow",
+            key = "High quality bloom",
+            title = stringResource(R.string.appearance_bloom),
+            description = stringResource(R.string.appearance_bloom_desc),
             icon = painterResource(R.drawable.sparks),
             checked = highBloom,
             onCheckedChange = onHighBloomChange,
@@ -376,34 +396,38 @@ private fun outputItems(): List<SettingsItem> {
     val dacName = devices.firstOrNull { it.kind == AudioOutputs.Kind.USB }?.name?.ifBlank { "USB DAC" }
     return listOfNotNull(
         switchItem(
-            title = "Prefer USB DAC",
-            description = dacName?.let { "$it is plugged in" } ?: "Plays through a USB DAC when one is plugged in",
-            detail = "Sends the music to a plugged-in USB DAC even while Bluetooth or other headphones are connected. Unplug it and the music goes back to where it was.",
+            key = "Prefer USB DAC",
+            title = stringResource(R.string.playback_usb_prefer),
+            description = dacName?.let { stringResource(R.string.playback_usb_connected, it) } ?: stringResource(R.string.playback_usb_prefer_desc),
+            detail = stringResource(R.string.playback_usb_prefer_detail),
             icon = rememberVectorPainter(Icons.Rounded.Usb),
             checked = preferUsbDac,
             onCheckedChange = onPreferUsbDacChange,
         ),
         // the dac's own mixer settings only exist on android 14 and up, so older phones don't see the row at all
         switchItem(
-            title = "USB DAC passthrough",
-            description = "Each song at its own rate, bit-perfect when nothing changes the sound",
-            detail = "Asks the DAC to run at the song's own sample rate instead of Android's 48 kHz, so nothing is resampled. When the equalizer and effects are off and the volume is at 100%, the song goes out bit-perfect. While it's on, your phone's volume buttons may set the DAC's own volume.",
+            key = "USB DAC passthrough",
+            title = stringResource(R.string.playback_usb_passthrough),
+            description = stringResource(R.string.playback_usb_passthrough_desc),
+            detail = stringResource(R.string.playback_usb_passthrough_detail),
             icon = rememberVectorPainter(Icons.Rounded.GraphicEq),
             checked = usbPassthrough,
             onCheckedChange = onUsbPassthroughChange,
         ).takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE },
         switchItem(
-            title = "Hi-res output",
-            description = "Keeps 24-bit songs at full detail as 32-bit float",
-            detail = "Sends hi-res songs to the speaker as 32-bit float instead of cutting them down to 16-bit. It only kicks in while the equalizer, Audio FX, Crossmix, layered fades, haptics, skip silence and speed changes are all off, because those work in 16-bit. Turn any of them on and the song carries on in 16-bit with every effect.",
+            key = "Hi-res output",
+            title = stringResource(R.string.playback_hires),
+            description = stringResource(R.string.playback_hires_desc),
+            detail = stringResource(R.string.playback_hires_detail),
             icon = rememberVectorPainter(Icons.Rounded.HighQuality),
             checked = hiResOutput,
             onCheckedChange = onHiResOutputChange,
         ),
         switchItem(
-            title = "Hi-fi resampler",
-            description = "Mochy's own filter turns songs to your speaker's rate",
-            detail = "Most songs are 44.1 kHz and your phone plays at 48 kHz, so something has to convert them. With this on, Mochy does it with its own high-quality filter (flat to 20 kHz, 120 dB of rejection, in 32-bit float) instead of leaving it to the phone. It works on the speaker and the headphone jack. Bluetooth and USB are left alone: Bluetooth's rate can't be read reliably, and USB has passthrough. It uses a little more battery.",
+            key = "Hi-fi resampler",
+            title = stringResource(R.string.playback_hifi),
+            description = stringResource(R.string.playback_hifi_desc),
+            detail = stringResource(R.string.playback_hifi_detail),
             icon = rememberVectorPainter(Icons.Rounded.Waves),
             checked = hiFiResampler,
             onCheckedChange = onHiFiResamplerChange,
@@ -416,8 +440,9 @@ private fun otherItems(): List<SettingsItem> {
     val (hideDescriptions, onHideDescriptions) = rememberPreference(HideSettingsDescriptionsKey, defaultValue = false)
     return listOf(
         switchItem(
-            title = "Disable description on settings",
-            description = "Only the titles show, hold a setting to read what it does",
+            key = "Disable description on settings",
+            title = stringResource(R.string.settings_hide_descriptions),
+            description = stringResource(R.string.settings_hide_descriptions_desc),
             icon = painterResource(R.drawable.info),
             checked = hideDescriptions,
             onCheckedChange = onHideDescriptions,
@@ -429,9 +454,10 @@ private fun otherItems(): List<SettingsItem> {
 @Composable
 private fun relatedItems(navController: NavController): List<SettingsItem> = listOf(
     SettingsItem(
-        title = { Text("Hide Top Bar") },
+        title = { Text(stringResource(R.string.settings_hide_top_bar)) },
         highlightKey = "Hide Top Bar status bar player",
-        descriptionText = "The phone's status bar over the player, in Customize",
+        descriptionText = stringResource(R.string.settings_hide_top_bar_desc),
+        searchText = stringResource(R.string.settings_hide_top_bar),
         icon = painterResource(R.drawable.tune),
         iconShape = CircleShape,
         onClick = {
@@ -471,8 +497,9 @@ private fun ValueTitle(title: String, value: String) {
     }
 }
 
-// one switch row; subOptionOf tucks it under its parent and only shows it while the parent is on
+// one switch row: key is the english name search results point at, subOptionOf tucks it under a parent that's on
 private fun switchItem(
+    key: String,
     title: String,
     description: String,
     icon: androidx.compose.ui.graphics.painter.Painter,
@@ -483,7 +510,8 @@ private fun switchItem(
     visible: Boolean = true,
 ) = SettingsItem(
     title = { Text(title) },
-    highlightKey = title,
+    highlightKey = key,
+    searchText = title,
     descriptionText = description,
     detail = detail,
     icon = icon,

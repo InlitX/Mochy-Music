@@ -110,8 +110,22 @@ private val LocalizedSettingsTitles = mapOf(
     "Audio Lab" to R.string.settings_audio_lab_category,
     "Modules" to R.string.settings_modules_category,
     "Storage" to R.string.storage,
+    "App behaviour" to R.string.settings_app_behaviour,
+    "Disable description on settings" to R.string.settings_hide_descriptions,
+    "Cover rounding" to R.string.customise_cover_rounding,
+    "Playlist styles" to R.string.customise_playlist_styles,
+    "Player styles" to R.string.customise_player_styles,
+    "Home styles" to R.string.customise_home_styles,
+    "Element blur" to R.string.customise_element_blur,
+    "Animation speed" to R.string.customise_animation_speed,
+    "Top Bar on player" to R.string.customise_top_bar,
+    "Gesture" to R.string.customise_gesture,
+    "Swipe right" to R.string.customise_swipe_right,
+    "Swipe left" to R.string.customise_swipe_left,
+    "Swipe down anywhere to close" to R.string.customise_swipe_down_anywhere,
 )
 private val LocalizedSettingsPages = mapOf(
+    "App behaviour" to R.string.settings_app_behaviour,
     "Customisation" to R.string.settings_customisation_category,
     "Storage" to R.string.storage,
     "Audio Lab" to R.string.settings_audio_lab_category,
@@ -209,16 +223,16 @@ private val SettingsIndex = listOf(
 )
 
 private data class RecommendedSetting(
-    val title: String,
-    val breadcrumb: String,
+    val titleRes: Int,
+    val breadcrumbRes: Int,
     val iconRes: Int,
     val onClick: (NavController) -> Unit,
 )
 
 private val RecommendedOptions = listOf(
     RecommendedSetting(
-        title = "Configure Blur settings",
-        breadcrumb = "settings>customisation",
+        titleRes = R.string.settings_rec_blur,
+        breadcrumbRes = R.string.settings_crumb_customisation,
         iconRes = R.drawable.contrast,
         onClick = { nav ->
             SettingsHighlight.pending = "Blur"
@@ -226,16 +240,16 @@ private val RecommendedOptions = listOf(
         }
     ),
     RecommendedSetting(
-        title = "Configure Crossfade settings",
-        breadcrumb = "settings>audio lab",
+        titleRes = R.string.settings_rec_crossfade,
+        breadcrumbRes = R.string.settings_crumb_audio_lab,
         iconRes = R.drawable.linear_scale,
         onClick = { nav ->
             nav.navigate("crossmix_settings")
         }
     ),
     RecommendedSetting(
-        title = "Configure Equalizer settings",
-        breadcrumb = "settings>audio lab",
+        titleRes = R.string.settings_rec_equalizer,
+        breadcrumbRes = R.string.settings_crumb_audio_lab,
         iconRes = R.drawable.equalizer,
         onClick = { nav ->
             nav.navigate("equalizer")
@@ -439,14 +453,14 @@ fun MochySettingsScreen(navController: NavController) {
 
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
-                                        text = recommendedItem.title,
+                                        text = stringResource(recommendedItem.titleRes),
                                         fontFamily = InterFontFamily,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
                                         color = Color.White
                                     )
                                     Text(
-                                        text = recommendedItem.breadcrumb,
+                                        text = stringResource(recommendedItem.breadcrumbRes),
                                         fontFamily = InterFontFamily,
                                         fontSize = 13.sp,
                                         color = Color.White.copy(alpha = 0.55f)
@@ -484,7 +498,7 @@ fun MochySettingsScreen(navController: NavController) {
                         )
 
                         CategoryBubble(
-                            title = "App Behaviour",
+                            title = stringResource(R.string.settings_app_behaviour),
                             iconRes = R.drawable.settings,
                             onClick = { navController.navigate("general_settings") }
                         )

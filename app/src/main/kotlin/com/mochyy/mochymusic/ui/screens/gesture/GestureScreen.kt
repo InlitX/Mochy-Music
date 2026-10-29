@@ -35,6 +35,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -105,23 +107,23 @@ private val PageTitleStyle = TextStyle(
 fun GestureScreen(navController: NavController) = CustomisationScreen(navController)
 
 // the customize page's parts in order, with what a search or a settings result can find each one by
-private enum class CustomiseSection(val keys: List<String>, val words: String) {
-    ROUNDING(listOf("Cover rounding"), "cover rounding corner radius square rounded art"),
-    PLAYLIST(listOf("Playlist styles"), "playlist styles flow classic minimal header"),
-    PLAYER(listOf("Player styles"), "player styles flagship turntable ipod poster timeline lyrics editor customize"),
-    HOME(listOf("Home styles"), "home styles mochyy listen now hop in hero"),
-    BLUR(listOf("Blur", "Progressive blur", "Blur quality", "Blur strength"), "blur glass frosted progressive flat quality low high strength px"),
-    ELEMENT_BLUR(listOf("Element blur"), "element blur lyrics lines cover zoom titles menus page swipes"),
-    ANIMATION(listOf("Animation", "Animation speed"), "animation speed motion transitions off faster slower"),
-    LYRICS(listOf("Lyrics animation"), "lyrics animation style 1 2 boring plain shader glow wave"),
-    TOP_BAR(listOf(TopBarHighlightKey), "top bar status bar player clock battery icons hide"),
-    GESTURE(listOf("Gesture", "Swipe right", "Swipe left", "Swipe down anywhere to close"), "gesture swipe left right slide songs player close down");
+private enum class CustomiseSection(@StringRes val titleRes: Int, val keys: List<String>, val words: String) {
+    ROUNDING(R.string.customise_cover_rounding, listOf("Cover rounding"), "cover rounding corner radius square rounded art"),
+    PLAYLIST(R.string.customise_playlist_styles, listOf("Playlist styles"), "playlist styles flow classic minimal header"),
+    PLAYER(R.string.customise_player_styles, listOf("Player styles"), "player styles flagship turntable ipod poster timeline lyrics editor customize"),
+    HOME(R.string.customise_home_styles, listOf("Home styles"), "home styles mochyy listen now hop in hero"),
+    BLUR(R.string.appearance_blur, listOf("Blur", "Progressive blur", "Blur quality", "Blur strength"), "blur glass frosted progressive flat quality low high strength px"),
+    ELEMENT_BLUR(R.string.customise_element_blur, listOf("Element blur"), "element blur lyrics lines cover zoom titles menus page swipes"),
+    ANIMATION(R.string.appearance_animation, listOf("Animation", "Animation speed"), "animation speed motion transitions off faster slower"),
+    LYRICS(R.string.appearance_lyrics_animation, listOf("Lyrics animation"), "lyrics animation style 1 2 boring plain shader glow wave"),
+    TOP_BAR(R.string.customise_top_bar, listOf(TopBarHighlightKey), "top bar status bar player clock battery icons hide"),
+    GESTURE(R.string.customise_gesture, listOf("Gesture", "Swipe right", "Swipe left", "Swipe down anywhere to close"), "gesture swipe left right slide songs player close down");
 
-    // every word typed has to show up in the section's own words or its names
-    fun matches(query: String): Boolean {
+    // every word typed has to show up in the section's english words, its names, or its title in the app's language
+    fun matches(query: String, shownTitle: String): Boolean {
         val words = query.trim().lowercase().split(' ').filter { it.isNotBlank() }
         if (words.isEmpty()) return true
-        val haystack = (this.words + " " + keys.joinToString(" ")).lowercase()
+        val haystack = (this.words + " " + keys.joinToString(" ") + " " + shownTitle).lowercase()
         return words.all { it in haystack }
     }
 }
@@ -132,7 +134,8 @@ fun CustomisationScreen(navController: NavController) {
     var query by remember { mutableStateOf("") }
     val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
-    val shown = CustomiseSection.entries.filter { it.matches(query) }
+    val titles = CustomiseSection.entries.associateWith { stringResource(it.titleRes) }
+    val shown = CustomiseSection.entries.filter { it.matches(query, titles.getValue(it)) }
 
     // a plain black page like the mock: back button, the title, the search, then the cards
     Box(
@@ -151,14 +154,14 @@ fun CustomisationScreen(navController: NavController) {
         ) {
             LabBackButton(onBack = { navController.navigateUp() })
             Spacer(Modifier.height(14.dp))
-            Text(text = "Customize", style = PageTitleStyle, color = Color.White)
+            Text(text = stringResource(R.string.customise_title), style = PageTitleStyle, color = Color.White)
             Spacer(Modifier.height(16.dp))
             SubSettingsSearchBar(query = query, onQueryChange = { query = it })
             Spacer(Modifier.height(18.dp))
 
             if (shown.isEmpty()) {
                 Text(
-                    text = "Nothing here matches \"$query\". Try another word.",
+                    text = stringResource(R.string.customise_nothing_matches, query),
                     fontFamily = InterFontFamily,
                     fontSize = 15.sp,
                     color = Color.White.copy(alpha = 0.6f),
@@ -193,7 +196,7 @@ private fun CustomiseSectionContent(section: CustomiseSection) {
             val (coverRadiusPx) = rememberPreference(ThumbnailCornerRadiusKey, defaultValue = 25f)
             val (playlistStyle, onPlaylistStyleChange) = rememberEnumPreference(PlaylistStyleKey, defaultValue = PlaylistStyle.FLOW)
             StylePagerSection(
-                category = "Playlist styles",
+                category = stringResource(R.string.customise_playlist_styles),
                 styles = PlaylistStyle.entries,
                 selected = playlistStyle,
                 nameOf = { it.displayName },
@@ -206,7 +209,7 @@ private fun CustomiseSectionContent(section: CustomiseSection) {
             val (coverRadiusPx) = rememberPreference(ThumbnailCornerRadiusKey, defaultValue = 25f)
             val (homeStyle, onHomeStyleChange) = rememberEnumPreference(HomeStyleKey, defaultValue = HomeStyle.MOCHYY)
             StylePagerSection(
-                category = "Home styles",
+                category = stringResource(R.string.customise_home_styles),
                 styles = HomeStyle.entries,
                 selected = homeStyle,
                 nameOf = { it.displayName },
@@ -230,6 +233,7 @@ private fun PlayerSection() {
     val playerConnection = LocalPlayerConnection.current
     val playerSheetState = LocalPlayerBottomSheetState.current
     val playerStyle by rememberEnumPreference(PlayerStyleKey, defaultValue = PlayerStyle.DEFAULT)
+    val playFirst = stringResource(R.string.customise_play_first)
     PlayerStyleCard(
         selected = playerStyle,
         onOpenEditor = {
@@ -238,7 +242,7 @@ private fun PlayerSection() {
                 playerSheetState?.expandSoft()
                 playerConnection?.requestPlayerStudio()
             } else {
-                Toast.makeText(context, "Play a song first to open player customisation", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, playFirst, Toast.LENGTH_SHORT).show()
             }
         },
     )
@@ -250,7 +254,7 @@ private fun GestureSection() {
     val (left, setLeft) = rememberEnumPreference(SwipeLeftActionKey, defaultValue = DefaultSwipeLeft)
     Column {
         Text(
-            text = "Gesture",
+            text = stringResource(R.string.customise_gesture),
             style = TextStyle(
                 fontFamily = InterFontFamily,
                 fontWeight = FontWeight.Bold,
@@ -261,16 +265,16 @@ private fun GestureSection() {
         )
         Spacer(Modifier.height(14.dp))
         SwipeCard(
-            title = "Swipe right",
-            subtitle = "Slide a song in any list to the right",
+            title = stringResource(R.string.customise_swipe_right),
+            subtitle = stringResource(R.string.customise_swipe_right_desc),
             toRight = true,
             action = right,
             onPick = setRight,
         )
         Spacer(Modifier.height(14.dp))
         SwipeCard(
-            title = "Swipe left",
-            subtitle = "Slide a song in any list to the left",
+            title = stringResource(R.string.customise_swipe_left),
+            subtitle = stringResource(R.string.customise_swipe_left_desc),
             toRight = false,
             action = left,
             onPick = setLeft,
@@ -441,7 +445,7 @@ private fun PlayerGestureCard() {
     val (anywhere, setAnywhere) = rememberPreference(PlayerSwipeDownAnywhereKey, defaultValue = false)
     LabCard(padding = CardPadding) {
         Text(
-            "Player",
+            stringResource(R.string.customise_player_gestures),
             fontFamily = InterFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
@@ -449,7 +453,7 @@ private fun PlayerGestureCard() {
             color = LabColors.Primary,
         )
         Text(
-            "How the open player answers your swipes",
+            stringResource(R.string.customise_player_gestures_desc),
             fontFamily = InterFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = 13.sp,
@@ -458,8 +462,8 @@ private fun PlayerGestureCard() {
         )
         Spacer(Modifier.height(14.dp))
         LabToggleRow(
-            title = "Swipe down anywhere to close",
-            subtitle = "Otherwise only from the top of the player and its cover",
+            title = stringResource(R.string.customise_swipe_down_anywhere),
+            subtitle = stringResource(R.string.customise_swipe_down_anywhere_desc),
             checked = anywhere,
             onCheckedChange = setAnywhere,
         )

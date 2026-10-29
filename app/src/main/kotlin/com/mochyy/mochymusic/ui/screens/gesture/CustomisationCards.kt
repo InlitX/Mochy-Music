@@ -57,7 +57,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.PlayerStyle
+import androidx.compose.ui.res.stringResource
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
@@ -139,7 +141,7 @@ fun CoverRoundingSection(
         ) {
             RoundingSwatch(radiusPx = radiusPx, modifier = Modifier.matchParentSize())
             Text(
-                text = "Cover\nrounding",
+                text = stringResource(R.string.customise_cover_rounding),
                 style = CardLabelStyle,
                 color = Color.White.copy(alpha = 0.9f),
                 modifier = Modifier.padding(start = CardTextInset, top = CardTextInset),
@@ -156,9 +158,9 @@ fun CoverRoundingSection(
         Spacer(Modifier.height(11.dp))
 
         CustomiseSliderCard(
-            title = "customize it",
-            startLabel = "square",
-            endLabel = "more rounded",
+            title = stringResource(R.string.customise_customize_it),
+            startLabel = stringResource(R.string.customise_square),
+            endLabel = stringResource(R.string.customise_more_rounded),
             fraction = radiusPx / MaxCoverRadius,
             onFractionChange = { f ->
                 val next = f * MaxCoverRadius
@@ -330,7 +332,7 @@ fun <T> StylePagerSection(
                 },
             ) { preview(style) }
         }
-        StyleCaption("swipe, then tap one to use it", Modifier.padding(start = CustomisePageMargin))
+        StyleCaption(stringResource(R.string.customise_swipe_caption), Modifier.padding(start = CustomisePageMargin))
     }
 }
 
@@ -343,12 +345,12 @@ fun PlayerStyleCard(
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         StyleCard(
-            category = "Player styles",
+            category = stringResource(R.string.customise_player_styles),
             title = selected.displayName,
             highlighted = false,
             onClick = onOpenEditor,
         ) { PlayerStylePreview(style = selected) }
-        StyleCaption("tap to go into customisation")
+        StyleCaption(stringResource(R.string.customise_player_caption))
     }
 }
 

@@ -46,7 +46,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.AnimationSpeedKey
+import androidx.compose.ui.res.stringResource
 import com.mochyy.mochymusic.constants.BlurQuality
 import com.mochyy.mochymusic.constants.BlurQualityKey
 import com.mochyy.mochymusic.constants.BlurStrengthPxKey
@@ -93,7 +95,7 @@ internal fun BlurSection(modifier: Modifier = Modifier) {
 
     Column(modifier.fillMaxWidth()) {
         EffectCard(
-            title = "Blur",
+            title = stringResource(R.string.appearance_blur),
             checked = blurOn,
             onCheckedChange = { onDisableBlur(!it) },
             preview = { BlurPreview() },
@@ -104,7 +106,7 @@ internal fun BlurSection(modifier: Modifier = Modifier) {
                 modifier = Modifier.graphicsLayer { alpha = if (blurOn) 1f else 0.45f },
             ) {
                 PillSwitchRow(
-                    title = "Progressive blur",
+                    title = stringResource(R.string.appearance_progressive_blur),
                     checked = progressive,
                     onCheckedChange = onProgressive,
                     enabled = blurOn,
@@ -116,10 +118,10 @@ internal fun BlurSection(modifier: Modifier = Modifier) {
                         .background(LabColors.Row)
                         .padding(horizontal = 12.dp, vertical = 9.dp),
                 ) {
-                    Text("Blur quality", style = PillTextStyle, color = Color.White)
+                    Text(stringResource(R.string.appearance_blur_quality), style = PillTextStyle, color = Color.White)
                     Spacer(Modifier.height(7.dp))
                     MiniSegmented(
-                        options = listOf("Low", "High"),
+                        options = listOf(stringResource(R.string.appearance_low), stringResource(R.string.appearance_high)),
                         selectedIndex = if (quality == BlurQuality.LOW) 0 else 1,
                         onSelect = { onQuality(if (it == 0) BlurQuality.LOW else BlurQuality.HIGH) },
                         enabled = blurOn,
@@ -129,10 +131,10 @@ internal fun BlurSection(modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(11.dp))
         CustomiseSliderCard(
-            title = "Blur strength",
-            valueText = "${strength.roundToInt()}px",
-            startLabel = "${MinBlurStrength.roundToInt()}px",
-            endLabel = "${MaxBlurStrength.roundToInt()}px",
+            title = stringResource(R.string.appearance_blur_strength),
+            valueText = stringResource(R.string.customise_px, strength.roundToInt()),
+            startLabel = stringResource(R.string.customise_px, MinBlurStrength.roundToInt()),
+            endLabel = stringResource(R.string.customise_px, MaxBlurStrength.roundToInt()),
             fraction = (strength - MinBlurStrength) / (MaxBlurStrength - MinBlurStrength),
             onFractionChange = { f ->
                 val next = MinBlurStrength + f * (MaxBlurStrength - MinBlurStrength)
@@ -153,14 +155,14 @@ internal fun BlurSection(modifier: Modifier = Modifier) {
 internal fun ElementBlurSection(modifier: Modifier = Modifier) {
     val (elementBlur, onElementBlur) = rememberPreference(ElementBlurKey, defaultValue = true)
     EffectCard(
-        title = "Element blur",
+        title = stringResource(R.string.customise_element_blur),
         checked = elementBlur,
         onCheckedChange = onElementBlur,
         preview = { ElementBlurPreview() },
         modifier = modifier,
     ) {
         Text(
-            text = "Lyrics, cover zoom, titles, menus and page swipes",
+            text = stringResource(R.string.customise_element_blur_desc),
             style = CaptionStyle,
             color = Color.White.copy(alpha = 0.5f),
         )
@@ -178,24 +180,24 @@ internal fun AnimationSection(modifier: Modifier = Modifier) {
 
     Column(modifier.fillMaxWidth()) {
         EffectCard(
-            title = "Animation",
+            title = stringResource(R.string.appearance_animation),
             checked = enabled,
             onCheckedChange = onEnabled,
-            value = if (enabled) animationSpeedLabel(speed) else "Off",
+            value = if (enabled) animationSpeedLabel(speed) else stringResource(R.string.customise_off),
             preview = { AnimationPreview() },
         ) {
             Text(
-                text = if (speed == 1f) "Follows your phone's animation speed" else "On top of your phone's animation speed",
+                text = stringResource(if (speed == 1f) R.string.customise_animation_follows else R.string.customise_animation_on_top),
                 style = CaptionStyle,
                 color = Color.White.copy(alpha = 0.5f),
             )
         }
         Spacer(Modifier.height(11.dp))
         CustomiseSliderCard(
-            title = "Animation speed",
+            title = stringResource(R.string.customise_animation_speed),
             valueText = animationSpeedLabel(speed),
-            startLabel = "slower",
-            endLabel = "faster",
+            startLabel = stringResource(R.string.customise_slower),
+            endLabel = stringResource(R.string.customise_faster),
             fraction = index / stops.lastIndex.toFloat(),
             onFractionChange = { f ->
                 val next = stops[(f * stops.lastIndex).roundToInt()]
@@ -213,14 +215,23 @@ internal fun AnimationSection(modifier: Modifier = Modifier) {
 @Composable
 internal fun LyricsStyleSection(modifier: Modifier = Modifier) {
     val (style, onStyle) = rememberEnumPreference(LyricsMotionStyleKey, defaultValue = LyricsMotionStyle.MOTION)
+    val names = LyricsMotionStyle.entries.associateWith { stringResource(lyricStyleNameRes(it)) }
     StylePagerSection(
-        category = "Lyrics\nAnimation",
+        category = stringResource(R.string.customise_lyrics_animation),
         styles = LyricsMotionStyle.entries,
         selected = style,
-        nameOf = { it.displayName },
+        nameOf = { names.getValue(it) },
         onSelect = onStyle,
         modifier = modifier,
     ) { LyricsStylePreview(it) }
+}
+
+// a lyric style's name in the app's language
+private fun lyricStyleNameRes(style: LyricsMotionStyle): Int = when (style) {
+    LyricsMotionStyle.MOTION -> R.string.appearance_style_1
+    LyricsMotionStyle.LEGACY -> R.string.appearance_style_2
+    LyricsMotionStyle.BORING -> R.string.customise_style_boring
+    LyricsMotionStyle.PLAIN -> R.string.customise_style_plain
 }
 
 // the phone's status bar over the open player
@@ -229,13 +240,13 @@ internal fun TopBarSection(modifier: Modifier = Modifier) {
     val (shown, onShown) = rememberPreference(PlayerStatusBarKey, defaultValue = true)
     Column(modifier.fillMaxWidth()) {
         EffectCard(
-            title = "Top Bar on player",
+            title = stringResource(R.string.customise_top_bar),
             checked = shown,
             onCheckedChange = onShown,
             preview = { StatusBarPreview(shown) },
         ) {
             Text(
-                text = "The clock and icons over the open player. The iPod always hides them, it has its own",
+                text = stringResource(R.string.customise_top_bar_desc),
                 style = CaptionStyle,
                 color = Color.White.copy(alpha = 0.5f),
             )
