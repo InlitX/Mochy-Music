@@ -53,6 +53,7 @@ import androidx.navigation.NavController
 import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
 import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.LocalSyncUtils
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.HideExplicitKey
 import com.mochyy.mochymusic.constants.HideVideoSongsKey
@@ -101,6 +102,7 @@ fun AlbumScreen(
 ) {
     val menuState = LocalMenuState.current
     val database = LocalDatabase.current
+    val syncUtils = LocalSyncUtils.current
     val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
 
@@ -303,6 +305,12 @@ fun AlbumScreen(
                         }
                     },
                     selected = inSelectMode && song.id in selection,
+                    liked = song.song.liked,
+                    onLikeClick = {
+                        val updated = song.song.toggleLike()
+                        database.query { update(updated) }
+                        syncUtils.likeSong(updated)
+                    },
                     trailing = if (inSelectMode) {
                         { PlaylistSelectTick(checked = song.id in selection) }
                     } else null,
