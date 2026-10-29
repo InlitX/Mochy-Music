@@ -9,16 +9,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.DisableVideoAutoplayKey
+import com.mochyy.mochymusic.constants.SYSTEM_DEFAULT
+import com.mochyy.mochymusic.i18n.AppLanguage
+import com.mochyy.mochymusic.i18n.activityOrNull
 import com.mochyy.mochymusic.constants.DontSkipOnFailureKey
 import com.mochyy.mochymusic.constants.LocalSongAutoMetadataKey
 import com.mochyy.mochymusic.constants.OfflineModeKey
@@ -35,10 +42,42 @@ import com.mochyy.mochymusic.ui.component.SubSettingsScaffold
 import com.mochyy.mochymusic.ui.component.SubSettingsSearchBar
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.utils.rememberPreference
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun GeneralSettingsScreen(navController: NavController) {
     var query by remember { mutableStateOf("") }
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val activity = remember(context) { context.activityOrNull() }
+    val language = remember(context) { AppLanguage.selection(context) }
+    val languageName = if (language == SYSTEM_DEFAULT) stringResource(R.string.system_default)
+        else appLanguageNativeName(language)
+    val languageTitle = stringResource(R.string.app_language)
+    val languageFailure = stringResource(R.string.app_language_update_failed)
+    val scope = rememberCoroutineScope()
+
+    if (showLanguageDialog) {
+        AppLanguageDialog(
+            selected = language,
+            onDismiss = { showLanguageDialog = false },
+            onSelect = { tag ->
+                showLanguageDialog = false
+                if (tag != language && activity != null) {
+                    scope.launch {
+                        try {
+                            AppLanguage.select(activity, tag)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            Toast.makeText(context, languageFailure, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            },
+        )
+    }
 
     val (offlineMode, onOfflineModeChange) = rememberPreference(
         OfflineModeKey,
@@ -73,12 +112,12 @@ fun GeneralSettingsScreen(navController: NavController) {
     )
 
     SubSettingsScaffold(
-        title = "General",
+        title = stringResource(R.string.general),
         onBack = { navController.navigateUp() },
         searchBar = { SubSettingsSearchBar(query = query, onQueryChange = { query = it }) },
     ) {
         Text(
-            text = "Generally app settings",
+            text = stringResource(R.string.general_app_settings),
             fontFamily = InterFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp,
@@ -86,11 +125,30 @@ fun GeneralSettingsScreen(navController: NavController) {
             modifier = Modifier.padding(bottom = 10.dp, start = 4.dp)
         )
 
+        val searchableTitles = mapOf(
+            "App language" to languageTitle,
+            "Disable App Updates notice" to stringResource(R.string.settings_updates_notice),
+            "Offline mode" to stringResource(R.string.settings_offline_mode),
+            "Local song auto metadata" to stringResource(R.string.settings_local_auto_metadata),
+            "Disable auto-playing YouTube video" to stringResource(R.string.settings_disable_video_autoplay),
+            "Translations from YouTube" to stringResource(R.string.settings_youtube_translations),
+            "Sync lyrics to music videos" to stringResource(R.string.settings_sync_lyrics_video),
+            "Don't skip on failure" to stringResource(R.string.settings_dont_skip_failure),
+        )
         val toggleItems = listOf(
             SettingsItem(
-                title = { Text("Disable App Updates notice") },
+                title = { Text(languageTitle) },
+                highlightKey = "App language",
+                descriptionText = languageName,
+                icon = painterResource(R.drawable.translate),
+                iconShape = CircleShape,
+                enabled = activity != null,
+                onClick = { showLanguageDialog = true },
+            ),
+            SettingsItem(
+                title = { Text(stringResource(R.string.settings_updates_notice)) },
                 highlightKey = "Disable App Updates notice",
-                descriptionText = "No popup will appear except if u open the updater",
+                descriptionText = stringResource(R.string.settings_updates_notice_desc),
                 icon = painterResource(R.drawable.commit),
                 iconShape = CircleShape,
                 onClick = { },
@@ -103,9 +161,9 @@ fun GeneralSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Offline mode") },
+                title = { Text(stringResource(R.string.settings_offline_mode)) },
                 highlightKey = "Offline mode",
-                descriptionText = "play downloaded music only",
+                descriptionText = stringResource(R.string.settings_offline_mode_desc),
                 icon = painterResource(R.drawable.download),
                 iconShape = CircleShape,
                 onClick = { onOfflineModeChange(!offlineMode) },
@@ -117,9 +175,9 @@ fun GeneralSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Local song auto metadata") },
+                title = { Text(stringResource(R.string.settings_local_auto_metadata)) },
                 highlightKey = "Local song auto metadata",
-                descriptionText = "Automatically match local tracks with online metadata",
+                descriptionText = stringResource(R.string.settings_local_auto_metadata_desc),
                 icon = painterResource(R.drawable.cached),
                 iconShape = CircleShape,
                 onClick = { onLocalSongAutoMetadataChange(!localSongAutoMetadata) },
@@ -131,9 +189,9 @@ fun GeneralSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Disable auto-playing YouTube video") },
+                title = { Text(stringResource(R.string.settings_disable_video_autoplay)) },
                 highlightKey = "Disable auto-playing YouTube video",
-                descriptionText = "Music videos and live shows play with their cover instead of the video",
+                descriptionText = stringResource(R.string.settings_disable_video_autoplay_desc),
                 icon = painterResource(R.drawable.slow_motion_video),
                 iconShape = CircleShape,
                 onClick = { onDisableVideoAutoplayChange(!disableVideoAutoplay) },
@@ -145,10 +203,10 @@ fun GeneralSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Translations from YouTube") },
+                title = { Text(stringResource(R.string.settings_youtube_translations)) },
                 highlightKey = "Translations from YouTube",
-                descriptionText = "Use a video's own translated captions when you translate lyrics",
-                detail = "When the song's video has captions someone made in your language, they're used instead of a machine translation",
+                descriptionText = stringResource(R.string.settings_youtube_translations_desc),
+                detail = stringResource(R.string.settings_youtube_translations_detail),
                 icon = painterResource(R.drawable.translate),
                 iconShape = CircleShape,
                 onClick = { onYoutubeTranslationsChange(!youtubeTranslations) },
@@ -160,10 +218,10 @@ fun GeneralSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Sync lyrics to music videos") },
+                title = { Text(stringResource(R.string.settings_sync_lyrics_video)) },
                 highlightKey = "Sync lyrics to music videos",
-                descriptionText = "Line lyrics up with the video's own captions",
-                detail = "Lyrics are usually timed to the album version. When a music video plays, they're moved to match the video once its captions load",
+                descriptionText = stringResource(R.string.settings_sync_lyrics_video_desc),
+                detail = stringResource(R.string.settings_sync_lyrics_video_detail),
                 icon = painterResource(R.drawable.lyrics),
                 iconShape = CircleShape,
                 onClick = { onSyncLyricsToVideoChange(!syncLyricsToVideo) },
@@ -175,10 +233,10 @@ fun GeneralSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Don't skip on failure") },
+                title = { Text(stringResource(R.string.settings_dont_skip_failure)) },
                 highlightKey = "Don't skip on failure",
-                descriptionText = "Stay on a failed stream instead of skipping",
-                detail = "When a stream fails, stay on it instead of skipping to the next track after a few seconds",
+                descriptionText = stringResource(R.string.settings_dont_skip_failure_desc),
+                detail = stringResource(R.string.settings_dont_skip_failure_detail),
                 icon = painterResource(R.drawable.skip_next),
                 iconShape = CircleShape,
                 onClick = { onDontSkipOnFailureChange(!dontSkipOnFailure) },
@@ -191,7 +249,9 @@ fun GeneralSettingsScreen(navController: NavController) {
             ),
         ).filter {
             query.isBlank() || it.highlightKey?.contains(query, ignoreCase = true) == true ||
-                it.descriptionText?.contains(query, ignoreCase = true) == true
+                it.highlightKey?.let { key -> searchableTitles[key] }?.contains(query, ignoreCase = true) == true ||
+                it.descriptionText?.contains(query, ignoreCase = true) == true ||
+                it.detail?.contains(query, ignoreCase = true) == true
         }
 
         if (toggleItems.isNotEmpty()) {
@@ -201,12 +261,13 @@ fun GeneralSettingsScreen(navController: NavController) {
             )
         }
 
-        if (!dontSkipOnFailure && (query.isBlank() || "skip timeout failure".contains(query, ignoreCase = true))) {
+        if (!dontSkipOnFailure && (query.isBlank() || "skip timeout failure".contains(query, ignoreCase = true) ||
+                stringResource(R.string.settings_skip_timeout).contains(query, ignoreCase = true))) {
             Spacer(Modifier.height(14.dp))
             LabCard(padding = 14.dp) {
                 LabSlider(
-                    label = "Skip timeout",
-                    valueText = "${failureTimeout}s",
+                    label = stringResource(R.string.settings_skip_timeout),
+                    valueText = stringResource(R.string.settings_seconds_short, failureTimeout),
                     value = failureTimeout.toFloat(),
                     onValueChange = { onFailureTimeoutChange(it.toInt()) },
                     valueRange = 5f..20f,

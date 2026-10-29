@@ -27,12 +27,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.ui.menu.rememberResyncAll
 import com.mochyy.mochymusic.LocalPlayerAwareWindowInsets
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.constants.ProfilePicUriKey
 import com.mochyy.mochymusic.db.entities.Song
@@ -113,12 +115,12 @@ fun LibraryHomeScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         LibraryScaffold(
-            title = "Library",
+            title = stringResource(R.string.filter_library),
             subtitle = null,
             searchPlaceholder = when (tab) {
-                LibraryTab.Local -> "Search your local music"
-                LibraryTab.Cached -> "Search your cached music"
-                else -> "Search anything on your library"
+                LibraryTab.Local -> stringResource(R.string.library_local_search)
+                LibraryTab.Cached -> stringResource(R.string.library_cached_search)
+                else -> stringResource(R.string.library_all_search)
             },
             query = query,
             onQueryChange = { query = it },
@@ -286,7 +288,7 @@ private fun LazyListScope.libraryAllTab(
 
     // A completely empty library gets one honest message instead of four zero-count cards.
     if (songs.isEmpty() && albums == 0 && artists == 0 && playlists == 0 && pinnedItems.isEmpty()) {
-        item(key = "empty") { LibraryEmptyState(text = "Nothing here yet. Import your music above to fill your library.") }
+        item(key = "empty") { LibraryEmptyState(text = stringResource(R.string.library_empty_import)) }
         return
     }
 
@@ -294,7 +296,7 @@ private fun LazyListScope.libraryAllTab(
     // placeholders, which on a fresh install would be the first thing on the screen.
     if (pinnedItems.isNotEmpty()) {
         item(key = "pinned_header") {
-            LibrarySectionTitle("Pinned")
+            LibrarySectionTitle(stringResource(R.string.library_pinned))
             Spacer(modifier = Modifier.height(12.dp))
             LibraryRule()
             Spacer(modifier = Modifier.height(16.dp))
@@ -331,12 +333,12 @@ private fun LazyListScope.libraryAllTab(
     item(key = "categories") {
         LibraryCardGrid(
             listOf(
-                LibraryCardEntry("Songs", songs.size, songs.take(4).map { it.song.thumbnailUrl }, {
+                LibraryCardEntry(stringResource(R.string.songs), songs.size, songs.take(4).map { it.song.thumbnailUrl }, {
                     navController.navigate("library/songs")
                 }),
-                LibraryCardEntry("Playlist", playlists, playlistCovers, { navController.navigate("library/playlists") }),
-                LibraryCardEntry("Albums", albums, albumCovers, { navController.navigate("library/albums") }),
-                LibraryCardEntry("Artist", artists, artistCovers, { navController.navigate("library/artists") }, roundCovers = true),
+                LibraryCardEntry(stringResource(R.string.playlists), playlists, playlistCovers, { navController.navigate("library/playlists") }),
+                LibraryCardEntry(stringResource(R.string.albums), albums, albumCovers, { navController.navigate("library/albums") }),
+                LibraryCardEntry(stringResource(R.string.artists), artists, artistCovers, { navController.navigate("library/artists") }, roundCovers = true),
             ),
         )
         Spacer(modifier = Modifier.height(10.dp))
@@ -345,7 +347,7 @@ private fun LazyListScope.libraryAllTab(
     if (songs.isNotEmpty()) {
         item(key = "recently_added") {
             LibraryWideCard(
-                title = "Recently added",
+                title = stringResource(R.string.library_recently_added),
                 count = songs.size,
                 covers = songs.take(4).map { it.song.thumbnailUrl },
                 onClick = { navController.navigate("library/added") },
@@ -358,7 +360,7 @@ private fun LazyListScope.libraryAllTab(
     if (likedSongs.isNotEmpty()) {
         item(key = "liked_songs") {
             LibraryWideCard(
-                title = "Liked",
+                title = stringResource(R.string.liked),
                 count = likedSongs.size,
                 covers = likedSongs.take(4).map { it.song.thumbnailUrl },
                 onClick = { navController.navigate("auto_playlist/liked") },

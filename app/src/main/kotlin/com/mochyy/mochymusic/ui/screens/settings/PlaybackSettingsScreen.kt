@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
@@ -69,16 +70,16 @@ fun PlaybackSettingsScreen(navController: NavController) {
     val dacName = dac?.name?.ifBlank { "USB DAC" }
 
     SubSettingsScaffold(
-        title = "Playback",
+        title = stringResource(R.string.settings_playback_category),
         onBack = { navController.navigateUp() },
         searchBar = { SubSettingsSearchBar(query = query, onQueryChange = { query = it }) },
     ) {
         val items = listOf(
             SettingsItem(
-                title = { Text("Keep playing even when closed") },
+                title = { Text(stringResource(R.string.playback_keep_playing)) },
                 highlightKey = "Keep playing even when closed",
-                descriptionText = "Keep playing after the app is cleared",
-                detail = "Continue playback in background when app is cleared from recents",
+                descriptionText = stringResource(R.string.playback_keep_playing_desc),
+                detail = stringResource(R.string.playback_keep_playing_detail),
                 icon = painterResource(R.drawable.clear_all),
                 iconShape = CircleShape,
                 onClick = { onStopPlaybackOnTaskRemovedChange(!stopPlaybackOnTaskRemoved) },
@@ -90,10 +91,10 @@ fun PlaybackSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Save Player's last state") },
+                title = { Text(stringResource(R.string.playback_save_state)) },
                 highlightKey = "Save Player's last state",
-                descriptionText = "Off clears played tracks on close",
-                detail = "disabling this will removing previously played tracks when closing the app",
+                descriptionText = stringResource(R.string.playback_save_state_desc),
+                detail = stringResource(R.string.playback_save_state_detail),
                 icon = painterResource(R.drawable.cached),
                 iconShape = CircleShape,
                 onClick = { onPersistentQueueChange(!persistentQueue) },
@@ -105,9 +106,9 @@ fun PlaybackSettingsScreen(navController: NavController) {
                 },
             ),
             SettingsItem(
-                title = { Text("Skip Silence") },
+                title = { Text(stringResource(R.string.playback_skip_silence)) },
                 highlightKey = "Skip Silence",
-                descriptionText = "Jump over the quiet gaps in songs",
+                descriptionText = stringResource(R.string.playback_skip_silence_desc),
                 icon = painterResource(R.drawable.skip_next),
                 iconShape = CircleShape,
                 onClick = { onSkipSilenceChange(!skipSilence) },
@@ -132,10 +133,10 @@ fun PlaybackSettingsScreen(navController: NavController) {
 
         val outputItems = listOfNotNull(
             SettingsItem(
-                title = { Text("Prefer USB DAC") },
+                title = { Text(stringResource(R.string.playback_usb_prefer)) },
                 highlightKey = "Prefer USB DAC",
-                descriptionText = dacName?.let { "$it is plugged in" } ?: "Plays through a USB DAC when one is plugged in",
-                detail = "Sends the music to a plugged-in USB DAC even while Bluetooth or other headphones are connected. Unplug it and the music goes back to where it was.",
+                descriptionText = if (dacName != null) stringResource(R.string.playback_usb_connected, dacName) else stringResource(R.string.playback_usb_prefer_desc),
+                detail = stringResource(R.string.playback_usb_prefer_detail),
                 icon = rememberVectorPainter(Icons.Rounded.Usb),
                 iconShape = CircleShape,
                 onClick = { onPreferUsbDacChange(!preferUsbDac) },
@@ -143,30 +144,30 @@ fun PlaybackSettingsScreen(navController: NavController) {
             ),
             // the dac's own mixer settings only exist on android 14 and up, so older phones don't see the row at all
             SettingsItem(
-                title = { Text("USB DAC passthrough") },
+                title = { Text(stringResource(R.string.playback_usb_passthrough)) },
                 highlightKey = "USB DAC passthrough",
-                descriptionText = "Each song at its own rate, bit-perfect when nothing changes the sound",
-                detail = "Asks the DAC to run at the song's own sample rate instead of Android's 48 kHz, so nothing is resampled. When the equalizer and effects are off and the volume is at 100%, the song goes out bit-perfect. While it's on, your phone's volume buttons may set the DAC's own volume.",
+                descriptionText = stringResource(R.string.playback_usb_passthrough_desc),
+                detail = stringResource(R.string.playback_usb_passthrough_detail),
                 icon = rememberVectorPainter(Icons.Rounded.GraphicEq),
                 iconShape = CircleShape,
                 onClick = { onUsbPassthroughChange(!usbPassthrough) },
                 trailingContent = { AppSwitch(checked = usbPassthrough, onCheckedChange = onUsbPassthroughChange) },
             ).takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE },
             SettingsItem(
-                title = { Text("Hi-res output") },
+                title = { Text(stringResource(R.string.playback_hires)) },
                 highlightKey = "Hi-res output",
-                descriptionText = "Keeps 24-bit songs at full detail as 32-bit float",
-                detail = "Sends hi-res songs to the speaker as 32-bit float instead of cutting them down to 16-bit. It only kicks in while the equalizer, Audio FX, Crossmix, layered fades, haptics, skip silence and speed changes are all off, because those work in 16-bit. Turn any of them on and the song carries on in 16-bit with every effect.",
+                descriptionText = stringResource(R.string.playback_hires_desc),
+                detail = stringResource(R.string.playback_hires_detail),
                 icon = rememberVectorPainter(Icons.Rounded.HighQuality),
                 iconShape = CircleShape,
                 onClick = { onHiResOutputChange(!hiResOutput) },
                 trailingContent = { AppSwitch(checked = hiResOutput, onCheckedChange = onHiResOutputChange) },
             ),
             SettingsItem(
-                title = { Text("Hi-fi resampler") },
+                title = { Text(stringResource(R.string.playback_hifi)) },
                 highlightKey = "Hi-fi resampler",
-                descriptionText = "Mochy's own filter turns songs to your speaker's rate",
-                detail = "Most songs are 44.1 kHz and your phone plays at 48 kHz, so something has to convert them. With this on, Mochy does it with its own high-quality filter (flat to 20 kHz, 120 dB of rejection, in 32-bit float) instead of leaving it to the phone. It works on the speaker and the headphone jack. Bluetooth and USB are left alone: Bluetooth's rate can't be read reliably, and USB has passthrough. It uses a little more battery.",
+                descriptionText = stringResource(R.string.playback_hifi_desc),
+                detail = stringResource(R.string.playback_hifi_detail),
                 icon = rememberVectorPainter(Icons.Rounded.Waves),
                 iconShape = CircleShape,
                 onClick = { onHiFiResamplerChange(!hiFiResampler) },
@@ -179,7 +180,7 @@ fun PlaybackSettingsScreen(navController: NavController) {
 
         if (outputItems.isNotEmpty()) {
             SettingsGroup(
-                title = "Output",
+                title = stringResource(R.string.playback_output),
                 style = SettingsGroupStyle.Grouped,
                 items = outputItems,
             )
