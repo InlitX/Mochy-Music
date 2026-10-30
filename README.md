@@ -8,6 +8,9 @@
   <a href="https://github.com/realidkroo/mochy-music/releases">
     <img src="https://shieldcn.dev/github/downloads/realidkroo/mochy-music.svg?mode=dark&radius=999&font=geist&split=true&height=28&fontSize=13&labelColor=1e1e2e&labelTextColor=ffffff&color=313244&valueColor=ffffff&logoColor=fab387" alt="Downloads">
   </a>
+  <a href="https://discord.gg/mVU8ZJ9kyh">
+  <img src="https://shieldcn.dev/badge/Discord-Join%20Server-313244.svg?mode=dark&radius=999&font=geist&split=true&height=28&fontSize=13&labelColor=1e1e2e&labelTextColor=ffffff&color=313244&valueColor=ffffff&logo=discord&logoColor=b4befe" alt="Join Discord">
+</a>
   <a href="https://github.com/realidkroo/mochy-music/stargazers">
     <img src="https://shieldcn.dev/github/stars/realidkroo/mochy-music.svg?mode=dark&radius=999&font=geist&split=true&height=28&fontSize=13&labelColor=1e1e2e&labelTextColor=ffffff&color=313244&valueColor=ffffff&logoColor=f9e2af" alt="Stars">
   </a>
