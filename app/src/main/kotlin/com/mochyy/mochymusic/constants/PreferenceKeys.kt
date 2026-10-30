@@ -1136,6 +1136,8 @@ val LastDonateShownTimeKey = longPreferencesKey("lastDonateShownTime")
 val DonatePlaytimeMsKey = longPreferencesKey("donatePlaytimeMs")
 val DonateFirstPromptShownKey = booleanPreferencesKey("donateFirstPromptShown")
 val DonatePromptWindowStartKey = longPreferencesKey("donatePromptWindowStart")
+// out of the box the open player runs to the top of the screen with the status bar hidden
+const val PlayerStatusBarDefault = false
 val DonatePromptSlotsKey = stringPreferencesKey("donatePromptSlots")
 val DonateOpenPromptAtKey = longPreferencesKey("donateOpenPromptAt")
 

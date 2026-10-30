@@ -58,6 +58,7 @@ import com.mochyy.mochymusic.constants.EnableElementBlurAnimatorKey
 import com.mochyy.mochymusic.constants.EnableProgressiveBlurKey
 import com.mochyy.mochymusic.constants.LyricsMotionStyle
 import com.mochyy.mochymusic.constants.LyricsMotionStyleKey
+import com.mochyy.mochymusic.constants.PlayerStatusBarDefault
 import com.mochyy.mochymusic.constants.PlayerStatusBarKey
 import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.screens.audiolab.LabColors
@@ -237,7 +238,7 @@ private fun lyricStyleNameRes(style: LyricsMotionStyle): Int = when (style) {
 // the phone's status bar over the open player
 @Composable
 internal fun TopBarSection(modifier: Modifier = Modifier) {
-    val (shown, onShown) = rememberPreference(PlayerStatusBarKey, defaultValue = true)
+    val (shown, onShown) = rememberPreference(PlayerStatusBarKey, defaultValue = PlayerStatusBarDefault)
     Column(modifier.fillMaxWidth()) {
         EffectCard(
             title = stringResource(R.string.customise_top_bar),

@@ -51,6 +51,7 @@ import com.mochyy.mochymusic.ui.player.styles.rememberStyleShowing
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
+import com.mochyy.mochymusic.constants.PlayerStatusBarDefault
 import com.mochyy.mochymusic.constants.PlayerStatusBarKey
 import com.mochyy.mochymusic.ui.player.findActivity
 import com.mochyy.mochymusic.ui.theme.ForceDarkTheme
@@ -70,7 +71,7 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
     val topInset = bars.getTop(density)
     val bottomInset = bars.getBottom(density)
     val look = rememberIpodLook()
-    val (statusBarShown) = rememberPreference(PlayerStatusBarKey, defaultValue = true)
+    val (statusBarShown) = rememberPreference(PlayerStatusBarKey, defaultValue = PlayerStatusBarDefault)
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()

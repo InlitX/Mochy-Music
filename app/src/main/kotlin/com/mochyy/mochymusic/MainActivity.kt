@@ -1337,7 +1337,7 @@ class MainActivity : ComponentActivity() {
         val playerOpen = state.isExpanded
         val playerHeadingDown = !state.isExpandedOrExpanding
         // the status bar goes too when customize's top bar is off, on every player style
-        val (statusBarShown) = rememberPreference(com.mochyy.mochymusic.constants.PlayerStatusBarKey, defaultValue = true)
+        val (statusBarShown) = rememberPreference(com.mochyy.mochymusic.constants.PlayerStatusBarKey, defaultValue = com.mochyy.mochymusic.constants.PlayerStatusBarDefault)
         val hideStatusBar = !statusBarShown
         // Back in the app (from Home, the recents, a dialog) it's hidden again: with
         // gesture navigation a swipe from the bottom brings it back for good (see
