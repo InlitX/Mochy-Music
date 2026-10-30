@@ -94,6 +94,9 @@ private const val FitMs = 600
 // a double tap jumps this far
 private const val SeekStepMs = 10_000L
 
+// a swipe is kept from the sheet once it has gone this many touch slops: further than the lists inside wait, nearer than the sheet does
+private const val SwipeKeepSlopScale = 1.5f
+
 // with the lyrics open the picture dims by this much, and fades into the light behind it over this share of the pane
 private const val PaneDim = 0.18f
 private const val PaneFadeShare = 0.55f
@@ -423,7 +426,8 @@ private fun VideoModeLayout(
 private fun Modifier.keepSwipesFromSheet(): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
-        val slop = viewConfiguration.touchSlop
+        // past the pane's lists' own slop, so a slanted scroll on them starts the list before this can take it
+        val slop = viewConfiguration.touchSlop * SwipeKeepSlopScale
         var travelled = androidx.compose.ui.geometry.Offset.Zero
         while (true) {
             val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break

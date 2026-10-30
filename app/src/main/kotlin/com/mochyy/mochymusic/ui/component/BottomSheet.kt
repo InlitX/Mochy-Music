@@ -21,7 +21,7 @@ import androidx.compose.foundation.gestures.DraggableState
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.mochyy.mochymusic.LocalPlayerConnection
 import androidx.compose.ui.unit.IntOffset
@@ -62,6 +62,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.draw.drawWithContent
@@ -475,7 +476,9 @@ fun BottomSheet(
                             // A sideways swipe on the mini player handed to [collapsedSwipe].
                             var sideSwipe: CollapsedSwipe? = null
 
-                            detectDragGestures(
+                            detectSheetDrag(
+                                // open, the lists and sliders inside get the first word: a slanted scroll is theirs
+                                slopScale = { if (state.progress > 0.5f) OpenSheetSlopScale else 1f },
                                 onDragStart = { start ->
                                     dragStartTime = System.currentTimeMillis()
                                     totalHorizontalDrag = 0f
@@ -520,7 +523,7 @@ fun BottomSheet(
                                             handler.onStart()
                                             handler.onDrag(totalHorizontalDrag, size.width.toFloat())
                                             change.consume()
-                                            return@detectDragGestures
+                                            return@detectSheetDrag
                                         }
                                         val resistance = 1f - (kotlin.math.abs(state.horizontalOffset) / (size.width / 2f)).coerceIn(0f, 0.8f)
                                         state.horizontalOffset += dragAmount.x * resistance
@@ -567,13 +570,13 @@ fun BottomSheet(
                                         handler.onEnd(velocityTracker.calculateVelocity().y)
                                         velocityTracker.resetTracking()
                                         swipe = null
-                                        return@detectDragGestures
+                                        return@detectSheetDrag
                                     }
                                     sideSwipe?.let { handler ->
                                         handler.onEnd(totalHorizontalDrag, velocityTracker.calculateVelocity().x, size.width.toFloat(), cancelled = false)
                                         velocityTracker.resetTracking()
                                         sideSwipe = null
-                                        return@detectDragGestures
+                                        return@detectSheetDrag
                                     }
                                     val velocityY = velocityTracker.calculateVelocity().y
                                     velocityTracker.resetTracking()
@@ -587,7 +590,7 @@ fun BottomSheet(
                                     ) {
                                         acted = true
                                         state.collapseSoft()
-                                        return@detectDragGestures
+                                        return@detectSheetDrag
                                     }
 
                                     if (state.isCollapsed || state.progress < 0.2f) {
@@ -702,6 +705,44 @@ private fun BoxScope.PillShadow(state: BottomSheetState, pillPress: PillPress) {
             )
         }
     }
+}
+
+// how much further than the touch slop a finger must go before the open sheet takes a drag
+private const val OpenSheetSlopScale = 2f
+
+// like detectDragGestures, but it gives way: a drag a list or slider inside already took stays theirs, and it waits longer so a slanted scroll starts the list
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSheetDrag(
+    slopScale: () -> Float,
+    onDragStart: (Offset) -> Unit,
+    onDrag: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+) = awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val slop = viewConfiguration.touchSlop * slopScale()
+    var total = Offset.Zero
+    var started: androidx.compose.ui.input.pointer.PointerInputChange? = null
+    while (started == null) {
+        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+        if (!change.pressed || change.isConsumed) return@awaitEachGesture
+        total += change.positionChange()
+        if (total.getDistance() >= slop) {
+            change.consume()
+            started = change
+        } else {
+            // something inside may still claim this same move after us; then it's theirs
+            awaitPointerEvent(PointerEventPass.Final)
+            if (change.isConsumed) return@awaitEachGesture
+        }
+    }
+    val distance = total.getDistance()
+    onDragStart(started.position)
+    onDrag(started, if (distance > 0f) total * ((distance - slop) / distance) else Offset.Zero)
+    val finished = drag(started.id) {
+        onDrag(it, it.positionChange())
+        it.consume()
+    }
+    if (finished) onDragEnd() else onDragCancel()
 }
 
 // its own function, so the sheet leaving collapsed or dismissed doesn't recompose the whole sheet

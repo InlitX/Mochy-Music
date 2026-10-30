@@ -198,12 +198,14 @@ internal object CaptionAligner {
         abs(anchor.deltaMs - median(neighbours)) <= OutlierMs
     }
 
-    // splits the song where the shift really changes (an intro, a skit or a cut in the video), each stretch on its own steady shift
+    // splits the song where the shift really jumps (an intro, a skit or a cut in the video); inside a stretch the shift may wander slowly, a video a touch faster or slower than the album
     private fun runsOf(anchors: List<Anchor>): List<SongVideoMap.Run>? {
         val groups = ArrayList<MutableList<Anchor>>()
         for (anchor in anchors) {
             val current = groups.lastOrNull()
-            if (current != null && abs(anchor.deltaMs - median(current.map { it.deltaMs })) <= RunToleranceMs) {
+            // against the last few lines, not the whole stretch, so a slow drift stays one stretch instead of breaking every few seconds
+            val recent = current?.takeLast(RecentAnchors)?.map { it.deltaMs }
+            if (current != null && abs(anchor.deltaMs - median(recent!!)) <= RunToleranceMs) {
                 current += anchor
             } else {
                 groups += mutableListOf(anchor)
@@ -211,7 +213,42 @@ internal object CaptionAligner {
         }
         val steady = groups.filter { it.size >= MinRunAnchors }
         if (steady.isEmpty()) return null
-        return steady.map { group -> SongVideoMap.Run(group.first().lyricMs, group.last().lyricMs, median(group.map { it.deltaMs })) }
+        return steady.map { group ->
+            val points = group.indices.map { i -> SongVideoMap.Point(group[i].lyricMs, smoothedDelta(group, i)) }
+            SongVideoMap.Run(group.first().lyricMs, group.last().lyricMs, median(group.map { it.deltaMs }), points)
+        }
+    }
+
+    // a line's shift read off a straight line through its neighbours: a drift keeps its slope, one misheard caption is left out and the rest average out
+    private fun smoothedDelta(group: List<Anchor>, i: Int): Long {
+        val from = maxOf(0, i - SmoothReach)
+        val to = minOf(group.size, i + SmoothReach + 1)
+        var window = group.subList(from, to)
+        if (window.size < 3) return median(window.map { it.deltaMs })
+        val first = fitLine(window)
+        val kept = window.filter { abs(it.deltaMs - first.at(it.lyricMs)) <= FitOutlierMs }
+        if (kept.size >= 3) window = kept
+        return fitLine(window).at(group[i].lyricMs)
+    }
+
+    // least squares through the anchors' shifts, against their song times
+    private class Fit(val intercept: Double, val slope: Double) {
+        fun at(ms: Long): Long = (intercept + slope * ms).toLong()
+    }
+
+    private fun fitLine(anchors: List<Anchor>): Fit {
+        val meanX = anchors.sumOf { it.lyricMs.toDouble() } / anchors.size
+        val meanY = anchors.sumOf { it.deltaMs.toDouble() } / anchors.size
+        var top = 0.0
+        var bottom = 0.0
+        for (anchor in anchors) {
+            val dx = anchor.lyricMs - meanX
+            top += dx * (anchor.deltaMs - meanY)
+            bottom += dx * dx
+        }
+        // a drift faster than this is no album-to-video speed change, it's noise between a few close lines
+        val slope = if (bottom > 0.0) (top / bottom).coerceIn(-MaxDriftRate, MaxDriftRate) else 0.0
+        return Fit(meanY - slope * meanX, slope)
     }
 
     private fun median(values: List<Long>): Long {
@@ -227,6 +264,10 @@ internal object CaptionAligner {
     private const val MaxJumpCost = 0.8f
     private const val OutlierMs = 2_000L
     private const val RunToleranceMs = 700L
+    private const val RecentAnchors = 3
+    private const val SmoothReach = 3
+    private const val FitOutlierMs = 300L
+    private const val MaxDriftRate = 0.1
     private const val MinRunAnchors = 2
     private const val MinAnchors = 3
     private const val MinMatchedShare = 0.3f

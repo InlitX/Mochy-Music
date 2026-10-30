@@ -1482,8 +1482,9 @@ private fun PlayerSheet(
 
         // Pulling down at the top of the queue list stretches the list instead of closing the
         // player. (Lyrics keep the pull-to-close.)
-        androidx.compose.runtime.DisposableEffect(state, showQueue) {
-            state.collapseOnNestedOverscroll = !showQueue
+        // the full video mode's pane is a side panel turned sideways: past its top it only stretches, the player stays open
+        androidx.compose.runtime.DisposableEffect(state, showQueue, playerStyle) {
+            state.collapseOnNestedOverscroll = !showQueue && playerStyle != PlayerStyle.VIDEO
             onDispose { state.collapseOnNestedOverscroll = true }
         }
 

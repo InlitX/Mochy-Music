@@ -85,6 +85,33 @@ class CaptionAlignerTest {
     }
 
     @Test
+    fun followsAVideoThatRunsSlowerThanTheAlbum() {
+        val lines = lyrics(englishLines + englishLines.take(10), gapMs = 5_000L)
+        // the video plays 3% slower and starts 4 s later: by the last line it's over 3.5 s further behind than at the first
+        val deltaAt = { t: Long -> 4_000L + (t * 0.03).toLong() }
+        val alignment = sure(CaptionAligner.align(lines, autoCaptions(lines, deltaAt, Random(7))))
+        lines.forEach { line ->
+            val off = abs(alignment.map.deltaAt(line.time) - deltaAt(line.time))
+            assertTrue("line at ${line.time} is $off ms off in ${alignment.map}", off <= 250)
+        }
+    }
+
+    @Test
+    fun keepsACutAJumpWhileFollowingDrift() {
+        val lines = lyrics(englishLines + englishLines.take(10), gapMs = 5_000L)
+        // a slow drift, then a 15 s skit inserted half way
+        val cut = lines[12].time
+        val deltaAt = { t: Long -> 2_000L + (t * 0.02).toLong() + if (t >= cut) 15_000L else 0L }
+        val alignment = sure(CaptionAligner.align(lines, autoCaptions(lines, deltaAt, Random(8))))
+        assertTrue("${alignment.map}", alignment.map.runs.size >= 2)
+        // a line that couldn't be found right at the cut could be either side of it; every line in a stretch must be right
+        lines.filter { line -> alignment.map.runs.any { line.time in it.fromSongMs..it.toSongMs } }.forEach { line ->
+            val off = abs(alignment.map.deltaAt(line.time) - deltaAt(line.time))
+            assertTrue("line at ${line.time} is $off ms off in ${alignment.map}", off <= 250)
+        }
+    }
+
+    @Test
     fun readsJapaneseWithoutSpaces() {
         val japanese = listOf(
             "沈むように溶けてゆくように", "二人だけの空が広がる夜に", "さよならだけだった", "その一言で全てが分かった",
