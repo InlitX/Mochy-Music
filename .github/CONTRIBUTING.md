@@ -38,7 +38,7 @@ Yooo, thanks for wanting to help out. This thing is small, so the process here i
 
 9. **do not fully vibecoded it** if you can, please.. :3
 
-Commit messages should be short and say what changed. Conventional prefixes (`fix:`, `feat:`, `refactor:`) are welcome but not required. just make it simple, ok? 
+Commit messages should be short and say what changed. Conventional prefixes (`fix:`, `feat:`, `refactor:`) are welcome but not required. just make it simple, ok? its stil beta though so keep it cool and simple, prefix will required after release
 
 ## Reporting bugs
 
