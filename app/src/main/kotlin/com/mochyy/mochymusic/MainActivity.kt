@@ -76,6 +76,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -402,6 +403,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         systemScaleObserver = com.mochyy.mochymusic.ui.utils.AppMotion.followSystemScale(this)
         moveOffOldLyricsShaderSwitch()
+        followLookSettings()
 
         lifecycleScope.launch {
             dataStore.data
@@ -466,29 +468,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // customize's animation and element blur settings, copied where draw code and the window's animation scale read them
-        val animationsEnabled by rememberPreference(
-            com.mochyy.mochymusic.constants.EnableElementBlurAnimatorKey,
-            defaultValue = true,
-        )
-        val animationSpeed by rememberPreference(com.mochyy.mochymusic.constants.AnimationSpeedKey, defaultValue = 1f)
-        val elementBlur by rememberPreference(com.mochyy.mochymusic.constants.ElementBlurKey, defaultValue = true)
-        SideEffect {
-            com.mochyy.mochymusic.ui.utils.AppMotion.enabled = animationsEnabled
-            com.mochyy.mochymusic.ui.utils.AppMotion.speed = animationSpeed
-            com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur = elementBlur
-        }
-
         // "Keep screen on" (the player's menu, or a chevron button): the phone doesn't sleep while
         // Mochy is on screen. A window flag only holds while the app is in front, which is the point.
         val keepScreenOn by rememberPreference(com.mochyy.mochymusic.constants.KeepScreenOn, defaultValue = false)
-        val coverCornerRadius by rememberPreference(com.mochyy.mochymusic.constants.ThumbnailCornerRadiusKey, defaultValue = 25f)
-        SideEffect {
-            val r = coverCornerRadius.coerceIn(0f, 45f)
-            com.mochyy.mochymusic.ui.component.HomeCardCornerRadius = r.dp
-            com.mochyy.mochymusic.constants.GridThumbnailCornerRadius = (r * 0.6f).coerceIn(0f, 28f).dp
-            com.mochyy.mochymusic.constants.ThumbnailCornerRadius = (r * 0.35f).coerceIn(0f, 16f).dp
-        }
         val rootView = androidx.compose.ui.platform.LocalView.current
         DisposableEffect(keepScreenOn) {
             rootView.keepScreenOn = keepScreenOn
@@ -1354,28 +1336,40 @@ class MainActivity : ComponentActivity() {
         // (a resize it is catching up with), which brought the bar back over the open player.
         val playerOpen = state.isExpanded
         val playerHeadingDown = !state.isExpandedOrExpanding
-        // the status bar goes too when customize's top bar is off, and always on the ipod, which draws its own
+        // the status bar goes too when customize's top bar is off, on every player style
         val (statusBarShown) = rememberPreference(com.mochyy.mochymusic.constants.PlayerStatusBarKey, defaultValue = true)
-        val playerStyle by rememberEnumPreference(com.mochyy.mochymusic.constants.PlayerStyleKey, com.mochyy.mochymusic.constants.PlayerStyle.DEFAULT)
-        val hideStatusBar = !statusBarShown || playerStyle == com.mochyy.mochymusic.constants.PlayerStyle.IPOD
+        val hideStatusBar = !statusBarShown
         // Back in the app (from Home, the recents, a dialog) it's hidden again: with
         // gesture navigation a swipe from the bottom brings it back for good (see
         // playerNavBarBehavior).
         val windowFocused = LocalWindowInfo.current.isWindowFocused
-        LaunchedEffect(playerOpen, playerHeadingDown, windowFocused, hideStatusBar) {
+        LaunchedEffect(playerOpen, playerHeadingDown, windowFocused) {
             val controller = WindowCompat.getInsetsController(window, window.decorView.rootView)
             // one behaviour for both bars, set only here: the ipod used to set its own and broke the back swipe on gesture navigation
             if (playerOpen) {
                 controller.systemBarsBehavior = window.playerNavBarBehavior()
                 controller.hide(WindowInsetsCompat.Type.navigationBars())
-                if (hideStatusBar) {
-                    controller.hide(WindowInsetsCompat.Type.statusBars())
-                } else {
-                    controller.show(WindowInsetsCompat.Type.statusBars())
-                }
             } else if (playerHeadingDown) {
-                controller.show(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.statusBars())
+                controller.show(WindowInsetsCompat.Type.navigationBars())
             }
+        }
+        // the status bar leaves during the last stretch of the open, so its slide runs with the player's instead of after it lands
+        val statusBarAway by remember(state) {
+            derivedStateOf { state.isExpanded || (state.isExpandedOrExpanding && state.progress > StatusBarLeavesAt) }
+        }
+        LaunchedEffect(statusBarAway, hideStatusBar, windowFocused) {
+            val controller = WindowCompat.getInsetsController(window, window.decorView.rootView)
+            if (statusBarAway && hideStatusBar) {
+                controller.systemBarsBehavior = window.playerNavBarBehavior()
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.statusBars())
+            }
+        }
+        // set before the bar ever hides and left alone after, so hiding it never moves the window off the camera strip
+        val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+        LaunchedEffect(hideStatusBar, portrait) {
+            window.drawUnderCutout(hideStatusBar && portrait)
         }
         // A bar a swipe brought back while the player stays open (Samsung's swipe-from-
         // bottom gestures) goes away again after a moment, as the transient one does.
@@ -1395,6 +1389,33 @@ class MainActivity : ComponentActivity() {
                 .hide(WindowInsetsCompat.Type.statusBars())
         }
     }
+
+    // copies the animation, element blur and cover rounding settings where draw code and the animation scale read them, the moment they're saved
+    private fun followLookSettings() {
+        lifecycleScope.launch {
+            dataStore.data
+                .map { prefs ->
+                    LookSettings(
+                        animations = prefs[com.mochyy.mochymusic.constants.EnableElementBlurAnimatorKey] ?: true,
+                        speed = prefs[com.mochyy.mochymusic.constants.AnimationSpeedKey] ?: 1f,
+                        elementBlur = prefs[com.mochyy.mochymusic.constants.ElementBlurKey] ?: true,
+                        coverRadius = prefs[com.mochyy.mochymusic.constants.ThumbnailCornerRadiusKey] ?: 25f,
+                    )
+                }
+                .distinctUntilChanged()
+                .collect { look ->
+                    com.mochyy.mochymusic.ui.utils.AppMotion.enabled = look.animations
+                    com.mochyy.mochymusic.ui.utils.AppMotion.speed = look.speed
+                    com.mochyy.mochymusic.ui.utils.AppMotion.elementBlur = look.elementBlur
+                    val r = look.coverRadius.coerceIn(0f, 45f)
+                    com.mochyy.mochymusic.ui.component.HomeCardCornerRadius = r.dp
+                    com.mochyy.mochymusic.constants.GridThumbnailCornerRadius = (r * 0.6f).coerceIn(0f, 28f).dp
+                    com.mochyy.mochymusic.constants.ThumbnailCornerRadius = (r * 0.35f).coerceIn(0f, 16f).dp
+                }
+        }
+    }
+
+    private data class LookSettings(val animations: Boolean, val speed: Float, val elementBlur: Boolean, val coverRadius: Float)
 
     // people who had the old lyrics shader switch off land on the matching shaderless lyric style, once
     private fun moveOffOldLyricsShaderSwitch() {
@@ -1644,6 +1665,21 @@ val LocalDetailAccentColor = staticCompositionLocalOf<androidx.compose.runtime.M
  * nothing tappable in it - known for certain from Android 11, where the hidden bar's insets can
  * be read.
  */
+// how far open the player is when its status bar starts sliding away
+private const val StatusBarLeavesAt = 0.82f
+
+// with the status bar hidden android 9 to 14 paints a notched phone's camera strip black unless the window may draw there
+private fun android.view.Window.drawUnderCutout(on: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+    val mode = if (on) {
+        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+    } else {
+        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+    }
+    if (attributes.layoutInDisplayCutoutMode == mode) return
+    attributes = attributes.apply { layoutInDisplayCutoutMode = mode }
+}
+
 private fun android.view.Window.playerNavBarBehavior(): Int {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         val tappable = androidx.core.view.ViewCompat.getRootWindowInsets(decorView)

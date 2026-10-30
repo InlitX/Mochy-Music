@@ -1115,7 +1115,7 @@ val BlurStrengthPxKey = floatPreferencesKey("blurStrengthPx")
 val ElementBlurKey = booleanPreferencesKey("elementBlur")
 // how fast animations run on top of android's own animation speed, 1 means just follow android
 val AnimationSpeedKey = floatPreferencesKey("animationSpeed")
-// the phone's status bar over the open player, off hides it (the ipod always hides it, it has its own)
+// the phone's status bar over the open player, off hides it on every player style, the ipod too
 val PlayerStatusBarKey = booleanPreferencesKey("playerStatusBar")
 // settings rows show only their titles, holding a row still shows what it does
 val HideSettingsDescriptionsKey = booleanPreferencesKey("hideSettingsDescriptions")

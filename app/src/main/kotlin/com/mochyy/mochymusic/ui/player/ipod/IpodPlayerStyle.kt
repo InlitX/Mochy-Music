@@ -51,6 +51,14 @@ import com.mochyy.mochymusic.ui.player.styles.rememberStyleShowing
 import com.mochyy.mochymusic.ui.player.styles.whileStyleInteractive
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.stableSystemBars
+import com.mochyy.mochymusic.constants.PlayerStatusBarKey
+import com.mochyy.mochymusic.ui.player.findActivity
+import com.mochyy.mochymusic.ui.theme.ForceDarkTheme
+import com.mochyy.mochymusic.utils.rememberPreference
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.mochyy.mochymusic.viewmodels.IpodLibraryViewModel
 import kotlinx.coroutines.delay
 
@@ -62,6 +70,7 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
     val topInset = bars.getTop(density)
     val bottomInset = bars.getBottom(density)
     val look = rememberIpodLook()
+    val (statusBarShown) = rememberPreference(PlayerStatusBarKey, defaultValue = true)
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -75,6 +84,8 @@ fun IpodPlayerStyle(modifier: Modifier = Modifier, preview: Boolean = false) {
             if (wholeDevice) deviceGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
             else phoneGeometry(w, h, topInset.toFloat(), bottomInset.toFloat(), look.tall)
         }
+        // the top bar setting decides whether the phone's status bar shows, and over a light body its icons go dark
+        if (statusBarShown && !wholeDevice && !preview && look.body.light) DarkStatusIcons()
         Box(
             Modifier
                 .fillMaxSize()
@@ -291,6 +302,24 @@ private fun Chevron(geometry: IpodGeometry, sheet: BottomSheetState?, preview: B
                 onDrawBehind { drawPath(path, ink, style = stroke) }
             },
     )
+}
+
+// dark status bar icons over the light body, back to white once the player is mostly closed or the style changes
+@Composable
+private fun DarkStatusIcons() {
+    val view = LocalView.current
+    val sheet = LocalPlayerBottomSheetState.current
+    LaunchedEffect(view, sheet) {
+        val window = view.context.findActivity()?.window ?: return@LaunchedEffect
+        val controller = WindowCompat.getInsetsController(window, view)
+        try {
+            snapshotFlow { sheet == null || sheet.progress > 0.5f }
+                .distinctUntilChanged()
+                .collect { light -> controller.isAppearanceLightStatusBars = light || !ForceDarkTheme }
+        } finally {
+            controller.isAppearanceLightStatusBars = !ForceDarkTheme
+        }
+    }
 }
 
 // a style card in the picker shows the ipod, it doesn't work it

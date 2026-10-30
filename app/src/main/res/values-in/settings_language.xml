@@ -102,7 +102,7 @@
     <string name="customise_style_boring">Biasa</string>
     <string name="customise_style_plain">Polos</string>
     <string name="customise_top_bar">Bilah atas di pemutar</string>
-    <string name="customise_top_bar_desc">Jam dan ikon di atas pemutar yang terbuka. Gaya iPod selalu menyembunyikannya karena punya sendiri</string>
+    <string name="customise_top_bar_desc">Jam dan ikon di atas pemutar yang terbuka. Kalau mati, semua gaya pemutar memenuhi layar sampai atas</string>
     <string name="customise_gesture">Gestur</string>
     <string name="customise_swipe_right">Geser ke kanan</string>
     <string name="customise_swipe_right_desc">Geser lagu di daftar mana pun ke kanan</string>
