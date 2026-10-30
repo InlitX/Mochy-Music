@@ -88,6 +88,8 @@ fun PlayerActionMenu(
     fromLyrics: Boolean = false,
 
     onReveal: ((Float) -> Unit)? = null,
+    // turns the player into the full video mode; no row without it
+    onFullVideo: (() -> Unit)? = null,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val trackInfo by playerConnection.uiState.trackInfo.collectAsState()
@@ -272,6 +274,18 @@ fun PlayerActionMenu(
                     )
                 }
 
+                if (onFullVideo != null) {
+                    Spacer(modifier = Modifier.height(SectionGap))
+                    MenuRow(
+                        icon = R.drawable.fullscreen,
+                        title = androidx.compose.ui.res.stringResource(R.string.video_mode),
+                        onClick = {
+                            onDismiss()
+                            onFullVideo()
+                        },
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(SectionGap))
 
                 DeviceVolumeRow()
@@ -372,7 +386,7 @@ fun PlayerActionMenu(
 private val SectionGap = 16.dp
 
 @Composable
-private fun MenuRow(
+internal fun MenuRow(
     icon: Int,
     title: String,
     onClick: () -> Unit,

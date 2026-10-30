@@ -61,6 +61,8 @@ import com.mochyy.mochymusic.constants.StopPlaybackOnTaskRemovedKey
 import com.mochyy.mochymusic.constants.StreamFailureTimeoutKey
 import com.mochyy.mochymusic.constants.SyncLyricsToVideoKey
 import com.mochyy.mochymusic.constants.UsbPassthroughKey
+import com.mochyy.mochymusic.constants.VideoQuality
+import com.mochyy.mochymusic.constants.VideoQualityKey
 import com.mochyy.mochymusic.constants.YouTubeCaptionTranslationKey
 import com.mochyy.mochymusic.constants.YtVideoBackgroundLyricsSyncKey
 import com.mochyy.mochymusic.core.updater.saveUpdateNotificationsSetting
@@ -346,6 +348,7 @@ private fun playerLookItems(): List<SettingsItem> {
             checked = playVideoBackground,
             onCheckedChange = onPlayVideoBackgroundChange,
         ),
+        videoQualityItem(),
         switchItem(
             key = "Timestamp matching",
             title = stringResource(R.string.appearance_timestamp_matching),
@@ -382,6 +385,34 @@ private fun playerLookItems(): List<SettingsItem> {
             onCheckedChange = onHighBloomChange,
             visible = lyricsStyle.shaded,
         ),
+    )
+}
+
+// how sharp youtube videos play, on the cover and in the full video mode
+@Composable
+private fun videoQualityItem(): SettingsItem {
+    val (quality, onQuality) = rememberEnumPreference(VideoQualityKey, defaultValue = VideoQuality.AUTO)
+    var showDialog by remember { mutableStateOf(false) }
+    if (showDialog) {
+        VideoQualityDialog(
+            selected = quality,
+            onSelect = {
+                onQuality(it)
+                showDialog = false
+            },
+            onDismiss = { showDialog = false },
+        )
+    }
+    val title = stringResource(R.string.video_quality)
+    return SettingsItem(
+        title = { Text(title) },
+        highlightKey = "Video quality",
+        descriptionText = videoQualityName(quality),
+        detail = stringResource(R.string.video_quality_settings_desc),
+        searchText = title,
+        icon = rememberVectorPainter(Icons.Rounded.HighQuality),
+        iconShape = CircleShape,
+        onClick = { showDialog = true },
     )
 }
 

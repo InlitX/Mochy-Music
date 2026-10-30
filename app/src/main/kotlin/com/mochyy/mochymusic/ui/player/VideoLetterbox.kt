@@ -30,7 +30,7 @@ internal data class FrameReading(
  * zoom back out when a scene drops them. Many music videos switch between letterboxed and full
  * frame scenes, so this runs on every sample rather than once per video.
  *
- * Pure so it can be unit tested; [YouTubeVideoBackground] feeds it small frame samples.
+ * Pure so it can be unit tested; [com.mochyy.mochymusic.ui.player.video.YouTubeVideoSurface] feeds it small frame samples.
  */
 internal object VideoLetterbox {
     /** Largest bar, per side, worth believing. Anything taller is a dark frame, not a bar. */
@@ -234,6 +234,8 @@ internal fun videoCropTransform(
     videoAspect: Float,
     insetX: Float,
     insetY: Float,
+    // at most this share of the picture is cut away to fill the view; past it the picture shrinks and leaves room round it
+    maxLoss: Float = 1f,
 ): VideoTransform {
     if (viewWidth <= 0f || viewHeight <= 0f) return VideoTransform.Identity
     val viewAspect = viewWidth / viewHeight
@@ -243,14 +245,23 @@ internal fun videoCropTransform(
     val keepY = 1f - 2f * insetY.coerceIn(0f, VideoLetterbox.MAX_INSET)
     val pictureAspect = aspect * keepX / keepY
 
-    val pictureWidth: Float
-    val pictureHeight: Float
+    var pictureWidth: Float
+    var pictureHeight: Float
+    val keep = (1f - maxLoss).coerceIn(0.01f, 1f)
     if (pictureAspect > viewAspect) {
         pictureHeight = viewHeight
         pictureWidth = viewHeight * pictureAspect
+        if (viewWidth / pictureWidth < keep) {
+            pictureWidth = viewWidth / keep
+            pictureHeight = pictureWidth / pictureAspect
+        }
     } else {
         pictureWidth = viewWidth
         pictureHeight = viewWidth / pictureAspect
+        if (viewHeight / pictureHeight < keep) {
+            pictureHeight = viewHeight / keep
+            pictureWidth = pictureHeight * pictureAspect
+        }
     }
 
     val frameWidth = pictureWidth / keepX

@@ -285,6 +285,8 @@ private fun PlayerSheet(
 
     var showExpandMenu by remember { mutableStateOf(false) }
     var seeVideo by remember { mutableStateOf(false) }
+    // a youtube video is playing on the cover, so the chevron offers the full video mode
+    var videoShowing by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
     // The title and artist's sheet: the artists, the album, about the song
     var showSongDetails by remember { mutableStateOf(false) }
@@ -311,7 +313,10 @@ private fun PlayerSheet(
     LaunchedEffect(savedPlayerStyle) {
         if (savedPlayerStyle == pickedPlayerStyle) pickedPlayerStyle = null
     }
+    val (videoModeReturn, saveVideoModeReturn) = rememberPreference(com.mochyy.mochymusic.constants.VideoModeReturnStyleKey, "")
     val onPlayerStyleChange: (PlayerStyle) -> Unit = { style ->
+        // the style the full video mode goes back to when it's left
+        if (style == PlayerStyle.VIDEO && playerStyle != PlayerStyle.VIDEO) saveVideoModeReturn(playerStyle.name)
         pickedPlayerStyle = style
         savePlayerStyle(style)
     }
@@ -371,6 +376,16 @@ private fun PlayerSheet(
         kotlinx.coroutines.delay(180)
         openStudio()
     }
+    // the full video mode, from the options sheet or the chevron while a youtube video plays
+    val enterVideoMode: () -> Unit = {
+        showActionMenu = false
+        showExpandMenu = false
+        onPlayerStyleChange(PlayerStyle.VIDEO)
+    }
+    val exitVideoMode = androidx.compose.runtime.rememberUpdatedState {
+        val back = PlayerStyle.entries.firstOrNull { it.name == videoModeReturn && it != PlayerStyle.VIDEO }
+        onPlayerStyleChange(back ?: PlayerStyle.DEFAULT)
+    }
     // the song's whole lyrics, opened over an alternate style from its ••• menu
     var styleLyricsOpen by remember { mutableStateOf(false) }
     // that page fully up: the style under it stops drawing
@@ -385,6 +400,15 @@ private fun PlayerSheet(
             },
             onEditPlayer = openStudio,
             onLyrics = { styleLyricsOpen = true },
+            onExitVideoMode = { exitVideoMode.value() },
+            onOpenArtist = { artistId ->
+                navController.navigate("artist/$artistId")
+                state.collapseSoft()
+            },
+            onOpenAlbum = { albumId ->
+                navController.navigate("album/$albumId")
+                state.collapseSoft()
+            },
         )
     }
 
@@ -755,6 +779,7 @@ private fun PlayerSheet(
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.QUEUE -> transition.open(PlayerPage.QUEUE)
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SPEED -> showPlaybackSpeed = true
                 com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.OUTPUT -> showDeviceOutput = true
+                com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.FULL_VIDEO -> enterVideoMode()
                 else -> menuExtras.run(action)
             }
         }
@@ -825,6 +850,7 @@ private fun PlayerSheet(
                     glassActiveInEdit = { studio.stage >= StudioStage.EDIT && studio.selector.value < 0.01f },
                     // another style draws the open player itself: none of the flagship runs behind it
                     alternateStyle = !playerStyle.flagshipFamily,
+                    miniVideo = playerStyle == PlayerStyle.VIDEO,
                     coverOffsetProvider = layoutTweaks::controlsOffset,
                     onLongPressCover = holdToStudio,
                     studioArtModifier = if (playerStyle.flagshipFamily) {
@@ -838,6 +864,7 @@ private fun PlayerSheet(
                         }
                     },
                     onArtBoundsChanged = { rects.cover = it },
+                    onVideoShowingChange = { videoShowing = it },
                 )
             },
             onDismiss = {
@@ -874,8 +901,10 @@ private fun PlayerSheet(
                                 if (state.progress > StyleHiddenBelow) placeable.place(0, 0)
                             }
                         }
-                        .pointerInput(styleOpen) {
-                            if (!styleOpen) return@pointerInput
+                        // the full video mode is turned sideways and has its own pull to close, so a sideways swipe on it
+                        // (a vertical one to this) mustn't close the player
+                        .pointerInput(styleOpen, playerStyle) {
+                            if (!styleOpen || playerStyle == PlayerStyle.VIDEO) return@pointerInput
                             val closePx = 8.dp.toPx()
                             var pulled = 0f
                             var closing = false
@@ -926,8 +955,8 @@ private fun PlayerSheet(
                     onCoveredChange = { styleCovered = it },
                     onSwitchSource = { showLyricsSource = true },
                 )
-                // the ipod has its own chevron on its body, a bar over it would just be in the way
-                if (playerStyle != PlayerStyle.IPOD) PlayerHandle(
+                // the ipod has its own chevron on its body and the full video mode its own close, a bar over them would just be in the way
+                if (playerStyle != PlayerStyle.IPOD && playerStyle != PlayerStyle.VIDEO) PlayerHandle(
                     state = handleState,
                     sheet = state,
                     statusBarTop = statusBarTopInset,
@@ -1428,13 +1457,18 @@ private fun PlayerSheet(
             onDismiss = { showExpandMenu = false },
             // the Turntable's pills have no shuffle or repeat, so its menu adds them on top of the
             // four set in the editor (unless one of those is already there)
-            slots = if (isTurntable) {
-                listOf(
-                    com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE,
-                    com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.REPEAT,
-                ).filterNot { it in menuLayout.slots } + menuLayout.slots
-            } else {
-                menuLayout.slots
+            slots = run {
+                val set = if (isTurntable) {
+                    listOf(
+                        com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.SHUFFLE,
+                        com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.REPEAT,
+                    ).filterNot { it in menuLayout.slots } + menuLayout.slots
+                } else {
+                    menuLayout.slots
+                }
+                // with a youtube video on the cover, the full video mode goes on top unless it's already one of the four
+                val fullVideo = com.mochyy.mochymusic.ui.player.studio.PlayerMenuAction.FULL_VIDEO
+                if (videoShowing && fullVideo !in set) listOf(fullVideo) + set else set
             },
             isActive = ::menuActionActive,
             onAction = onMenuAction,
@@ -1490,6 +1524,7 @@ private fun PlayerSheet(
         if (showActionMenu) {
             PlayerActionMenu(
                 fromLyrics = menuFromLyrics,
+                onFullVideo = enterVideoMode,
                 onDismiss = {
                     showActionMenu = false
                     menuReveal.floatValue = 0f

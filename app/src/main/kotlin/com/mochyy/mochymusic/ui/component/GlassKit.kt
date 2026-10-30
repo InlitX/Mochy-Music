@@ -276,21 +276,26 @@ private class MaskedEffectCache {
     var height = -1f
     var tileOrdinal = -1
     var grow = -1
+    var across = false
+    var ramp = 1f
     var mask: Brush? = null
     var effect: RenderEffect? = null
 }
 
-// one separable gaussian pass whose radius grows row by row (maxRadius * t^2), edges averaged from real pixels only
+// one separable gaussian pass whose radius grows row by row (maxRadius * t^2), or column by column with across, reaching full strength ramp of the way along; edges averaged from real pixels only
 private const val VariableBlurSource = """
 uniform shader content;
 uniform float2 dir;
 uniform float2 size;
 uniform float maxRadius;
 uniform float growDown;
+uniform float across;
+uniform float ramp;
 
 half4 main(float2 p) {
-    float t = clamp(p.y / size.y, 0.0, 1.0);
-    if (growDown < 0.5) { t = 1.0 - t; }
+    float along = clamp(mix(p.y / size.y, p.x / size.x, across), 0.0, 1.0);
+    if (growDown < 0.5) { along = 1.0 - along; }
+    float t = clamp(along / ramp, 0.0, 1.0);
     float r = maxRadius * t * t;
     if (r < 0.5) { return content.eval(p); }
     float stepPx = (0.57735 * r + 0.5) * 0.25;
@@ -314,11 +319,21 @@ private object VariableBlurShader {
 
 // sharp at one end and maxRadius at the other in one go; stacked faded copies made every bright edge bloom
 @RequiresApi(33)
-private fun variableBlurEffect(maxRadius: Float, width: Float, height: Float, growDown: Boolean, mask: android.graphics.Shader?): RenderEffect {
+private fun variableBlurEffect(
+    maxRadius: Float,
+    width: Float,
+    height: Float,
+    growDown: Boolean,
+    mask: android.graphics.Shader?,
+    across: Boolean = false,
+    ramp: Float = 1f,
+): RenderEffect {
     val shader = VariableBlurShader.shader ?: createAgslShader(VariableBlurSource).also { VariableBlurShader.shader = it }
     shader.setAgslUniform("size", width, height)
     shader.setAgslUniform("maxRadius", maxRadius)
     shader.setAgslUniform("growDown", if (growDown) 1f else 0f)
+    shader.setAgslUniform("across", if (across) 1f else 0f)
+    shader.setAgslUniform("ramp", ramp.coerceIn(0.01f, 1f))
     shader.setAgslUniform("dir", 1f, 0f)
     val across = agslRenderEffect(shader, "content")
     shader.setAgslUniform("dir", 0f, 1f)
@@ -373,6 +388,9 @@ internal fun DownscaledBlur(
     offscreen: (() -> Boolean)? = null,
     // set to grow the blur from sharp to radius across the height (true: strongest at the bottom), android 13+ only
     growDown: Boolean? = null,
+    // grows across the width instead (growDown true: strongest at the right), full strength ramp of the way along
+    growAcross: Boolean = false,
+    growRamp: Float = 1f,
     draw: DrawScope.(fullSize: Size) -> Unit,
 ) {
     val currentRadius by rememberUpdatedState(radius)
@@ -414,15 +432,20 @@ internal fun DownscaledBlur(
                             val grow = if (growDown) 1 else 0
                             val cache = maskCache
                             if (cache.effect == null || cache.radius != quantized || cache.width != size.width ||
-                                cache.height != size.height || cache.grow != grow || cache.mask != mask
+                                cache.height != size.height || cache.grow != grow || cache.mask != mask ||
+                                cache.across != growAcross || cache.ramp != growRamp
                             ) {
                                 cache.effect = variableBlurEffect(
                                     quantized, size.width, size.height, growDown, (mask as? ShaderBrush)?.createShader(size),
+                                    across = growAcross,
+                                    ramp = growRamp,
                                 )
                                 cache.radius = quantized
                                 cache.width = size.width
                                 cache.height = size.height
                                 cache.grow = grow
+                                cache.across = growAcross
+                                cache.ramp = growRamp
                                 cache.tileOrdinal = -1
                                 cache.mask = mask
                             }

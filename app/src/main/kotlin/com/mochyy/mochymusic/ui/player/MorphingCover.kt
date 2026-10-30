@@ -119,10 +119,8 @@ import com.mochyy.mochymusic.constants.DisableBlurKey
 import com.mochyy.mochymusic.constants.ForceYtBackdropBlur1500Key
 import com.mochyy.mochymusic.constants.PlayVideoBackgroundKey
 import com.mochyy.mochymusic.constants.DisableVideoAutoplayKey
-import com.mochyy.mochymusic.utils.YTPlayerUtils
 import com.mochyy.mochymusic.constants.PlayerBackgroundStyle
 import com.mochyy.mochymusic.constants.PlayerCoverStyle
-import com.mochyy.mochymusic.constants.YtVideoBackgroundLyricsSyncKey
 import com.mochyy.mochymusic.ui.player.customize.DiscCoverStack
 import com.mochyy.mochymusic.ui.player.customize.PlayerBackgroundContent
 import com.mochyy.mochymusic.ui.player.customize.CoverGradientBackdrop
@@ -224,6 +222,9 @@ private class MorphEndpointsPx(
 private enum class MorphElement { ART, PLAY, SKIP, TEXT, BACKDROP }
 
 private const val PILL_FADE_END = 0.15f
+
+// past this much of the open the mini player's video gives the picture to the full video mode
+private const val MiniVideoUntil = 0.4f
 
 private val LyricsHeaderCornerRadius = 12.dp
 
@@ -392,11 +393,15 @@ fun MorphingCover(
      * backdrop, canvas, video and their clocks don't run at all.
      */
     alternateStyle: Boolean = false,
+    // the full video mode: its video keeps playing in the mini player, as the flagship's does
+    miniVideo: Boolean = false,
     /**
      * How far the controls under the cover were moved, px down (up when negative): its region
      * ends where they start, so the cover zooms with them. Read while laying out only.
      */
     coverOffsetProvider: () -> Float = { 0f },
+    // told when a youtube video starts or stops showing on the cover, so the chevron can offer the full video mode
+    onVideoShowingChange: (Boolean) -> Unit = {},
 ) {
     val playerConnection = LocalPlayerConnection.current
     val density = LocalDensity.current
@@ -415,47 +420,26 @@ fun MorphingCover(
         .collectAsState()
     // a track that is a video itself (a music video or live row, the Videos search tab) plays that
     // video here on its own; songs only get one when the video background setting asks for it
-    val trackIsVideo = !disableVideoAutoplay &&
-        currentMetadata?.id == trackInfo.mediaId &&
-        currentMetadata?.isVideoSong == true
-    val playVideoBackground = !alternateStyle && (forceVideoBackground || playVideoPref || trackIsVideo)
-    var videoInfo by remember(trackInfo.mediaId) { mutableStateOf<OfficialMusicVideo?>(null) }
-    LaunchedEffect(trackInfo.mediaId, trackInfo.title, trackInfo.artist, playVideoBackground, trackIsVideo) {
-        val mediaId = trackInfo.mediaId
-        val titleStr = trackInfo.title
-        val artistStr = trackInfo.artist
-        if (!playVideoBackground || mediaId.isBlank()) {
-            videoInfo = null
-            return@LaunchedEffect
-        }
-        if (trackIsVideo) {
-            // the audio is this very video, so its own stream lines up exactly and needs no search
-            val key = "self:$mediaId"
-            if (YouTubeVideoUrlCache.contains(key)) {
-                videoInfo = YouTubeVideoUrlCache.get(key)
-                return@LaunchedEffect
-            }
-            val own = withContext(Dispatchers.IO) {
-                YTPlayerUtils.resolveVideoStreamUrl(mediaId).getOrNull()?.let { OfficialMusicVideo(mediaId, it) }
-            }
-            YouTubeVideoUrlCache.put(key, own)
-            videoInfo = own
-            return@LaunchedEffect
-        }
-        if (titleStr.isBlank() || artistStr.isBlank()) {
-            videoInfo = null
-            return@LaunchedEffect
-        }
-        if (YouTubeVideoUrlCache.contains(mediaId)) {
-            videoInfo = YouTubeVideoUrlCache.get(mediaId)
-            return@LaunchedEffect
-        }
-        val resolved = withContext(Dispatchers.IO) { findOfficialMusicVideo(titleStr, artistStr) }
-        YouTubeVideoUrlCache.put(mediaId, resolved)
-        videoInfo = resolved
+    val songIsVideo = currentMetadata?.id == trackInfo.mediaId && currentMetadata?.isVideoSong == true
+    val trackIsVideo = !disableVideoAutoplay && songIsVideo
+    val playVideoBackground = if (alternateStyle) miniVideo else forceVideoBackground || playVideoPref || trackIsVideo
+    // the audio of a track that is a video is that very video, so its own stream lines up exactly and needs no search;
+    // the full video mode asked for the video itself, so it plays its own even with autoplay off, as the mode does
+    val videoInfo = rememberSongVideo(
+        mediaId = trackInfo.mediaId,
+        title = trackInfo.title,
+        artist = trackInfo.artist,
+        isVideoSong = if (miniVideo) songIsVideo else trackIsVideo,
+        enabled = playVideoBackground,
+    )
+    // with the full video mode opening over it, the mini player's copy steps aside so the mode takes the picture
+    val miniVideoShown by remember(alternateStyle) {
+        derivedStateOf { !alternateStyle || progressProvider() < MiniVideoUntil }
     }
 
     val isVideoActive = !isDiscStyle && playVideoBackground && videoInfo != null
+    val currentOnVideoShowing by androidx.compose.runtime.rememberUpdatedState(onVideoShowingChange)
+    LaunchedEffect(isVideoActive) { currentOnVideoShowing(isVideoActive) }
     val targetMiniArtWidth = if (isVideoActive) (48.dp * 16f / 9f) else 48.dp
     val animatedMiniArtWidth by animateDpAsState(
         targetValue = targetMiniArtWidth,
@@ -602,56 +586,6 @@ fun MorphingCover(
     }
 
 
-    val lyricsSyncEnabled by rememberPreference(YtVideoBackgroundLyricsSyncKey, defaultValue = true)
-    val currentLyrics by playerConnection?.currentLyrics?.collectAsState(initial = null)
-        ?: androidx.compose.runtime.mutableStateOf(null)
-    // the video plays as soon as it loads, then a first guess at where the song is from its captions and the lyrics
-    var lyricVideoTimeline by remember(trackInfo.mediaId) { mutableStateOf<LyricVideoTimeline?>(null) }
-    LaunchedEffect(videoInfo?.videoId, currentLyrics?.lyrics, lyricsSyncEnabled) {
-        val mediaId = trackInfo.mediaId
-        val videoId = videoInfo?.videoId
-        val lyricsRaw = currentLyrics?.lyrics
-            ?.takeIf { it.isNotBlank() && it != com.mochyy.mochymusic.db.entities.LyricsEntity.LYRICS_NOT_FOUND }
-        // the track's own video is already in step with it; the timeline is for lining up a separate one
-        if (!lyricsSyncEnabled || videoId == null || videoId == mediaId || lyricsRaw == null) {
-            lyricVideoTimeline = null
-            return@LaunchedEffect
-        }
-        val key = "$mediaId|$videoId|${lyricsRaw.hashCode()}"
-        if (LyricVideoTimelineCache.contains(key)) {
-            lyricVideoTimeline = LyricVideoTimelineCache.get(key)
-            return@LaunchedEffect
-        }
-        val timeline = try {
-            buildLyricVideoTimeline(videoId, lyricsRaw)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
-        }
-        LyricVideoTimelineCache.put(key, timeline)
-        lyricVideoTimeline = timeline
-    }
-    // then the exact answer: the song and the video listened to side by side, which needs no captions or lyrics at all
-    var audioVideoMap by remember(trackInfo.mediaId) { mutableStateOf<com.mochyy.mochymusic.lyrics.SongVideoMap?>(null) }
-    LaunchedEffect(trackInfo.mediaId, videoInfo?.videoId, lyricsSyncEnabled) {
-        val mediaId = trackInfo.mediaId
-        val videoId = videoInfo?.videoId
-        val service = playerConnection?.service
-        if (!lyricsSyncEnabled || videoId == null || videoId == mediaId || service == null) {
-            audioVideoMap = null
-            return@LaunchedEffect
-        }
-        audioVideoMap = service.matchSongToVideo(mediaId, videoId)
-    }
-    val videoPositionAt = remember(lyricVideoTimeline, audioVideoMap) {
-        audioVideoMap?.let { map -> { songMs: Long -> map.videoMsAt(songMs) } }
-            ?: lyricVideoTimeline?.let { timeline ->
-                // the lyrics' own offset counts too: it's what puts the lyrics, and so the video, on the song
-                { songMs: Long -> timeline.videoMsAt(songMs + (playerConnection?.lyricsOffsetMs?.value ?: 0)) }
-            }
-    }
-
     val videoGlassState = remember(trackInfo.mediaId) { GlassState() }
 
     // the playing canvas mirrored into the backdrop under the edge-to-edge cover, like the youtube video is
@@ -691,7 +625,7 @@ fun MorphingCover(
             // edge-to-edge cover has one. The squared cover's reflection covered a strip below it,
             // and the discs play no video at all - both faded the cover's colours out for a bare
             // grey surface on every song with a video.
-            playVideoBackground = playVideoBackground && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE,
+            playVideoBackground = playVideoBackground && !alternateStyle && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE,
             videoInfo = videoInfo,
             videoGlassState = videoGlassState,
             canvasGlassState = canvasMirror.glass,
@@ -1022,12 +956,10 @@ fun MorphingCover(
                                 mirror = if (playing && canvasMirrorWanted) canvasMirror else null,
                             )
 
-                            if (playing && !isDiscStyle && playVideoBackground && videoInfo != null) {
+                            if (playing && !isDiscStyle && playVideoBackground && videoInfo != null && miniVideoShown) {
                                 YouTubeVideoBackground(
-                                    streamUrl = videoInfo?.streamUrl,
+                                    video = videoInfo,
                                     isPlaying = isPlaying,
-                                    positionMsProvider = { playerConnection?.player?.currentPosition ?: 0L },
-                                    videoPositionAt = videoPositionAt,
                                     glassState = videoGlassState,
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -1287,7 +1219,7 @@ private fun PlayerBackdropCrossfade(
     backgroundStyle: PlayerBackgroundStyle,
     pureBlack: Boolean,
     playVideoBackground: Boolean,
-    videoInfo: OfficialMusicVideo?,
+    videoInfo: SongVideo?,
     videoGlassState: GlassState,
     canvasGlassState: GlassState,
     canvasMirrorAlpha: () -> Float,
@@ -1671,7 +1603,7 @@ private fun SheetBackdrop(
     coverStyle: PlayerCoverStyle,
     pureBlack: Boolean,
     playVideoBackground: Boolean,
-    videoInfo: OfficialMusicVideo?,
+    videoInfo: SongVideo?,
     videoGlassState: GlassState,
     canvasGlassState: GlassState,
     canvasMirrorAlpha: () -> Float,

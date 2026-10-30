@@ -943,4 +943,33 @@
     <string name="all_time_hits">All Time Hits</string>
     <string name="most_played_genre">Most played %1$s</string>
     <string name="add_music">Add Music</string>
+    <!-- the full video mode and youtube video quality -->
+    <string name="video_mode">Full video</string>
+    <string name="video_mode_exit">Exit video mode</string>
+    <string name="video_mode_close_player">Close player</string>
+    <string name="video_mode_finding">Looking for the video…</string>
+    <string name="video_mode_no_video">No video for this song. The lyrics still play here.</string>
+    <string name="video_mode_no_lyrics">No lyrics for this song</string>
+    <string name="video_mode_queue">Queue</string>
+    <string name="video_mode_lyrics">Lyrics</string>
+    <string name="video_mode_lyrics_provider">Lyrics provider</string>
+    <string name="video_mode_lyrics_offset">Lyrics offset</string>
+    <string name="video_mode_lyrics_translation">Lyrics translation</string>
+    <string name="video_mode_speed">Playback speed and tempo</string>
+    <string name="video_mode_volume">Volume</string>
+    <string name="video_quality">Video quality</string>
+    <string name="video_quality_auto">Auto</string>
+    <string name="video_quality_auto_desc">Drops to a lower picture when your connection slows down, so the video keeps moving instead of freezing</string>
+    <string name="video_quality_auto_now">Auto · %1$s</string>
+    <string name="video_quality_size">%1$dp</string>
+    <string name="video_quality_fixed_desc">Stays at this size. On a slow connection the video may stop to load</string>
+    <string name="video_quality_settings_desc">How sharp YouTube videos play. Auto keeps them smooth on a slow connection</string>
+    <string name="video_quality_not_loaded">The sizes show up once the video has loaded</string>
+    <string name="video_mode_song_info">Song info</string>
+    <string name="video_mode_whole_video">Show the whole video</string>
+    <string name="video_mode_whole_video_desc">Off, the video is zoomed in to fill the screen</string>
+    <plurals name="video_mode_seek_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
 </resources>

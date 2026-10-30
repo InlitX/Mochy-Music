@@ -640,46 +640,88 @@ object YTPlayerUtils {
         WEB,
     )
 
-    suspend fun resolveVideoStreamUrl(videoId: String): Result<String> = runCatching {
-        val signatureTimestamp = getSignatureTimestampOrNull(videoId)
-
-        for (client in VIDEO_BACKGROUND_CLIENTS) {
-            val response = try {
-                YouTube.player(videoId, null, client, signatureTimestamp.timestamp, null).getOrNull()
-            } catch (e: Exception) {
-                Timber.tag(logTag).d("resolveVideoStreamUrl: client ${client.clientName} threw: ${e.message}")
-                null
-            } ?: continue
-
-            if (response.playabilityStatus.status != "OK") {
-                Timber.tag(logTag).d("resolveVideoStreamUrl: client ${client.clientName} not OK: ${response.playabilityStatus.status}")
-                continue
+    // every size of the video's picture from the first client whose links really serve the whole file
+    suspend fun resolveVideoStreams(videoId: String): Result<VideoStreams> = runCatching {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            // without a visitorData the first client says UNPLAYABLE and the ones after it stop the video a few seconds in
+            if (YouTube.cookie == null && YouTube.visitorData.isNullOrEmpty()) {
+                YouTube.refreshVisitorData()
+                    .onFailure { Timber.tag(logTag).w(it, "resolveVideoStreams: no visitorData: ${it.message}") }
             }
+            val signatureTimestamp: SignatureTimestampResult by lazy { getSignatureTimestampOrNull(videoId) }
 
-            val format = response.streamingData?.adaptiveFormats
-                ?.filter { !it.isAudio && it.height != null }
-                ?.minByOrNull { kotlin.math.abs((it.height ?: 0) - 720) }
-                ?: response.streamingData?.formats?.firstOrNull { !it.isAudio }
-
-            if (format == null) {
-                Timber.tag(logTag).d("resolveVideoStreamUrl: client ${client.clientName} had no video format")
-                continue
+            for (client in VIDEO_BACKGROUND_CLIENTS) {
+                val streams = try {
+                    videoStreamsFrom(client, videoId) { signatureTimestamp.timestamp }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag(logTag).d("resolveVideoStreams: client ${client.clientName} threw: ${e.message}")
+                    null
+                }
+                if (streams != null) {
+                    Timber.tag(logTag).d("resolveVideoStreams: ${streams.tracks.size} sizes via ${client.clientName}")
+                    return@withContext streams
+                }
             }
-
-            val url = try {
-                findUrlOrNull(format, videoId, response, skipNewPipe = false)
-            } catch (e: Exception) {
-                Timber.tag(logTag).d("resolveVideoStreamUrl: client ${client.clientName} URL resolution threw: ${e.message}")
-                null
-            }
-
-            if (url != null) {
-                Timber.tag(logTag).d("resolveVideoStreamUrl: resolved via ${client.clientName}")
-                return@runCatching url
-            }
+            throw Exception("Could not resolve a playable video stream for videoId=$videoId after trying ${VIDEO_BACKGROUND_CLIENTS.size} clients")
         }
+    }
 
-        throw Exception("Could not resolve a playable video stream for videoId=$videoId after trying ${VIDEO_BACKGROUND_CLIENTS.size} clients")
+    // one client's sizes, or null when it can't play the video or its links stop early
+    private suspend fun videoStreamsFrom(
+        client: YouTubeClient,
+        videoId: String,
+        signatureTimestamp: () -> Int?,
+    ): VideoStreams? {
+        val timestamp = if (client.useSignatureTimestamp) signatureTimestamp() else null
+        val response = YouTube.player(videoId, null, client, timestamp, null).getOrNull() ?: return null
+        if (response.playabilityStatus.status != "OK") {
+            Timber.tag(logTag).d("resolveVideoStreams: client ${client.clientName} not OK: ${response.playabilityStatus.status}")
+            return null
+        }
+        val streaming = response.streamingData ?: return null
+        val tracks = pickVideoFamily(streaming.adaptiveFormats).mapNotNull { format ->
+            var url = runCatching { findUrlOrNull(format, videoId, response, skipNewPipe = false) }.getOrNull()
+                ?: return@mapNotNull null
+            if (client.useWebPoTokens) {
+                url = runCatching { EjsNTransformSolver.transformNParamInUrl(url) }.getOrDefault(url)
+            }
+            VideoTrack(
+                itag = format.itag,
+                url = url,
+                mimeType = format.containerType(),
+                codecs = format.codecs(),
+                width = format.width ?: 0,
+                height = format.height ?: 0,
+                fps = format.fps ?: 30,
+                bitrate = format.bitrate,
+                initRange = format.initRange?.toLongRange(),
+                indexRange = format.indexRange?.toLongRange(),
+                contentLength = format.contentLength,
+            )
+        }
+        if (tracks.isEmpty()) {
+            Timber.tag(logTag).d("resolveVideoStreams: client ${client.clientName} had no video format")
+            return null
+        }
+        val headers = client.streamHeaders()
+        // checked at the end of the file: a link that only serves its first ~786 KB froze the picture three seconds in
+        val probe = tracks.minBy { kotlin.math.abs(it.shortSide - 720) }
+        if (!validateStatus(probe.url, headers, probe.contentLength)) {
+            Timber.tag(logTag).d("resolveVideoStreams: client ${client.clientName} cuts the video off")
+            return null
+        }
+        val durationMs = streaming.adaptiveFormats.firstNotNullOfOrNull { it.approxDurationMs?.toLongOrNull() }
+            ?: response.videoDetails?.lengthSeconds?.toLongOrNull()?.times(1000L)
+            ?: 0L
+        return VideoStreams(
+            videoId = videoId,
+            tracks = tracks,
+            headers = headers,
+            expiresAtMs = System.currentTimeMillis() + streaming.expiresInSeconds * 1000L,
+            durationMs = durationMs,
+        )
     }
 
     suspend fun playerResponseForMetadata(

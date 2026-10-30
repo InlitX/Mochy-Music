@@ -1338,7 +1338,12 @@ class MainActivity : ComponentActivity() {
         val playerHeadingDown = !state.isExpandedOrExpanding
         // the status bar goes too when customize's top bar is off, on every player style
         val (statusBarShown) = rememberPreference(com.mochyy.mochymusic.constants.PlayerStatusBarKey, defaultValue = com.mochyy.mochymusic.constants.PlayerStatusBarDefault)
-        val hideStatusBar = !statusBarShown
+        // the full video mode fills the screen sideways, a status bar down one side of it would cut into the picture
+        val (playerStyle) = com.mochyy.mochymusic.utils.rememberEnumPreference(
+            com.mochyy.mochymusic.constants.PlayerStyleKey,
+            com.mochyy.mochymusic.constants.PlayerStyle.DEFAULT,
+        )
+        val hideStatusBar = !statusBarShown || playerStyle == com.mochyy.mochymusic.constants.PlayerStyle.VIDEO
         // Back in the app (from Home, the recents, a dialog) it's hidden again: with
         // gesture navigation a swipe from the bottom brings it back for good (see
         // playerNavBarBehavior).

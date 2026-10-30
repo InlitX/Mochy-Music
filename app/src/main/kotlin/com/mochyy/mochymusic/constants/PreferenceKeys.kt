@@ -372,6 +372,26 @@ val ShowPlayerBottomCardKey = booleanPreferencesKey("showPlayerBottomCard")
 val PlayVideoBackgroundKey = booleanPreferencesKey("playVideoBackground")
 // a track that is a YouTube video (from a video row or the Videos search tab) shows that video in the player
 val DisableVideoAutoplayKey = booleanPreferencesKey("disableVideoAutoplay")
+
+// how sharp youtube videos play; auto drops to a lower picture when the connection slows down instead of freezing
+enum class VideoQuality(val shortSide: Int) {
+    AUTO(0),
+    Q1080(1080),
+    Q720(720),
+    Q480(480),
+    Q360(360),
+    Q240(240),
+    Q144(144),
+}
+
+val VideoQualityKey = stringPreferencesKey("videoQuality")
+
+// the style the player goes back to when the full video mode is left
+val VideoModeReturnStyleKey = stringPreferencesKey("videoModeReturnStyle")
+
+// the full video mode shows the whole picture with room round it, instead of zooming it to fill the screen
+val VideoModeWholeVideoKey = booleanPreferencesKey("videoModeWholeVideo")
+
 val LocalSongAutoMetadataKey = booleanPreferencesKey("local_song_auto_metadata")
 
 enum class LibraryViewType {
@@ -565,13 +585,15 @@ enum class PlayerCoverStyle {
  * Whole-player presets, picked in the player selector (hold the player, or "edit player").
  *
  * The flagship [DEFAULT] can be edited, [TURNTABLE] (the flagship around a record player) has
- * its disc label and [POSTER] its visualizer; the other three are complete designs of their own,
+ * its disc label and [POSTER] its visualizer; the others are complete designs of their own,
  * each of which can be turned sideways from its menu.
  */
 enum class PlayerStyle(val displayName: String, val selectorName: String) {
     DEFAULT("Flagship", "Default"),
     /** the flagship with a record player for its cover, whose arm is the seek bar */
     TURNTABLE("Turntable", "Turntable"),
+    // the song's youtube video across the whole screen, turned sideways, with its lyrics in a pane
+    VIDEO("Full video", "Full video"),
     // the ipod classic, click wheel and all, browsing the library from inside the player
     IPOD("iPod", "iPod"),
     POSTER("Poster", "Poster"),
@@ -1117,6 +1139,8 @@ val ElementBlurKey = booleanPreferencesKey("elementBlur")
 val AnimationSpeedKey = floatPreferencesKey("animationSpeed")
 // the phone's status bar over the open player, off hides it on every player style, the ipod too
 val PlayerStatusBarKey = booleanPreferencesKey("playerStatusBar")
+// out of the box the open player runs to the top of the screen with the status bar hidden
+const val PlayerStatusBarDefault = false
 // settings rows show only their titles, holding a row still shows what it does
 val HideSettingsDescriptionsKey = booleanPreferencesKey("hideSettingsDescriptions")
 // no update popup on home and no update notification, the updater page still shows what's new when opened
@@ -1136,8 +1160,6 @@ val LastDonateShownTimeKey = longPreferencesKey("lastDonateShownTime")
 val DonatePlaytimeMsKey = longPreferencesKey("donatePlaytimeMs")
 val DonateFirstPromptShownKey = booleanPreferencesKey("donateFirstPromptShown")
 val DonatePromptWindowStartKey = longPreferencesKey("donatePromptWindowStart")
-// out of the box the open player runs to the top of the screen with the status bar hidden
-const val PlayerStatusBarDefault = false
 val DonatePromptSlotsKey = stringPreferencesKey("donatePromptSlots")
 val DonateOpenPromptAtKey = longPreferencesKey("donateOpenPromptAt")
 

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -88,6 +89,14 @@ private val PeekHeight = 32.dp
 
 /** Space kept between the status bar and the highest a sheet (or its peek strip) can reach. */
 private val StatusBarGap = 6.dp
+
+// set where a sheet floats as a card in the middle instead of rising from the bottom edge (the full video mode, turned sideways)
+val LocalMenuSheetFloating = staticCompositionLocalOf { false }
+
+// a floating sheet's gap to the edges, its widest, and its corners
+private val FloatingMargin = 18.dp
+private val FloatingMaxWidth = 360.dp
+private val FloatingCorner = 28.dp
 
 /**
  * The player's sheets opened from one another - the action menu, then "Change device output",
@@ -186,6 +195,10 @@ fun MenuSheetSurface(
     val density = LocalDensity.current
     val stack = LocalMenuSheetStack.current
     val peekPx = with(density) { PeekHeight.toPx() }
+    // a floating card is as tall as what's in it and scrolls inside itself; it never grows to a taller detent
+    val floating = LocalMenuSheetFloating.current
+    val wraps = wrapHeight || floating
+    val floatingMarginPx = if (floating) with(density) { FloatingMargin.toPx() } else 0f
 
     var closing by remember { mutableStateOf(false) }
 
@@ -250,17 +263,20 @@ fun MenuSheetSurface(
         val parentHeightPx = constraints.maxHeight.toFloat()
         // No sheet edge ever goes above the status bar. A sheet covering another stops a peek strip
         // lower still, so the one behind can rise to peek above it and stay below the status bar.
-        val safeTopPx = (statusBarBottomPx - parentTopInWindowPx).coerceAtLeast(0f)
-        val capPx = (parentHeightPx - safeTopPx - if (isCovering) peekPx else 0f).coerceAtLeast(0f)
-        val detentSheetPx = minOf(with(density) { (maxHeight * fullDetent).toPx() }, capPx)
+        // a floating card sits in a frame of its own with no status bar, just its margin all round
+        val safeTopPx = if (floating) floatingMarginPx else (statusBarBottomPx - parentTopInWindowPx).coerceAtLeast(0f)
+        val capPx = (parentHeightPx - safeTopPx - floatingMarginPx - if (isCovering) peekPx else 0f).coerceAtLeast(0f)
+        val detentSheetPx = if (floating) capPx else minOf(with(density) { (maxHeight * fullDetent).toPx() }, capPx)
         val maxSheetPx = minOf(maxOf(detentSheetPx, coveredVisiblePx), capPx)
-        val fullHeightPx = if (wrapHeight) {
+        val fullHeightPx = if (wraps) {
             measuredHeightPx.floatValue.takeIf { it > 0f } ?: maxSheetPx
         } else {
             maxSheetPx
         }
+        // how far down the sheet goes to be fully out of sight, its bottom gap included
+        val closedOffsetPx = fullHeightPx + floatingMarginPx
 
-        val restingOffsetPx = if (wrapHeight) {
+        val restingOffsetPx = if (wraps) {
             0f
         } else {
             val restVisiblePx = maxOf(with(density) { (maxHeight * halfDetent).toPx() }, coveredVisiblePx)
@@ -273,7 +289,7 @@ fun MenuSheetSurface(
         }
 
         fun revealFraction(): Float =
-            (1f - (offsetPx.floatValue - restingOffsetPx) / (fullHeightPx - restingOffsetPx).coerceAtLeast(1f))
+            (1f - (offsetPx.floatValue - restingOffsetPx) / (closedOffsetPx - restingOffsetPx).coerceAtLeast(1f))
                 .coerceIn(0f, 1f)
 
         fun setOffset(value: Float) {
@@ -301,8 +317,8 @@ fun MenuSheetSurface(
             snapshotFlow { measuredHeightPx.floatValue }.first { it > 0f }
             withFrameNanos { }
 
-            val start = if (wrapHeight) measuredHeightPx.floatValue else maxSheetPx
-            val target = if (wrapHeight) 0f else restingOffsetPx
+            val start = (if (wraps) measuredHeightPx.floatValue else maxSheetPx) + floatingMarginPx
+            val target = if (wraps) 0f else restingOffsetPx
             setOffset(start)
             animate(
                 initialValue = start,
@@ -325,7 +341,7 @@ fun MenuSheetSurface(
         forceCloseRef.value = {
             if (!closing) {
                 closing = true
-                animateTo(fullHeightPx) { onDismiss() }
+                animateTo(closedOffsetPx) { onDismiss() }
             }
         }
 
@@ -358,13 +374,13 @@ fun MenuSheetSurface(
             val current = offsetPx.floatValue
             val target = when {
                 !dismissEnabled -> restingOffsetPx
-                velocity > FlingThreshold -> if (current > restingOffsetPx * 0.6f) fullHeightPx else restingOffsetPx
+                velocity > FlingThreshold -> if (current > restingOffsetPx * 0.6f) closedOffsetPx else restingOffsetPx
                 velocity < -FlingThreshold -> 0f
-                else -> listOf(0f, restingOffsetPx, fullHeightPx).minBy { kotlin.math.abs(it - current) }
+                else -> listOf(0f, restingOffsetPx, closedOffsetPx).minBy { kotlin.math.abs(it - current) }
             }
-            if (target >= fullHeightPx && dismissEnabled) {
+            if (target >= closedOffsetPx && dismissEnabled) {
                 closing = true
-                animateTo(fullHeightPx) { onDismiss() }
+                animateTo(closedOffsetPx) { onDismiss() }
             } else {
                 animateTo(target) {}
             }
@@ -414,14 +430,21 @@ fun MenuSheetSurface(
             }
         }
 
-        val sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
+        val sheetShape = if (floating) RoundedCornerShape(FloatingCorner) else RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
 
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .then(
+                    if (floating) {
+                        Modifier
+                            .padding(bottom = FloatingMargin)
+                            .widthIn(max = FloatingMaxWidth)
+                    } else Modifier
+                )
                 .fillMaxWidth()
                 .then(
-                    if (wrapHeight) {
+                    if (wraps) {
                         Modifier.heightIn(
                             min = with(density) { coveredVisiblePx.toDp() },
                             max = with(density) { maxSheetPx.toDp() },
@@ -437,7 +460,8 @@ fun MenuSheetSurface(
                     measuredHeightPx.floatValue = it.height.toFloat()
                     entry.sheetHeightPx = it.height.toFloat()
                 }
-                .nestedScroll(sheetNestedScroll)
+                // a floating card's list scrolls inside it; the card itself stays put
+                .then(if (floating) Modifier else Modifier.nestedScroll(sheetNestedScroll))
                 .graphicsLayer {
                     var shift = 0f
                     var depth = 0f
@@ -475,7 +499,7 @@ fun MenuSheetSurface(
             val dragHandle = Modifier.draggable(
                 state = rememberDraggableState { delta ->
                     if (dismissEnabled) {
-                        setOffset((offsetPx.floatValue + delta).coerceIn(0f, fullHeightPx))
+                        setOffset((offsetPx.floatValue + delta).coerceIn(0f, closedOffsetPx))
                     } else {
 
                         val resisted = (offsetPx.floatValue + delta * LockedDragResistance)

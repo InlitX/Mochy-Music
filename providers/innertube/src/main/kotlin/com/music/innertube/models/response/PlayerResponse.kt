@@ -60,12 +60,21 @@ data class PlayerResponse(
             val lastModified: Long?,
             val signatureCipher: String?,
             val cipher: String?,
-            val audioTrack: AudioTrack?
+            val audioTrack: AudioTrack?,
+            // where the header and the chunk index sit in the file, so a player can fetch it in small pieces and switch quality
+            val initRange: ByteRange? = null,
+            val indexRange: ByteRange? = null,
         ) {
             val isAudio: Boolean
                 get() = width == null
             val isOriginal: Boolean
                 get() = audioTrack?.isAutoDubbed == null
+
+            @Serializable
+            data class ByteRange(
+                val start: String,
+                val end: String,
+            )
 
             @Serializable
             data class AudioTrack(

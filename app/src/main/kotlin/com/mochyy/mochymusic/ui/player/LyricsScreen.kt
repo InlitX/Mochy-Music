@@ -306,23 +306,7 @@ fun LyricsScreen(
     }
 
     val anchorIndex by remember(lines, unsynced) {
-        derivedStateOf {
-            if (unsynced) return@derivedStateOf -1
-            var i = LyricsUtils.findCurrentLineIndex(lines, progress.position + lyricsOffsetMs)
-            // findCurrentLineIndex returns lines.size once playback is past the final line. Don't
-            // walk back from there looking for an anchor — there is no active line to anchor.
-            if (i <= 0 || i >= lines.size) return@derivedStateOf i
-            while (i > 0) {
-                val previous = i - 1
-                val endMs = lines[previous].words
-                    ?.lastOrNull()
-                    ?.let { (it.endTime * 1000).toLong() }
-                    ?: return@derivedStateOf i
-                if (endMs <= progress.position + lyricsOffsetMs) return@derivedStateOf i
-                i = previous
-            }
-            i
-        }
+        derivedStateOf { if (unsynced) -1 else lyricAnchorIndex(lines, progress.position + lyricsOffsetMs) }
     }
 
     // Every instrumental gap in the song, as its own list row. Building these up front — rather
@@ -490,15 +474,7 @@ fun LyricsScreen(
 
     /** Which gap, if any, is happening right now. [NoInterlude] when a line is being sung. */
     val activeInterlude by remember(lines, rows) {
-        derivedStateOf {
-            val position = progress.position + lyricsOffsetMs
-            // Ends with the same lead-in the next line starts with, so the dots collapse on the
-            // very frame that line takes over and the recenter scroll can account for it.
-            rows.firstOrNull {
-                it is LyricRow.Interlude && position >= it.startMs &&
-                    position + LyricsUtils.LineLeadInMs < it.endMs
-            }?.let { (it as LyricRow.Interlude).afterIndex } ?: NoInterlude
-        }
+        derivedStateOf { activeInterludeOf(rows, progress.position + lyricsOffsetMs) }
     }
 
     // Only honour {agent:v1}/{agent:v2} when the song actually has more than one voice. A solo
@@ -509,12 +485,7 @@ fun LyricsScreen(
     // singer implicit — saw a single distinct agent and fell back to all-left, which is exactly
     // the case where left/right matters most. Background vocals are excluded because they are
     // centred regardless and would otherwise fake a second voice on a solo track.
-    val useAgentAlignment = remember(lines) {
-        lines.filter { !it.isBackground }
-            .map { it.agent ?: "v1" }
-            .distinct()
-            .size > 1
-    }
+    val useAgentAlignment = remember(lines) { usesAgentAlignment(lines) }
 
     // the boring and plain styles are styles 1 and 2 with the shader left out
     val lyricsWaveAnimation = motionStyle.shaded
@@ -805,12 +776,44 @@ fun LyricsScreen(
 }
 
 /** Sentinel for "no instrumental gap is playing right now". */
-private const val NoInterlude = Int.MIN_VALUE
+internal const val NoInterlude = Int.MIN_VALUE
+
+// the line the list rests on: the sung one, or an earlier one whose words are still running into it
+internal fun lyricAnchorIndex(lines: List<LyricsEntry>, positionMs: Long): Int {
+    var i = LyricsUtils.findCurrentLineIndex(lines, positionMs)
+    // findCurrentLineIndex returns lines.size once playback is past the final line. Don't
+    // walk back from there looking for an anchor — there is no active line to anchor.
+    if (i <= 0 || i >= lines.size) return i
+    while (i > 0) {
+        val previous = i - 1
+        val endMs = lines[previous].words
+            ?.lastOrNull()
+            ?.let { (it.endTime * 1000).toLong() }
+            ?: return i
+        if (endMs <= positionMs) return i
+        i = previous
+    }
+    return i
+}
+
+// the gap playing right now, or NoInterlude; it ends with the same lead-in the next line starts with, so the dots collapse on the very frame that line takes over
+internal fun activeInterludeOf(rows: List<LyricRow>, positionMs: Long): Int =
+    rows.firstOrNull {
+        it is LyricRow.Interlude && positionMs >= it.startMs &&
+            positionMs + LyricsUtils.LineLeadInMs < it.endMs
+    }?.let { (it as LyricRow.Interlude).afterIndex } ?: NoInterlude
+
+// left and right only mean something when the song really has more than one voice; untagged lines count as the lead, background ones don't count
+internal fun usesAgentAlignment(lines: List<LyricsEntry>): Boolean =
+    lines.filter { !it.isBackground }
+        .map { it.agent ?: "v1" }
+        .distinct()
+        .size > 1
 
 // how a line looks right now: its state, and how blurred it is by its distance from the sung line
-private data class LineLook(val state: LyricsLineState, val blurStage: Int)
+internal data class LineLook(val state: LyricsLineState, val blurStage: Int)
 
-private fun lineLook(index: Int, current: Int, anchor: Int, unsynced: Boolean, interlude: Boolean): LineLook {
+internal fun lineLook(index: Int, current: Int, anchor: Int, unsynced: Boolean, interlude: Boolean): LineLook {
     // no timing: every line is equally current, so all of them read at full strength
     if (unsynced) return LineLook(LyricsLineState.ACTIVE, 0)
     val distance = when {
@@ -839,7 +842,7 @@ private fun lineLook(index: Int, current: Int, anchor: Int, unsynced: Boolean, i
  * a lyric line grows when the playhead reaches it — see the comment at the [buildLyricRows] call
  * site for why that matters to scrolling.
  */
-private sealed interface LyricRow {
+internal sealed interface LyricRow {
     /** Stable across the life of the song, so LazyColumn never re-creates a row. */
     val key: Long
 
@@ -856,7 +859,7 @@ private sealed interface LyricRow {
     }
 }
 
-private fun buildLyricRows(lines: List<LyricsEntry>): List<LyricRow> {
+internal fun buildLyricRows(lines: List<LyricsEntry>): List<LyricRow> {
     if (lines.isEmpty()) return emptyList()
     val rows = ArrayList<LyricRow>(lines.size + 4)
 
@@ -881,7 +884,7 @@ private fun buildLyricRows(lines: List<LyricsEntry>): List<LyricRow> {
  * Maps a line's `{agent:…}` tag onto a side of the screen. `v1` leads on the left, `v2` answers on
  * the right, `v1000` is a group/chorus line and sits centred; background vocals centre as well.
  */
-private fun alignmentFor(entry: LyricsEntry, useAgentAlignment: Boolean): LyricsAlignment = when {
+internal fun alignmentFor(entry: LyricsEntry, useAgentAlignment: Boolean): LyricsAlignment = when {
     !useAgentAlignment -> LyricsAlignment.START
     entry.isBackground -> LyricsAlignment.CENTER
     entry.agent == "v2" -> LyricsAlignment.END

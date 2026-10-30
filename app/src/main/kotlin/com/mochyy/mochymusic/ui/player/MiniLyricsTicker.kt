@@ -154,7 +154,7 @@ private fun risesFromList(lines: List<LyricsEntry>, from: TickerSlot, to: Ticker
 
 /** What the card is showing. Equal slots are the same content, so nothing re-animates. */
 @Immutable
-private data class TickerSlot(val kind: Int, val index: Int) {
+internal data class TickerSlot(val kind: Int, val index: Int) {
     companion object {
         const val EMPTY = 0
         const val LINE = 1
@@ -165,7 +165,7 @@ private data class TickerSlot(val kind: Int, val index: Int) {
     }
 }
 
-private fun tickerSlot(lines: List<LyricsEntry>, position: Long): TickerSlot {
+internal fun tickerSlot(lines: List<LyricsEntry>, position: Long): TickerSlot {
     if (lines.isEmpty()) return TickerSlot(TickerSlot.EMPTY, -1)
     val index = LyricsUtils.findCurrentLineIndex(lines, position)
     if (index >= lines.size) return TickerSlot(TickerSlot.END, lines.lastIndex)

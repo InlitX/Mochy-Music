@@ -198,7 +198,7 @@ private fun Modifier.speakerLight(held: State<Float>): Modifier = graphicsLayer 
  * The phone's music volume as 0..1. A drag shows exactly where the finger is (the phone only has
  * a few steps); letting go settles on the step the phone actually took.
  */
-private class MusicVolume(private val audio: AudioManager) {
+internal class MusicVolume(private val audio: AudioManager) {
     private val steps = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
     private var level by mutableFloatStateOf(read())
     private var dragging by mutableStateOf<Float?>(null)
@@ -225,7 +225,7 @@ private class MusicVolume(private val audio: AudioManager) {
 
 /** the music volume, following the volume keys while [listening] */
 @Composable
-private fun rememberMusicVolume(listening: Boolean): MusicVolume {
+internal fun rememberMusicVolume(listening: Boolean): MusicVolume {
     val context = LocalContext.current
     val volume = remember(context) {
         MusicVolume(context.getSystemService(Context.AUDIO_SERVICE) as AudioManager)

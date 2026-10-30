@@ -832,4 +832,32 @@
     <string name="all_time_hits">Hit sepanjang masa</string>
     <string name="most_played_genre">%1$s paling sering diputar</string>
     <string name="add_music">Tambahkan musik</string>
+    <!-- the full video mode and youtube video quality -->
+    <string name="video_mode">Video penuh</string>
+    <string name="video_mode_exit">Keluar dari mode video</string>
+    <string name="video_mode_close_player">Tutup pemutar</string>
+    <string name="video_mode_finding">Mencari videonya…</string>
+    <string name="video_mode_no_video">Lagu ini tidak punya video. Liriknya tetap diputar di sini.</string>
+    <string name="video_mode_no_lyrics">Lagu ini tidak punya lirik</string>
+    <string name="video_mode_queue">Antrean</string>
+    <string name="video_mode_lyrics">Lirik</string>
+    <string name="video_mode_lyrics_provider">Penyedia lirik</string>
+    <string name="video_mode_lyrics_offset">Pergeseran lirik</string>
+    <string name="video_mode_lyrics_translation">Terjemahan lirik</string>
+    <string name="video_mode_speed">Kecepatan dan tempo pemutaran</string>
+    <string name="video_mode_volume">Volume</string>
+    <string name="video_quality">Kualitas video</string>
+    <string name="video_quality_auto">Otomatis</string>
+    <string name="video_quality_auto_desc">Turun ke gambar yang lebih rendah saat koneksi melambat, jadi videonya tetap jalan dan tidak macet</string>
+    <string name="video_quality_auto_now">Otomatis · %1$s</string>
+    <string name="video_quality_size">%1$dp</string>
+    <string name="video_quality_fixed_desc">Tetap di ukuran ini. Di koneksi lambat videonya mungkin berhenti untuk memuat</string>
+    <string name="video_quality_settings_desc">Seberapa tajam video YouTube diputar. Otomatis menjaganya tetap lancar di koneksi lambat</string>
+    <string name="video_quality_not_loaded">Pilihan ukuran muncul setelah videonya dimuat</string>
+    <string name="video_mode_song_info">Info lagu</string>
+    <string name="video_mode_whole_video">Tampilkan seluruh video</string>
+    <string name="video_mode_whole_video_desc">Jika mati, video diperbesar sampai memenuhi layar</string>
+    <plurals name="video_mode_seek_seconds">
+        <item quantity="other">%d detik</item>
+    </plurals>
 </resources>

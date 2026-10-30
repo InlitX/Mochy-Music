@@ -227,6 +227,9 @@ fun LyricsGlowLine(
      */
     translationLoading: Boolean = false,
 
+    // the translation goes over the line instead of under it, with the readings left below (the full video mode)
+    translationAbove: Boolean = false,
+
     /** style 1 or boring (words rise, held notes swell), or style 2 or plain (the original wave) */
     motionStyle: com.mochyy.mochymusic.constants.LyricsMotionStyle =
         com.mochyy.mochymusic.constants.LyricsMotionStyle.MOTION,
@@ -361,6 +364,10 @@ fun LyricsGlowLine(
             label = "lyricsWaveAmplitude",
         )
 
+        if (translationAbove) {
+            TranslationSubText(translation, translationLoading, translationColor, textAlign, above = true)
+        }
+
         // a derived flag, so the fade doesn't recompose the line on every frame
         val waveLingers by remember { derivedStateOf { waveAmplitude > 0.01f } }
         val sweepActive = !words.isNullOrEmpty() &&
@@ -447,26 +454,41 @@ fun LyricsGlowLine(
         // The translation sits below both the line and its romanisation. It is written by
         // LyricsTranslationHelper, which until now had no reader in the live player at all — the
         // menu toggle wrote into flows nothing was collecting.
-        if (translationLoading && translation.isNullOrBlank()) {
-            TranslationLoadingDots(
-                color = translationColor,
-                modifier = Modifier.padding(top = 7.dp),
-            )
-        } else {
-            FadingSubText(
-                text = translation,
-                color = translationColor,
-                textAlign = textAlign,
-            )
+        if (!translationAbove) {
+            TranslationSubText(translation, translationLoading, translationColor, textAlign, above = false)
         }
     }
     }
     }
 }
 
+// the line's translation, or three pulsing dots while it's on its way
+@Composable
+private fun TranslationSubText(
+    translation: String?,
+    loading: Boolean,
+    color: ColorProducer,
+    textAlign: TextAlign,
+    above: Boolean,
+) {
+    if (loading && translation.isNullOrBlank()) {
+        TranslationLoadingDots(
+            color = color,
+            modifier = Modifier.padding(top = if (above) 0.dp else 7.dp, bottom = if (above) 5.dp else 0.dp),
+        )
+    } else {
+        FadingSubText(
+            text = translation,
+            color = color,
+            textAlign = textAlign,
+            above = above,
+        )
+    }
+}
+
 // a small line under the lyric (reading or translation) that fades and unfolds in, instead of popping in and shoving the rows below
 @Composable
-private fun FadingSubText(text: String?, color: ColorProducer, textAlign: TextAlign) {
+private fun FadingSubText(text: String?, color: ColorProducer, textAlign: TextAlign, above: Boolean = false) {
     // Keep the last text while folding away, or the exit would animate an empty line.
     val shown = remember { arrayOfNulls<String>(1) }
     if (!text.isNullOrBlank()) shown[0] = text
@@ -482,7 +504,7 @@ private fun FadingSubText(text: String?, color: ColorProducer, textAlign: TextAl
             style = MaterialTheme.typography.bodyLarge.copy(textAlign = textAlign),
             color = color,
             overflow = TextOverflow.Clip,
-            modifier = Modifier.padding(top = 3.dp),
+            modifier = Modifier.padding(top = if (above) 0.dp else 3.dp, bottom = if (above) 2.dp else 0.dp),
         )
     }
 }

@@ -377,6 +377,11 @@ class StyleActions(
     val onEditPlayer: () -> Unit,
     /** opens the song's whole lyrics over the style; no item without it (the selector's cards) */
     val onLyrics: (() -> Unit)? = null,
+    // the full video mode's way back to the style it was opened from
+    val onExitVideoMode: () -> Unit = {},
+    // the song info sheet's artist and album rows: the page opens and the player closes on the way
+    val onOpenArtist: (String) -> Unit = {},
+    val onOpenAlbum: (String) -> Unit = {},
 )
 
 /** whether [style] is turned sideways, and the switch for it */
@@ -762,7 +767,7 @@ private const val ToneFadeMs = 700
  * How far a layer [w] x [h] (as laid out, before its own [restAngle]) must shrink, turned a further
  * [angle] degrees, to stay inside the screen it fills at rest.
  */
-private fun turnFit(w: Float, h: Float, restAngle: Float, angle: Float): Float {
+internal fun turnFit(w: Float, h: Float, restAngle: Float, angle: Float): Float {
     if (w <= 0f || h <= 0f) return 1f
     // the screen: the layer's own size, turned by its rest angle
     val screenW = if (restAngle == 0f) w else h
@@ -775,9 +780,9 @@ private fun turnFit(w: Float, h: Float, restAngle: Float, angle: Float): Float {
     return minOf(screenW / extentW, screenH / extentH, 1f)
 }
 
-private fun sin01(t: Float): Float = kotlin.math.sin(Math.PI.toFloat() * t.coerceIn(0f, 1f))
+internal fun sin01(t: Float): Float = kotlin.math.sin(Math.PI.toFloat() * t.coerceIn(0f, 1f))
 
-private fun smooth(t: Float): Float {
+internal fun smooth(t: Float): Float {
     val x = t.coerceIn(0f, 1f)
     return x * x * (3f - 2f * x)
 }
