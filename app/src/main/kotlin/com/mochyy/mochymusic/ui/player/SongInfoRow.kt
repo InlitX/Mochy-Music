@@ -429,40 +429,46 @@ fun PressScaleActionButton(
             )
     ) {
         Box(
-            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .then(
-                    if (hasShadow) Modifier.shadow(elevation = 6.dp, shape = CircleShape, clip = false)
-                    else Modifier
-                )
-                .clip(CircleShape)
-                .background(containerColor)
         ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (hasShadow) Modifier.shadow(elevation = 6.dp, shape = CircleShape, clip = false)
+                        else Modifier
+                    )
+                    .clip(CircleShape)
+                    .background(containerColor)
+            ) {
 
-            if (boldIcon) {
+                if (boldIcon) {
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(icon),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(tint),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .offset(x = 0.45.dp)
+                    )
+                }
                 androidx.compose.foundation.Image(
                     painter = painterResource(icon),
                     contentDescription = null,
                     colorFilter = ColorFilter.tint(tint),
-                    modifier = Modifier
-                        .size(18.dp)
-                        .offset(x = 0.45.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            androidx.compose.foundation.Image(
-                painter = painterResource(icon),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(tint),
-                modifier = Modifier.size(18.dp)
-            )
+            // outside the round clip, sitting on the rim: inside it the circle cut the 1 in half
             if (badgeText != null) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .offset(x = 1.dp, y = 1.dp)
+                        .offset(x = 2.dp, y = 2.dp)
                         .size(12.dp)
                         .clip(RoundedCornerShape(50))
                         .background(tint)
