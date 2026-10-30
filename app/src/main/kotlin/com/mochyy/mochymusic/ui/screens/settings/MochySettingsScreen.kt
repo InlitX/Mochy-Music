@@ -258,6 +258,10 @@ private val RecommendedOptions = listOf(
 )
 
 private val BubbleColor = Color(0xFF1C1C1E)
+
+// the header holds the mochy mark with the big "Settings" under it, taller than search's title-only header
+private val SettingsTitleBlockHeight = 88.dp
+private val SettingsMarkSize = 32.dp
 private val IconBgColor = Color(0xFF333338)
 
 @Composable
@@ -328,7 +332,7 @@ fun MochySettingsScreen(navController: NavController) {
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            Spacer(modifier = Modifier.height(searchTopBarHeight()))
+            Spacer(modifier = Modifier.height(searchTopBarHeight(titleBlockHeight = SettingsTitleBlockHeight)))
 
             // Search results view when user types
             AnimatedVisibility(
@@ -546,17 +550,34 @@ fun MochySettingsScreen(navController: NavController) {
             glassState = glassState,
             progressProvider = { collapseProgress },
             pureBlack = true,
-            title = "Mochy",
+            title = stringResource(R.string.settings),
+            titleBlockHeight = SettingsTitleBlockHeight,
             titleContent = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_mochy_mark),
-                    contentDescription = "Mochy",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp),
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_mochy_mark),
+                        contentDescription = "Mochy",
+                        tint = Color.White,
+                        modifier = Modifier.size(SettingsMarkSize),
+                    )
+                    Text(
+                        text = stringResource(R.string.settings),
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 34.sp,
+                        lineHeight = 40.sp,
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                }
             },
             trailing = {
+                // at rest it sits beside the mark like the design, and drops to the search field's middle as the header folds
                 SearchAvatar(
+                    modifier = Modifier.graphicsLayer {
+                        val lift = (SettingsTitleBlockHeight / 2 - SettingsMarkSize / 2).toPx()
+                        translationY = -(1f - collapseProgress) * lift
+                    },
                     imageUrl = profilePicUri.ifBlank { null },
                     onClick = {
                         // back to the profile page these were opened from, not a second copy of it on top
