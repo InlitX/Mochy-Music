@@ -7,6 +7,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -70,6 +72,9 @@ fun PlaybackSpeedSheet(onDismiss: () -> Unit) {
     MenuSheetSurface(onDismiss = onDismiss, halfDetent = 0.46f, fullDetent = 0.46f) { _ ->
         Column(
             modifier = Modifier
+                .weight(1f, fill = false)
+                // the full video mode's card is only as tall as the phone is wide, so the sliders scroll there
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(top = 10.dp, bottom = 28.dp)
         ) {

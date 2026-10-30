@@ -8,8 +8,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -44,7 +42,6 @@ import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -93,9 +90,6 @@ private const val FitMs = 600
 
 // a double tap jumps this far
 private const val SeekStepMs = 10_000L
-
-// a swipe is kept from the sheet once it has gone this many touch slops: further than the lists inside wait, nearer than the sheet does
-private const val SwipeKeepSlopScale = 1.5f
 
 // with the lyrics open the picture dims by this much, and fades into the light behind it over this share of the pane
 private const val PaneDim = 0.18f
@@ -237,7 +231,7 @@ private fun VideoModeScreen(actions: StyleActions, modifier: Modifier) {
     }
 }
 
-// every layer of the landscape frame, back to front: light, video, scrim, pane, the line, the controls
+// every layer of the landscape frame, back to front: light, video, pane, scrim, the line, the controls
 @Composable
 private fun VideoModeLayout(
     state: VideoModeState,
@@ -276,7 +270,6 @@ private fun VideoModeLayout(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .keepSwipesFromSheet()
                 .videoGestures(
                     state = state,
                     frame = frame,
@@ -364,7 +357,12 @@ private fun VideoModeLayout(
                 )
             }
 
-            // the controls dim the video a little and darken its top and bottom edges, where they sit
+            if (state.paneMounted) {
+                VideoPaneBackdrop(glass = glass, frame = frame, state = state, tint = ambient.pane)
+                VideoPaneContent(frame = frame, state = state, lyrics = lyrics, look = look, positionProvider = lyricClock)
+            }
+
+            // the controls dim the whole screen a little, the open pane too, and darken its top and bottom edges where they sit
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -382,11 +380,6 @@ private fun VideoModeLayout(
                         )
                     },
             )
-
-            if (state.paneMounted) {
-                VideoPaneBackdrop(glass = glass, frame = frame, state = state, tint = ambient.pane)
-                VideoPaneContent(frame = frame, state = state, lyrics = lyrics, look = look, positionProvider = lyricClock)
-            }
 
             if (regularMounted) {
                 VideoRegularLyrics(
@@ -408,32 +401,15 @@ private fun VideoModeLayout(
                 onClose = onClose,
                 onSongInfo = { state.songInfoOpen = true },
             )
-            VideoTransport(frame = frame, state = state, controls = controls, isPlaying = isPlaying)
+            VideoTransport(state = state, controls = controls, isPlaying = isPlaying)
             VideoVolumeBar(state = state, controls = controls)
             VideoSeekRow(
-                frame = frame,
                 state = state,
                 controls = controls,
                 positionProvider = seekClock,
                 onChevron = { state.menuOpen = true },
             )
             VideoPaneHandle(frame = frame, state = state)
-        }
-    }
-}
-
-// sideways, a swipe across the video reads to the sheet underneath as a pull, collapsing it and springing it back open; past the slop it's kept from it
-private fun Modifier.keepSwipesFromSheet(): Modifier = pointerInput(Unit) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        // past the pane's lists' own slop, so a slanted scroll on them starts the list before this can take it
-        val slop = viewConfiguration.touchSlop * SwipeKeepSlopScale
-        var travelled = androidx.compose.ui.geometry.Offset.Zero
-        while (true) {
-            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-            if (!change.pressed) break
-            travelled += change.positionChangeIgnoreConsumed()
-            if (travelled.getDistance() > slop) change.consume()
         }
     }
 }

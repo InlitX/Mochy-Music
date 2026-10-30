@@ -98,9 +98,6 @@ private val SeekTouch = 28.dp
 private val SeekThickness = 5.dp
 private val ChevronSize = 30.dp
 
-// with the pane open, the bottom controls end this far before it
-private val PaneGap = 58.dp
-
 // the volume line at the left edge
 private val VolumeLength = 100.dp
 private val VolumeTouch = 40.dp
@@ -196,16 +193,14 @@ internal fun BoxScope.VideoTopBar(
                 .align(Alignment.TopEnd)
                 .padding(end = EdgeEnd, top = TopRow + 9.dp)
                 .semantics { contentDescription = closeLabel }
-                // under an open pane it's out of the way: the pane's own bar closes that first
-                .graphicsLayer { alpha = controls() * (1f - state.pane.value) },
+                .graphicsLayer { alpha = controls() },
         )
     }
 }
 
-// previous, play or pause, next: in the middle of whatever part of the video is showing
+// previous, play or pause, next: in the middle of the whole screen, an open pane included
 @Composable
 internal fun BoxScope.VideoTransport(
-    frame: VideoFrame,
     state: VideoModeState,
     controls: () -> Float,
     isPlaying: Boolean,
@@ -213,8 +208,6 @@ internal fun BoxScope.VideoTransport(
     val visible by rememberControlsVisible(controls)
     if (!visible) return
     val connection = LocalPlayerConnection.current ?: return
-    val density = LocalDensity.current
-    val paneShift = with(density) { frame.paneWidth.toPx() } / 2f
     Row(
         horizontalArrangement = Arrangement.spacedBy(TransportGap),
         verticalAlignment = Alignment.CenterVertically,
@@ -226,7 +219,6 @@ internal fun BoxScope.VideoTransport(
                 val scale = 0.92f + 0.08f * c
                 scaleX = scale
                 scaleY = scale
-                translationX = -paneShift * state.pane.value
             },
     ) {
         TransportButton(R.drawable.ic_untitled_skip_previous, stringResource(R.string.previous), SkipSize, 30.dp, null) {
@@ -351,10 +343,9 @@ internal fun BoxScope.VideoVolumeBar(state: VideoModeState, controls: () -> Floa
     )
 }
 
-// the seek bar with the times over its ends and the chevron above its right end; it ends short of an open pane
+// the seek bar across the whole screen, an open pane included, with the times over its ends and the chevron above its right end
 @Composable
 internal fun BoxScope.VideoSeekRow(
-    frame: VideoFrame,
     state: VideoModeState,
     controls: () -> Float,
     positionProvider: () -> Long,
@@ -364,8 +355,6 @@ internal fun BoxScope.VideoSeekRow(
     if (!visible) return
     val connection = LocalPlayerConnection.current ?: return
     val durationMs = rememberDurationMs()
-    val density = LocalDensity.current
-    val shrinkPx = with(density) { (frame.paneWidth + PaneGap - EdgeEnd).toPx() }
     // the times change once a second, so that's how often this recomposes
     val playedSeconds by remember(connection) {
         connection.progressState.map { it.position / 1000L }.distinctUntilChanged()
@@ -402,28 +391,21 @@ internal fun BoxScope.VideoSeekRow(
                 },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .semantics { contentDescription = moreLabel }
-                    .graphicsLayer { translationX = -shrinkPx * state.pane.value },
+                    .semantics { contentDescription = moreLabel },
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             TimeText(makeTimeString(shownMs))
             Spacer(modifier = Modifier.weight(1f))
-            TimeText(
-                text = makeTimeString(durationMs),
-                modifier = Modifier.graphicsLayer { translationX = -shrinkPx * state.pane.value },
-            )
+            TimeText(makeTimeString(durationMs))
         }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(SeekTouch)
                 .pointerInput(durationMs) {
-                    fun fraction(x: Float): Float {
-                        val span = (size.width - shrinkPx * state.pane.value).coerceAtLeast(1f)
-                        return (x / span).coerceIn(0f, 1f)
-                    }
+                    fun fraction(x: Float): Float = (x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
                     detectHorizontalDragGestures(
                         onDragStart = {
                             state.touched()
@@ -443,18 +425,16 @@ internal fun BoxScope.VideoSeekRow(
                 .pointerInput(durationMs) {
                     detectTapGestures { offset ->
                         state.touched()
-                        val span = (size.width - shrinkPx * state.pane.value).coerceAtLeast(1f)
-                        connection.seekTo(((offset.x / span).coerceIn(0f, 1f) * durationMs).toLong())
+                        connection.seekTo(((offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f) * durationMs).toLong())
                     }
                 }
                 .drawBehind {
                     val thickness = (if (dragFraction != null) 7.dp else SeekThickness).toPx()
-                    val width = (size.width - shrinkPx * state.pane.value).coerceAtLeast(0f)
                     val top = (size.height - thickness) / 2f
                     val radius = CornerRadius(thickness / 2f)
-                    drawRoundRect(Color.White.copy(alpha = 0.3f), Offset(0f, top), Size(width, thickness), radius)
+                    drawRoundRect(Color.White.copy(alpha = 0.3f), Offset(0f, top), Size(size.width, thickness), radius)
                     val played = dragFraction ?: fill.floatValue
-                    drawRoundRect(Color.White, Offset(0f, top), Size(width * played, thickness), radius)
+                    drawRoundRect(Color.White, Offset(0f, top), Size(size.width * played, thickness), radius)
                 },
         )
     }

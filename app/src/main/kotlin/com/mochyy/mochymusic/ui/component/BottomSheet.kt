@@ -190,10 +190,13 @@ fun BottomSheet(
      * (false), whatever on it takes the touch (pill transition only).
      */
     onTouchActivity: ((touching: Boolean) -> Unit)? = null,
+    // false while what's on the open sheet handles every swipe itself; the sheet then leaves them all alone
+    dragsWhenOpen: () -> Boolean = { true },
     sharedContent: @Composable (BoxScope.() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
+    val currentDragsWhenOpen by androidx.compose.runtime.rememberUpdatedState(dragsWhenOpen)
     val currentSwipe by androidx.compose.runtime.rememberUpdatedState(expandedSwipe)
     val currentSideSwipe by androidx.compose.runtime.rememberUpdatedState(collapsedSwipe)
     val currentOnTouchActivity by androidx.compose.runtime.rememberUpdatedState(onTouchActivity)
@@ -477,6 +480,8 @@ fun BottomSheet(
                             var sideSwipe: CollapsedSwipe? = null
 
                             detectSheetDrag(
+                                // the sideways video mode reads to us turned a quarter: its scrolls look like swipes, so it gets them all
+                                enabled = { state.progress <= 0.5f || currentDragsWhenOpen() },
                                 // open, the lists and sliders inside get the first word: a slanted scroll is theirs
                                 slopScale = { if (state.progress > 0.5f) OpenSheetSlopScale else 1f },
                                 onDragStart = { start ->
@@ -712,6 +717,7 @@ private const val OpenSheetSlopScale = 2f
 
 // like detectDragGestures, but it gives way: a drag a list or slider inside already took stays theirs, and it waits longer so a slanted scroll starts the list
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSheetDrag(
+    enabled: () -> Boolean,
     slopScale: () -> Float,
     onDragStart: (Offset) -> Unit,
     onDrag: (androidx.compose.ui.input.pointer.PointerInputChange, Offset) -> Unit,
@@ -719,6 +725,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectSh
     onDragCancel: () -> Unit,
 ) = awaitEachGesture {
     val down = awaitFirstDown(requireUnconsumed = false)
+    if (!enabled()) return@awaitEachGesture
     val slop = viewConfiguration.touchSlop * slopScale()
     var total = Offset.Zero
     var started: androidx.compose.ui.input.pointer.PointerInputChange? = null

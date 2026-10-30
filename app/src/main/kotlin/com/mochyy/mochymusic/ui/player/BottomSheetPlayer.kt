@@ -825,6 +825,8 @@ private fun PlayerSheet(
             isPillTransition = true,
             expandedSwipe = swipe,
             collapsedSwipe = miniSwipe,
+            // the full video mode closes, opens its pane and scrolls by itself; the sheet read its swipes upright and fought its lists for them
+            dragsWhenOpen = { currentPlayerStyle != PlayerStyle.VIDEO },
             onTouchActivity = handleState::onTouchActivity,
             pureBlack = pureBlack,
             background = {},

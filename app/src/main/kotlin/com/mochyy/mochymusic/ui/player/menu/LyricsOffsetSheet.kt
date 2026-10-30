@@ -3,6 +3,8 @@
 package com.mochyy.mochymusic.ui.player.menu
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -107,6 +109,9 @@ fun LyricsOffsetSheet(onDismiss: () -> Unit) {
         val closeSheet = LocalMenuSheetClose.current
         Column(
             modifier = Modifier
+                .weight(1f, fill = false)
+                // the full video mode's card is only as tall as the phone is wide, so this scrolls there
+                .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(top = 16.dp, bottom = 24.dp)
