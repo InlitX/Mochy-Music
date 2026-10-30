@@ -26,6 +26,7 @@ kotlin {
 dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.serialization.json)
+    implementation(libs.okhttp.dnsoverhttps)
     implementation(libs.timber)
     testImplementation(libs.junit)
 

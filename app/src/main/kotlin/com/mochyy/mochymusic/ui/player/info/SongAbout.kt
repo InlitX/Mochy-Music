@@ -39,6 +39,8 @@ data class SongAbout(
     val libraryAlbum: String? = null,
     val musixmatchDone: Boolean = false,
     val musixmatch: MusixmatchSong? = null,
+    /** musixmatch's page (what the song is about) has been read, or there was none to read */
+    val musixmatchPageDone: Boolean = false,
     val geniusDone: Boolean = false,
     val genius: GeniusSong? = null,
     val wikiDone: Boolean = false,
@@ -76,7 +78,7 @@ object SongAboutLoader {
         // here rather than at app start: it reads its saved key from disk, which belongs off the main thread
         Musixmatch.init(context)
         val cached = cache[song.id]
-        if (cached != null && cached.factsDone && cached.youtubeDone) {
+        if (cached != null && cached.factsDone && cached.youtubeDone && cached.musixmatchPageDone) {
             send(cached)
             return@channelFlow
         }
@@ -86,7 +88,12 @@ object SongAboutLoader {
             state.update(change)
             // a source that said nothing is kept as "still to ask": each remembers a real miss itself, a failed try gets another go
             cache[song.id] = state.value.let {
-                it.copy(musixmatchDone = it.musixmatch != null, geniusDone = it.genius != null, wikiDone = it.wiki != null)
+                it.copy(
+                    musixmatchDone = it.musixmatch != null,
+                    musixmatchPageDone = it.musixmatch?.pageRead == true,
+                    geniusDone = it.genius != null,
+                    wikiDone = it.wiki != null,
+                )
             }
             trySend(state.value)
         }
@@ -99,7 +106,12 @@ object SongAboutLoader {
         }
         launch {
             val found = if (artistName.isBlank()) null else Musixmatch.song(song.title, artistName, song.duration.takeIf { d -> d > 0 })
-            publish { about -> about.withMusixmatch(found).withLinks(song) }
+            publish { about -> about.withMusixmatch(found, pageDone = found == null || found.pageRead).withLinks(song) }
+            // the facts are in; the page with what the song is about takes a few seconds more in a hidden browser
+            if (found != null && !found.pageRead) {
+                val read = Musixmatch.readPage(found)
+                publish { about -> about.withMusixmatch(read ?: found, pageDone = true).withLinks(song) }
+            }
         }
         launch {
             val found = if (artistName.isBlank()) null else Genius.song(song.title, artistName)
@@ -126,10 +138,11 @@ object SongAboutLoader {
         ).withLinks(song)
     }
 
-    private fun SongAbout.withMusixmatch(found: MusixmatchSong?): SongAbout {
+    private fun SongAbout.withMusixmatch(found: MusixmatchSong?, pageDone: Boolean): SongAbout {
         val byName = found?.artists.orEmpty().associateBy { it.name.lowercase() }
         return copy(
             musixmatchDone = true,
+            musixmatchPageDone = pageDone,
             musixmatch = found,
             artists = artists.map { a -> if (a.imageUrl == null) a.copy(imageUrl = byName[a.name.lowercase()]?.imageUrl) else a },
         )

@@ -7,19 +7,19 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
+import okhttp3.Dns
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.dnsoverhttps.DnsOverHttps
 import timber.log.Timber
-import java.net.URLDecoder
+import java.net.InetAddress
 import java.net.URLEncoder
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-// musixmatch's public song pages; its own search needs an account now, so a web search finds the page (docs/notes/audio-output.md)
+// musixmatch's app api finds the song and its facts in a second; the meaning is only on its page, behind a bot check (docs/notes/audio-output.md)
 object Musixmatch {
     private const val Site = "https://www.musixmatch.com"
     private const val WebSearch = "https://html.duckduckgo.com/html/?q="
@@ -32,6 +32,10 @@ object Musixmatch {
     @Volatile
     private var appContext: Context? = null
 
+    // null until a song page has been asked for over plain http; the bot check turns that away on most networks
+    @Volatile
+    private var plainPagesWork: Boolean? = null
+
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private val client by lazy {
@@ -39,7 +43,22 @@ object Musixmatch {
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(12, TimeUnit.SECONDS)
             .followRedirects(true)
+            .dns(searchDns)
             .build()
+    }
+
+    // indonesian isps send duckduckgo to a block page; cloudflare's dns over https still knows where it really is
+    private val searchDns by lazy {
+        val overHttps = DnsOverHttps.Builder()
+            .client(OkHttpClient.Builder().connectTimeout(5, TimeUnit.SECONDS).build())
+            .url("https://1.1.1.1/dns-query".toHttpUrl())
+            .includeIPv6(false)
+            .build()
+        object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> =
+                if (!hostname.endsWith("duckduckgo.com")) Dns.SYSTEM.lookup(hostname)
+                else runCatching { overHttps.lookup(hostname) }.getOrElse { Dns.SYSTEM.lookup(hostname) }
+        }
     }
 
     /** how one lookup ended: only [Found] and [Missing] are real answers worth keeping */
@@ -54,15 +73,21 @@ object Musixmatch {
     // a song asked for twice in one run (sheet closed and opened again) isn't looked up twice
     private val songs = ConcurrentHashMap<String, Lookup>()
 
+    // pages already read, by address, so the meaning is there at once the next time
+    private val pages = ConcurrentHashMap<String, MusixmatchSong>()
+
     fun init(context: Context) {
         if (appContext == null) appContext = context.applicationContext
     }
 
-    // the song's page and everything on it, or null when musixmatch doesn't have it (or couldn't be asked)
+    // the song's facts, quick; [readPage] adds what it's about. null when musixmatch doesn't have it (or couldn't be asked)
     suspend fun song(title: String, artist: String, durationSeconds: Int? = null): MusixmatchSong? = withContext(Dispatchers.IO) {
         val key = "${title.lowercase()}|${artist.lowercase()}"
-        songs[key]?.let { return@withContext (it as? Lookup.Found)?.song }
-        val lookup = runCatching { lookUp(cleanTitle(title), artist.substringBefore(",").substringBefore("&").trim()) }
+        songs[key]?.let { cached ->
+            val found = (cached as? Lookup.Found)?.song
+            return@withContext found?.pageUrl?.let(pages::get) ?: found
+        }
+        val lookup = runCatching { lookUp(cleanTitle(title), artist.substringBefore(",").substringBefore("&").trim(), durationSeconds) }
             .onFailure { Timber.tag(Tag).w(it, "couldn't read $title by $artist") }
             .getOrDefault(Lookup.Failed)
         // a blocked or offline try is asked again the next time the sheet opens
@@ -72,7 +97,33 @@ object Musixmatch {
         (lookup as? Lookup.Found)?.song
     }
 
-    private suspend fun lookUp(title: String, artist: String): Lookup {
+    // the song with what its page says it's about, or null when the page couldn't be read this time
+    suspend fun readPage(song: MusixmatchSong): MusixmatchSong? = withContext(Dispatchers.IO) {
+        if (song.pageRead) return@withContext song
+        val url = song.pageUrl ?: return@withContext null
+        pages[url]?.let { return@withContext it }
+        val track = runCatching { page(url.removePrefix(Site)) }
+            .onFailure { Timber.tag(Tag).w(it, "couldn't read $url") }
+            .getOrNull()
+            ?.let(::trackOf)
+        android.util.Log.i(Tag, "page $url: ${if (track != null) "read" else "couldn't read"}")
+        track?.let { merge(song, it, url) }?.also { pages[url] = it }
+    }
+
+    private suspend fun lookUp(title: String, artist: String, durationSeconds: Int?): Lookup {
+        // the page will need the hidden browser: it starts and gets past the bot check while the api searches
+        if (plainPagesWork != true) appContext?.let(MusixmatchBrowser::warmUp)
+        when (val search = MusixmatchApi.search(client, appContext, title, artist, durationSeconds)) {
+            is MusixmatchApi.Search.Hit -> return Lookup.Found(MusixmatchApi.songOf(search.track, title, artist))
+            MusixmatchApi.Search.Missing -> return Lookup.Missing
+            MusixmatchApi.Search.Failed -> android.util.Log.i(Tag, "the app api turned us away, searching the web for $title by $artist")
+        }
+        return webLookUp(title, artist)
+    }
+
+    // ---- finding the page without the app api ------------------------------------------------
+
+    private suspend fun webLookUp(title: String, artist: String): Lookup {
         val found = searchPaths(title, artist)
         android.util.Log.i(Tag, "web search for $title by $artist: ${found ?: "couldn't search"}")
         // the web search's best pages first, then a guess at the address for when it found none
@@ -84,12 +135,12 @@ object Musixmatch {
             val track = page?.let(::trackOf) ?: continue
             // a web search or a guess can land on a namesake: the page itself has to name this song
             if (!sameSong(track, title, artist)) continue
-            return Lookup.Found(merge(MusixmatchSong(title = title, artist = artist), track, "$Site$path"))
+            val song = merge(MusixmatchSong(title = title, artist = artist), track, "$Site$path")
+            pages["$Site$path"] = song
+            return Lookup.Found(song)
         }
         return if (anyAnswer) Lookup.Missing else Lookup.Failed
     }
-
-    // ---- finding the page --------------------------------------------------------------------
 
     /** song page paths a web search turns up, best first; null when the search itself couldn't be done */
     private suspend fun searchPaths(title: String, artist: String): List<String>? {
@@ -100,8 +151,8 @@ object Musixmatch {
             ?: return null
         // the traffic check's page has no results on it: that's "couldn't search", not "musixmatch hasn't got it"
         if (!html.contains("result__") && !html.contains("result-link") && !html.contains("no-results")) return null
-        return SongLink.findAll(decode(html))
-            .map { decode(it.groupValues[1]) }
+        return SongLink.findAll(decodeUrl(html))
+            .map { decodeUrl(it.groupValues[1]) }
             .distinct()
             .map { it to pathScore(it, title, artist) }
             .filter { it.second >= GoodMatch }
@@ -123,12 +174,11 @@ object Musixmatch {
         val linkArtist = normalize(parts[0].replace(Regex("-\\d+$"), "").replace('-', ' '))
         val linkTitle = normalize(parts[1].replace('-', ' '))
         val wantedTitle = normalize(title)
-        val wantedArtist = normalize(artist)
         // another artist's song of the same name isn't worth a page load
-        if (wantedArtist.isEmpty() || !(linkArtist == wantedArtist || linkArtist.contains(wantedArtist))) return 0
+        if (!sameWords(linkArtist, normalize(artist))) return 0
         return 40 + when {
             linkTitle == wantedTitle -> 80
-            linkTitle.isNotEmpty() && (linkTitle.contains(wantedTitle) || wantedTitle.contains(linkTitle)) -> 40
+            sameWords(linkTitle, wantedTitle) -> 40
             else -> 0
         }
     }
@@ -136,21 +186,22 @@ object Musixmatch {
     private fun sameSong(track: JsonObject, title: String, artist: String): Boolean {
         val name = normalize(track.string("name").orEmpty())
         val wanted = normalize(title)
-        val titleMatches = name == wanted || (name.isNotEmpty() && (name.contains(wanted) || wanted.contains(name)))
+        val titleMatches = name == wanted || sameWords(name, wanted)
         val artists = listOf(track.string("artistName").orEmpty()) +
             (track["artists"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.string("name") }
         val wantedArtist = normalize(artist)
-        return titleMatches && artists.map(::normalize).any {
-            it.isNotEmpty() && (it == wantedArtist || it.contains(wantedArtist) || wantedArtist.contains(it))
-        }
+        return titleMatches && artists.any { sameWords(normalize(it), wantedArtist) }
     }
 
     // ---- the song page -----------------------------------------------------------------------
 
-    // plain http first; the bot check holds that on most networks, and then the page loads in the hidden browser
+    // plain http first, until the bot check turns it away once; from then on the page goes straight to the hidden browser
     private suspend fun page(path: String): JsonObject? {
-        val html = runCatching { getText("$Site$path", "text/html,application/xhtml+xml") }.getOrNull()
-        val data = html?.let { NextData.find(it)?.groupValues?.get(1) }
+        val html = if (plainPagesWork == false) null
+        else runCatching { getText("$Site$path", "text/html,application/xhtml+xml") }.getOrNull()
+        val plainData = html?.let { NextData.find(it)?.groupValues?.get(1) }
+        if (plainPagesWork == null) plainPagesWork = plainData != null
+        val data = plainData
             ?: appContext?.let { MusixmatchBrowser.nextData(it, path) }
             ?: return null
         return parse(data)
@@ -190,6 +241,7 @@ object Musixmatch {
                 ?: base.appleMusicId,
             isExplicit = page.bool("isExplicit") ?: base.isExplicit,
             pageUrl = pageUrl,
+            pageRead = true,
         )
     }
 
@@ -216,8 +268,6 @@ object Musixmatch {
 
     private fun parse(text: String): JsonObject? = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull()
 
-    private fun decode(value: String): String = runCatching { URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
-
     // "(remastered 2011)" and "- live" keep a song from matching its plain self
     private fun cleanTitle(title: String): String = title
         .replace(Regex("""\s*[(\[][^)\]]*(remaster|live|version|edit|mix|feat|ft\.|from|official|audio|video)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE), "")
@@ -225,17 +275,7 @@ object Musixmatch {
         .trim()
         .ifEmpty { title }
 
-    private fun normalize(text: String): String = text.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
-
-    private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
-
-    private fun JsonObject.string(key: String): String? =
-        (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-
-    private fun JsonObject.bool(key: String): Boolean? =
-        (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.intOrNull?.let { n -> n == 1 } }
-
-    // a song page's address, without its translation or other sub-pages
-    private val SongLink = Regex("""https?://www\.musixmatch\.com(/lyrics/[^/"&\s<>?#]+/[^/"&\s<>?#]+)""")
+    // a song page's address, without its translation or other sub-pages; "/ja/lyrics/..." is the same page in japanese
+    private val SongLink = Regex("""https?://www\.musixmatch\.com(?:/[a-z]{2}(?:-[a-z]{2,4})?)?(/lyrics/[^/"&\s<>?#]+/[^/"&\s<>?#]+)""")
     private val NextData = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
 }
