@@ -45,6 +45,11 @@
         <intent>
             <action android:name="com.mochyy.mochymusic.SOURCE_MODULE" />
         </intent>
+        <!-- the song share sends straight to these three -->
+        <package android:name="com.instagram.android" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.facebook.katana" />
     </queries>
     <application
         android:name=".App"

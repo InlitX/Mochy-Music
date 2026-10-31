@@ -1,44 +1,25 @@
 // ShareKit.kt
 //
 // The small pieces every lyrics share sheet uses: the big title with its BETA tag, the picker
-// row's look (shared with the flying line so it lands on exactly that), the shake for a tap that
-// can't do anything, and the Share!/Save pair.
+// row's look (shared with the flying line so it lands on exactly that), and the shake for a tap
+// that can't do anything.
 
 package com.mochyy.mochymusic.ui.player.share
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -46,16 +27,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mochyy.mochymusic.R
-import com.mochyy.mochymusic.ui.component.SheetPillButton
-import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.player.menu.MenuRowSurface
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import kotlinx.coroutines.CoroutineScope
@@ -160,66 +136,4 @@ internal fun ShareTitle(
 /** A quick side-to-side shake, for a tap that can't do anything. */
 internal fun CoroutineScope.shake(offset: Animatable<Float, AnimationVector1D>) = launch {
     for (x in listOf(14f, -11f, 8f, -5f, 0f)) offset.animateTo(x, tween(45))
-}
-
-// ---------------------------------------------------------------------------------------------
-// Share and save
-
-/**
- * "Share!" makes the picture and opens the share sheet. The round button beside it keeps a copy
- * in Pictures/Mochy and turns into a tick when it's saved (Android 10+ only).
- */
-@Composable
-internal fun ShareActions(session: LyricsShareSession) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var working by remember { mutableStateOf(false) }
-    var saved by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        SheetPillButton(
-            text = if (working) "Making it…" else "Share!",
-            enabled = !working,
-            modifier = Modifier.weight(1f),
-            onClick = {
-                val layer = session.capture ?: return@SheetPillButton
-                working = true
-                scope.launch {
-                    runCatching {
-                        val uri = cacheShareImage(context, layer.toShareBitmap())
-                        openShareSheet(context, uri, session.song)
-                    }
-                    working = false
-                }
-            },
-        )
-        if (CanSaveToGallery) {
-            Spacer(Modifier.width(10.dp))
-            val interaction = remember { MutableInteractionSource() }
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .pressBounce(interaction)
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(MenuRowSurface)
-                    .clickable(interactionSource = interaction, indication = null, enabled = !working && !saved) {
-                        val layer = session.capture ?: return@clickable
-                        scope.launch { saved = saveShareImage(context, layer.toShareBitmap()) }
-                    },
-            ) {
-                AnimatedContent(
-                    targetState = saved,
-                    transitionSpec = { (scaleIn(spring(dampingRatio = 0.5f, stiffness = 500f)) + fadeIn()).togetherWith(scaleOut() + fadeOut()) },
-                    label = "saveIcon",
-                ) { done ->
-                    Icon(
-                        painterResource(if (done) R.drawable.check else R.drawable.download),
-                        contentDescription = if (done) "Saved to Pictures" else "Save to Pictures",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-        }
-    }
 }

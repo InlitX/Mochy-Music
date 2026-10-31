@@ -322,12 +322,17 @@ fun PlayerActionMenu(
                     onClick = { playerConnection.toggleLibrary() },
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                // Share stays greyed out for now.
+                // opens the song share over everything: a card, its lyrics, a video with the song, or the link
                 MenuRow(
                     icon = R.drawable.share,
-                    title = "share song",
-                    enabled = false,
-                    onClick = {},
+                    title = androidx.compose.ui.res.stringResource(R.string.song_share_menu),
+                    enabled = currentMetadata != null,
+                    onClick = {
+                        currentMetadata?.let { metadata ->
+                            onDismiss()
+                            com.mochyy.mochymusic.ui.player.share.song.SongShare.open(metadata)
+                        }
+                    },
                 )
 
                 Spacer(modifier = Modifier.height(SectionGap))

@@ -1,34 +1,27 @@
 // ShareCanvas.kt
 //
-// The picture a lyrics share makes. It is always laid out at one fixed size (a 9:16 story) with
-// the font scale held at 1, so it looks the same on every phone and in every preview; the editors
-// just scale it down to fit. The Card style puts the lines on a coloured card like Spotify's; the
-// Cinematic style sets them straight on the background, word by word.
+// The Cinematic lyrics picture: the words straight on the background, word by word, laid out on
+// the share's fixed 360 x 640 picture with the font scale held at 1, so it looks the same on every
+// phone and in every export. The song share (share/song) puts it over its background.
 
 package com.mochyy.mochymusic.ui.player.share
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,20 +30,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInParent
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -63,7 +51,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
@@ -71,7 +58,6 @@ import coil3.compose.AsyncImage
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.ui.utils.resize
-import kotlin.math.min
 import kotlin.math.sqrt
 
 internal val ShareWidth = 360.dp
@@ -100,100 +86,11 @@ private const val CinematicSmallestText = 12f
 /** Room the words get when the song sits with them: the picture less the margins, the mark and the song. */
 private val CinematicWordsRoom = ShareHeight - CinematicTop - CinematicMarkBottom - 16.dp - CinematicMarkGap - 38.dp - CinematicHeaderGap
 
-/**
- * The picture, scaled to fit this box with rounded corners. With [capture] on, what it draws is
- * also recorded into the session, unscaled, so Share saves it at full size. [overlay] is drawn on
- * top in the picture's own coordinates but never recorded - the editors' outlines live there.
- */
-@Composable
-internal fun SharePreview(
-    session: LyricsShareSession,
-    modifier: Modifier = Modifier,
-    /** the style tiles show both styles at once, whatever the session has picked */
-    style: ShareStyle = session.style,
-    capture: Boolean = false,
-    animate: Boolean = true,
-    regions: ShareRegions? = null,
-    onCardTap: (() -> Unit)? = null,
-    overlay: @Composable () -> Unit = {},
-) {
-    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
-        val scale = min(maxWidth / ShareWidth, maxHeight / ShareHeight)
-        Box(
-            Modifier
-                .size(ShareWidth * scale, ShareHeight * scale)
-                .clip(RoundedCornerShape(26.dp))
-                // lays the picture out at its real size, then scales it down from the corner
-                .layout { measurable, _ ->
-                    val full = Constraints.fixed(ShareWidth.roundToPx(), ShareHeight.roundToPx())
-                    val placeable = measurable.measure(full)
-                    layout((placeable.width * scale).toInt(), (placeable.height * scale).toInt()) {
-                        placeable.placeWithLayer(0, 0) {
-                            scaleX = scale
-                            scaleY = scale
-                            transformOrigin = TransformOrigin(0f, 0f)
-                        }
-                    }
-                },
-        ) {
-            val layer = rememberGraphicsLayer()
-            if (capture) {
-                DisposableEffect(layer) {
-                    session.capture = layer
-                    onDispose { if (session.capture === layer) session.capture = null }
-                }
-            }
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (capture) {
-                            Modifier.drawWithContent {
-                                layer.record { this@drawWithContent.drawContent() }
-                                drawLayer(layer)
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-            ) {
-                ShareCanvas(session, style, animate = animate, regions = regions, onCardTap = onCardTap)
-            }
-            overlay()
-        }
-    }
-}
-
-/** The picture at its full [ShareWidth] x [ShareHeight]. */
-@Composable
-internal fun ShareCanvas(
-    session: LyricsShareSession,
-    style: ShareStyle,
-    animate: Boolean,
-    regions: ShareRegions? = null,
-    onCardTap: (() -> Unit)? = null,
-) {
-    val density = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
-        Box(
-            Modifier
-                .size(ShareWidth, ShareHeight)
-                .clipToBounds(),
-        ) {
-            ShareBackdrop(session, animate)
-            when (style) {
-                ShareStyle.Card -> CardLayout(session, onCardTap)
-                ShareStyle.Cinematic -> CinematicLayout(session, regions)
-            }
-        }
-    }
-}
-
 private fun shareText(size: Float, weight: FontWeight = FontWeight.Bold, color: Color, tracking: Float = -0.5f) =
     TextStyle(fontFamily = InterFontFamily, fontWeight = weight, fontSize = size.sp, letterSpacing = tracking.sp, color = color)
 
 @Composable
-private fun MochyMark(color: Color, size: Float = 14f) {
+internal fun MochyMark(color: Color, size: Float = 14f) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             painter = painterResource(R.drawable.ic_mochy_mark),
@@ -206,18 +103,24 @@ private fun MochyMark(color: Color, size: Float = 14f) {
     }
 }
 
+// the cover, the title and the artist; a cover already in memory is drawn straight away, so an export never waits on it
 @Composable
-private fun SongHeader(song: ShareSong, color: Color, cover: Float, title: Float, modifier: Modifier = Modifier) {
+private fun SongHeader(song: ShareSong, color: Color, cover: Float, title: Float, modifier: Modifier = Modifier, art: ImageBitmap? = null) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
-        AsyncImage(
-            model = song.thumbnailUrl?.resize(240, 240),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(cover.dp)
-                .clip(RoundedCornerShape((cover * 0.22f).dp))
-                .background(color.copy(alpha = 0.2f)),
-        )
+        val coverModifier = Modifier
+            .size(cover.dp)
+            .clip(RoundedCornerShape((cover * 0.22f).dp))
+            .background(color.copy(alpha = 0.2f))
+        if (art != null) {
+            Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = coverModifier)
+        } else {
+            AsyncImage(
+                model = song.thumbnailUrl?.resize(240, 240),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = coverModifier,
+            )
+        }
         Spacer(Modifier.width(11.dp))
         Column {
             Text(song.title, style = shareText(title, color = color), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -231,42 +134,6 @@ private fun SongHeader(song: ShareSong, color: Color, cover: Float, title: Float
     }
 }
 
-/** The card style: the lines on a card in one of the cover's colours, the song on top. */
-@Composable
-private fun CardLayout(session: LyricsShareSession, onCardTap: (() -> Unit)?) {
-    val cardColor = session.cardColorOr(Color(0xFF3A3A3C))
-    val ink = if (cardColor.luminance() > 0.55f) Color(0xFF111111) else Color.White
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier
-                .width(ShareWidth * 0.8f)
-                .clip(RoundedCornerShape(22.dp))
-                .background(cardColor)
-                .then(
-                    if (onCardTap != null) {
-                        Modifier.clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCardTap)
-                    } else {
-                        Modifier
-                    },
-                )
-                .padding(20.dp),
-        ) {
-            SongHeader(session.song, ink, cover = 46f, title = 15f)
-            Spacer(Modifier.height(18.dp))
-            Text(
-                session.chosen.joinToString("\n") { it.second },
-                style = shareText(21f, color = ink, tracking = -0.7f).copy(lineHeight = 27.sp),
-                // a card holds 14 words, so this only cuts in on the greyed-out style tile when
-                // more is picked - and keeps the mark below on the card even there
-                maxLines = 9,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(22.dp))
-            MochyMark(ink, size = 13f)
-        }
-    }
-}
-
 /**
  * The cinematic style: the words straight on the background, each one as its look says - bigger,
  * in capitals, glowing. Lines sit on their own, so a big word only pushes its own line apart. The
@@ -274,8 +141,14 @@ private fun CardLayout(session: LyricsShareSession, onCardTap: (() -> Unit)?) {
  * and the song slides past the words when it moves above or below them.
  */
 @Composable
-private fun CinematicLayout(session: LyricsShareSession, regions: ShareRegions?) {
-    val ink = contentColorOn(session.background)
+internal fun CinematicLayout(
+    session: LyricsShareSession,
+    regions: ShareRegions?,
+    ink: Color,
+    cover: ImageBitmap? = null,
+    // in a video the words light up as they're sung; null keeps them all lit for a picture
+    flow: CinematicFlow? = null,
+) {
     val textSize = rememberCinematicTextSize(session)
     val below = animateFloatAsState(
         if (session.headerBelow) 1f else 0f,
@@ -291,6 +164,7 @@ private fun CinematicLayout(session: LyricsShareSession, regions: ShareRegions?)
                     cover = 38f,
                     title = 14f,
                     modifier = if (regions != null) Modifier.onGloballyPositioned { regions.header = it.boundsInParent() } else Modifier,
+                    art = cover,
                 )
             },
             {
@@ -299,7 +173,12 @@ private fun CinematicLayout(session: LyricsShareSession, regions: ShareRegions?)
                     modifier = if (regions != null) Modifier.onGloballyPositioned { regions.words = it.boundsInParent() } else Modifier,
                 ) {
                     session.chosen.forEach { (line, text) ->
-                        Text(cinematicLine(session, line, text, ink, textSize), style = shareText(textSize, color = ink, tracking = -1f))
+                        val style = shareText(textSize, color = ink, tracking = -1f)
+                        if (flow == null) {
+                            Text(cinematicLine(session, line, text, ink, textSize), style = style)
+                        } else {
+                            SungLine(session, line, text, ink, textSize, style, flow)
+                        }
                     }
                 }
             },
@@ -385,5 +264,5 @@ internal fun wordSpan(look: WordLook, ink: Color, base: Float = CinematicTextSiz
     fontSize = if (look.big) (base * 2.1f).sp else base.sp,
     fontWeight = if (look.big) FontWeight.ExtraBold else FontWeight.Bold,
     letterSpacing = if (look.big) (-2.6).sp else (-1).sp,
-    shadow = if (look.glow) Shadow(ink.copy(alpha = 0.9f), Offset.Zero, blurRadius = 30f) else null,
+    shadow = if (look.glow) Shadow(ink.copy(alpha = 0.9f * ink.alpha), Offset.Zero, blurRadius = 30f) else null,
 )

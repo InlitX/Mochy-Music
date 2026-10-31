@@ -2,7 +2,6 @@
 
 package com.mochyy.mochymusic.ui.menu
 
-import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -415,12 +414,7 @@ fun SongMenu(
                         },
                         onClick = {
                             onDismiss()
-                            val intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=${song.id}")
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
+                            com.mochyy.mochymusic.ui.player.share.song.SongShare.open(song.toMediaMetadata())
                         }
                     ),
                     if (song.song.albumId != null) {

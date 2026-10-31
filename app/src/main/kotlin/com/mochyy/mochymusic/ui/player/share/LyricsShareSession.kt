@@ -1,8 +1,7 @@
 // LyricsShareSession.kt
 //
-// Everything one lyrics share remembers while its sheets are open: the song, which lines are
-// picked, the style, the background and how each word looks. Every sheet reads and writes the
-// same session, so stepping back and forth between them never loses a choice.
+// The lyrics half of a song share: which lines are picked, the style, and how each word looks.
+// The song share (share/song) holds everything else, the background and the card included.
 
 package com.mochyy.mochymusic.ui.player.share
 
@@ -16,9 +15,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.text.TextStyle
+import com.mochyy.mochymusic.lyrics.LyricsEntry
+import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.player.LyricsAlignment
 import com.mochyy.mochymusic.ui.player.LyricsLineInsets
 
@@ -74,6 +74,8 @@ internal class LyricsShareSession(
     val song: ShareSong,
     /** every lyric line of the song, in order */
     val lines: List<String>,
+    // the same lines with their timing, so a video can flow through the picked ones
+    val entries: List<LyricsEntry>,
     /** the line that was held down to open the share */
     val held: Int,
     val flightSource: ShareFlightSource?,
@@ -92,21 +94,17 @@ internal class LyricsShareSession(
         private set
 
     var style by mutableStateOf(ShareStyle.Card)
-    var background by mutableStateOf<ShareBackground>(ShareBackground.FromMusic)
 
     /** colours taken from the cover, strongest first; empty until the cover has been read */
     var palette by mutableStateOf<List<Color>>(emptyList())
-
-    /** which colour the Card style's card is (see [cardColorOr]); a tap on the card moves to the next */
-    var cardColor by mutableIntStateOf(0)
 
     /** Cinematic: the song's name under the words instead of above them */
     var headerBelow by mutableStateOf(false)
 
     val looks = mutableStateMapOf<WordKey, WordLook>()
 
-    /** the picture being shown in the editor, recorded so Share can save exactly that */
-    var capture: GraphicsLayer? = null
+    // what "Select" does once the lines are picked: the song share moves on to the styles
+    var onLinesPicked: (PopupSheetState) -> Unit = {}
 
     /** the held line's row in the picker, so the flying copy knows where to land */
     var flightTarget by mutableStateOf<LayoutCoordinates?>(null)
@@ -185,14 +183,6 @@ internal class LyricsShareSession(
 
     fun setLook(key: WordKey, look: WordLook) {
         if (look.plain) looks.remove(key) else looks[key] = look
-    }
-
-    /** The cover's colours first, then near-black, then white, like Spotify's own card choices. */
-    fun cardColorOr(fallback: Color): Color = when (val i = cardColor) {
-        in palette.indices -> palette[i]
-        palette.size -> Color(0xFF141414)
-        palette.size + 1 -> Color.White
-        else -> palette.firstOrNull() ?: fallback
     }
 }
 

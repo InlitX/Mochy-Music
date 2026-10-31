@@ -179,7 +179,7 @@ private fun cachedVideo(mediaId: String, isVideoSong: Boolean): OfficialMusicVid
 // one lookup at a time: the mini player and the full video mode both ask for the playing song, and the second finds the first's answer cached
 private val lookupLock = Mutex()
 
-private suspend fun lookUpVideo(mediaId: String, title: String, artist: String, isVideoSong: Boolean): OfficialMusicVideo? =
+internal suspend fun lookUpVideo(mediaId: String, title: String, artist: String, isVideoSong: Boolean): OfficialMusicVideo? =
     lookupLock.withLock {
         val key = videoCacheKey(mediaId, isVideoSong)
         if (YouTubeVideoUrlCache.contains(key)) return@withLock YouTubeVideoUrlCache.get(key)

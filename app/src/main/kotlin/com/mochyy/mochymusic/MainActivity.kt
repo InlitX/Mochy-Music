@@ -1273,6 +1273,9 @@ class MainActivity : ComponentActivity() {
                     // action feedback ("Added to Queue", "Undo"...) drops in over the sheets too
                     com.mochyy.mochymusic.ui.component.TopToastHost()
 
+                    // "share song" from any menu opens here, over the app and the player
+                    com.mochyy.mochymusic.ui.player.share.song.SongShareHost()
+
                     HomeUpdatePrompt(currentRoute = currentRoute)
 
                     sharedSong?.let { song ->

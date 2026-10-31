@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
@@ -42,12 +43,7 @@ internal fun contentColorOn(background: ShareBackground): Color = when (backgrou
     else -> Color.White
 }
 
-@Composable
-internal fun ShareBackdrop(session: LyricsShareSession, animate: Boolean, modifier: Modifier = Modifier) {
-    BackdropOf(session.background, session.song.thumbnailUrl, session.palette, animate, modifier)
-}
-
-/** Any background, not only the picked one: the background picker shows each choice with this. */
+/** Any background: the background pager shows each choice with this. */
 @Composable
 internal fun BackdropOf(
     background: ShareBackground,
@@ -124,24 +120,29 @@ internal fun MusicBackdrop(thumbnailUrl: String?, palette: List<Color>, animate:
         Box(
             Modifier
                 .fillMaxSize()
-                .drawBehind {
-                    val t = drift?.value ?: 0.6f
-                    palette.take(5).forEachIndexed { i, color ->
-                        val angle = t * (0.7f + i * 0.19f) + i * 1.3f
-                        val center = Offset(
-                            size.width * (0.3f + 0.2f * (i % 3)) + size.width * 0.22f * cos(angle),
-                            size.height * (0.2f + 0.16f * (i % 4)) + size.height * 0.12f * sin(angle),
-                        )
-                        val radius = size.minDimension * (0.7f + 0.1f * (i % 2))
-                        drawCircle(
-                            Brush.radialGradient(listOf(color.copy(alpha = 0.6f), color.copy(alpha = 0f)), center, radius),
-                            radius,
-                            center,
-                        )
-                    }
-                    // a touch darker toward the bottom, where the words usually end
-                    drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.08f), Color.Black.copy(alpha = 0.38f))))
-                },
+                .drawBehind { drawMusicClouds(palette, drift?.value ?: MusicCloudsRestPhase) },
         )
     }
+}
+
+// where the clouds sit when nothing makes them drift
+internal const val MusicCloudsRestPhase = 0.6f
+
+// the cover's colours as soft clouds, placed by phase (radians, one lap is 2 pi)
+internal fun DrawScope.drawMusicClouds(palette: List<Color>, phase: Float) {
+    palette.take(5).forEachIndexed { i, color ->
+        val angle = phase * (0.7f + i * 0.19f) + i * 1.3f
+        val center = Offset(
+            size.width * (0.3f + 0.2f * (i % 3)) + size.width * 0.22f * cos(angle),
+            size.height * (0.2f + 0.16f * (i % 4)) + size.height * 0.12f * sin(angle),
+        )
+        val radius = size.minDimension * (0.7f + 0.1f * (i % 2))
+        drawCircle(
+            Brush.radialGradient(listOf(color.copy(alpha = 0.6f), color.copy(alpha = 0f)), center, radius),
+            radius,
+            center,
+        )
+    }
+    // a touch darker toward the bottom, where the words usually end
+    drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.08f), Color.Black.copy(alpha = 0.38f))))
 }

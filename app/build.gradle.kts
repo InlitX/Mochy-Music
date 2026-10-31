@@ -392,6 +392,9 @@ dependencies {
     implementation(libs.media3.dash)
     implementation(libs.media3.ui)
     implementation(libs.media3.okhttp)
+    // song share videos: decode the background, mix in the song, encode the mp4
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
 
     // Google Cast - only included in GMS flavor (not available in F-Droid/FOSS builds)
     "gmsImplementation"(libs.media3.cast)

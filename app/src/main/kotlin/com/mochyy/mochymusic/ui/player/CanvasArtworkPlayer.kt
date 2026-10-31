@@ -194,22 +194,7 @@ fun CanvasArtworkPlayer(
 
     LaunchedEffect(currentUrl, session) {
         val normalized = currentUrl.trim()
-        val mimeType =
-            when {
-                normalized.contains(".m3u8", ignoreCase = true) ||
-                normalized.lowercase(Locale.ROOT).split('?').first().endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
-                normalized.lowercase(Locale.ROOT).contains(".mp4") -> MimeTypes.VIDEO_MP4
-                primary != null && currentUrl == primary -> {
-
-                    if (normalized.contains("apple.com") || normalized.contains("music.apple") || !normalized.contains(".mp4")) {
-                        MimeTypes.APPLICATION_M3U8
-                    } else {
-                        MimeTypes.VIDEO_MP4
-                    }
-                }
-                fallback != null && currentUrl == fallback -> MimeTypes.VIDEO_MP4
-                else -> MimeTypes.APPLICATION_M3U8
-            }
+        val mimeType = canvasMimeType(normalized, isFallback = fallback != null && currentUrl == fallback && currentUrl != primary)
 
         val mediaItem =
             MediaItem.Builder()
@@ -260,13 +245,24 @@ fun CanvasArtworkPlayer(
     )
 }
 
+// whether a canvas link is an hls playlist or a plain mp4, so the song share's export reads it the same way the player does
+internal fun canvasMimeType(url: String, isFallback: Boolean = false): String {
+    val lower = url.lowercase(Locale.ROOT)
+    return when {
+        lower.contains(".m3u8") || lower.split('?').first().endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+        lower.contains(".mp4") -> MimeTypes.VIDEO_MP4
+        isFallback -> MimeTypes.VIDEO_MP4
+        else -> MimeTypes.APPLICATION_M3U8
+    }
+}
+
 // one thread runs every canvas player, so building or releasing one never stalls the main thread mid-scroll
 private object CanvasVideoThread {
     val handler: Handler by lazy { Handler(HandlerThread("CanvasVideo").apply { start() }.looper) }
 }
 
 // one canvas video's player, touched only on the canvas thread; the main thread just posts to it
-private class CanvasVideoSession(
+internal class CanvasVideoSession(
     context: Context,
     mediaSourceFactory: MediaSource.Factory,
     playing: Boolean,
@@ -322,6 +318,9 @@ private class CanvasVideoSession(
         }
     }
 
+    // back to the start of what's loaded, so a share's video starts over with its song
+    fun restart() = handler.post { player?.seekTo(0L) }
+
     fun attach(texture: SurfaceTexture) = handler.post {
         surface?.release()
         surface = Surface(texture).also { player?.setVideoSurface(it) }
@@ -348,7 +347,7 @@ private class CanvasVideoSession(
 }
 
 // keeps the view's texture alive until the canvas thread is done with it, and gives it to whichever session is current
-private class CanvasTexture : TextureView.SurfaceTextureListener {
+internal class CanvasTexture : TextureView.SurfaceTextureListener {
     private var available: SurfaceTexture? = null
 
     var session: CanvasVideoSession? = null

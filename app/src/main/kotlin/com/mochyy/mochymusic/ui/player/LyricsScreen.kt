@@ -67,8 +67,8 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import com.mochyy.mochymusic.ui.player.share.LyricsShareHost
 import com.mochyy.mochymusic.ui.player.share.LyricsShareSession
+import com.mochyy.mochymusic.ui.player.share.song.LyricsSongShare
 import com.mochyy.mochymusic.ui.player.share.ShareFlightSource
 import com.mochyy.mochymusic.ui.player.share.fullBoundsInWindow
 import com.mochyy.mochymusic.ui.player.share.ShareSong
@@ -518,6 +518,7 @@ fun LyricsScreen(
         shareSession = LyricsShareSession(
             song = ShareSong(meta.title, meta.artists.joinToString { it.name }, meta.thumbnailUrl),
             lines = shareable.map { it.second },
+            entries = shareable.map { lines[it.first] },
             held = held,
             flightSource = bounds()?.let {
                 ShareFlightSource(
@@ -772,7 +773,10 @@ fun LyricsScreen(
 
     }
 
-    shareSession?.let { LyricsShareHost(it, onDismiss = { shareSession = null }) }
+    // holding a line opens the song share on its line picker, the same share the menus open
+    shareSession?.let { pick ->
+        mediaMetadata?.let { song -> LyricsSongShare(song, pick, lines, onDismiss = { shareSession = null }) }
+    }
 }
 
 /** Sentinel for "no instrumental gap is playing right now". */

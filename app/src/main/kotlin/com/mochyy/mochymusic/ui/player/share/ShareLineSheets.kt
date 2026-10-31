@@ -1,8 +1,8 @@
 // ShareLineSheets.kt
 //
-// The first two steps of a lyrics share: picking the lines (the one you held is already picked,
-// and flies in from the lyrics), then picking a style. The pieces every share sheet uses live in
-// ShareKit.kt.
+// The first step of a lyrics share: picking the lines. The one you held is already picked, and
+// flies in from the lyrics. Select hands over to the song share, which picks the style next. The
+// pieces every share sheet uses live in ShareKit.kt.
 
 package com.mochyy.mochymusic.ui.player.share
 
@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,12 +56,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.ui.component.PopupSheetHandle
 import com.mochyy.mochymusic.ui.component.PopupSheetState
 import com.mochyy.mochymusic.ui.component.SheetPillButton
@@ -87,7 +84,7 @@ internal fun PopupSheetState.showLinePicker(session: LyricsShareSession): PopupS
             SheetPillButton(
                 text = "Select",
                 enabled = session.lineCount > 0,
-                onClick = { popup.showStylePicker(session) },
+                onClick = { session.onLinesPicked(popup) },
             )
         },
     ) {
@@ -271,99 +268,6 @@ private fun LineRow(session: LyricsShareSession, index: Int, text: String, modif
             text,
             style = ShareRowTextStyle,
             modifier = Modifier.graphicsLayer { alpha = 0.7f + 0.3f * maxOf(fill.value, outline.value) },
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Step 2: style
-
-private fun PopupSheetState.showStylePicker(session: LyricsShareSession) {
-    val popup = this
-    show {
-        ShareTitle("Share", "Select styles")
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 20.dp)) {
-            ShareStyle.entries.forEach { style ->
-                StyleTile(session, style) {
-                    session.style = style
-                    when (style) {
-                        ShareStyle.Card -> popup.showCardEditor(session)
-                        ShareStyle.Cinematic -> popup.showCinematicEditor(session)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * A big tile with a small live copy of that style, made from the lines you picked. A style that
- * can't hold that many words is greyed out and says so.
- */
-@Composable
-private fun StyleTile(session: LyricsShareSession, style: ShareStyle, onClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
-    val fits = session.fits(style)
-    val shake = remember { Animatable(0f) }
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .pressBounce(interaction, pressedScale = 0.97f)
-            .fillMaxWidth()
-            .graphicsLayer {
-                alpha = if (fits) 1f else 0.4f
-                translationX = shake.value
-            }
-            .clip(RoundedCornerShape(24.dp))
-            .background(MenuRowSurface)
-            .clickable(interactionSource = interaction, indication = null) {
-                if (fits) {
-                    onClick()
-                } else {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    scope.shake(shake)
-                }
-            }
-            .padding(12.dp),
-    ) {
-        SharePreview(
-            session = session,
-            style = style,
-            animate = false,
-            modifier = Modifier
-                .width(150.dp)
-                .height(140.dp),
-        )
-        Spacer(Modifier.width(18.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                when (style) {
-                    ShareStyle.Card -> "card\nstyles"
-                    ShareStyle.Cinematic -> "Cinematic\nstyles"
-                },
-                fontFamily = InterFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 19.sp,
-                lineHeight = 22.sp,
-                letterSpacing = (-0.7).sp,
-                color = Color.White,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (fits) "Up to ${style.maxWords} words" else "Too many words for this one",
-                fontFamily = InterFontFamily,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
-                color = ShareMuted,
-            )
-        }
-        Icon(
-            painterResource(R.drawable.navigate_next),
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.5f),
-            modifier = Modifier.size(22.dp),
         )
     }
 }

@@ -9,7 +9,6 @@ import com.mochyy.mochymusic.ui.component.SheetHeaderGap
 import com.mochyy.mochymusic.ui.component.SheetHeaderButton
 import com.mochyy.mochymusic.ui.component.SheetHeader
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -297,13 +296,8 @@ fun YouTubeSongMenu(
                             )
                         },
                         onClick = {
-                            val intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, song.shareLink)
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
                             onDismiss()
+                            com.mochyy.mochymusic.ui.player.share.song.SongShare.open(song.toMediaMetadata())
                         }
                     ),
                     song.album?.let { album ->

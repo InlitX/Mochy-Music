@@ -3507,6 +3507,9 @@ class MusicService :
         }.onFailure { Timber.tag(TAG).w(it, "Could not post playback error notification") }
     }
 
+    // the song share's preview and video read the song through this, so they hit the same cache and get the same links playback does
+    fun shareDataSourceFactory(): DataSource.Factory = createDataSourceFactory()
+
     private fun createDataSourceFactory(): DataSource.Factory {
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
             // a stream a source module or backend resolved to a real URL (an HLS playlist, given
