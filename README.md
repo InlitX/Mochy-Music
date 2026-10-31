@@ -141,8 +141,10 @@ Mochy is an independent, unofficial project made for personal and educational us
 ---
 
 # FAQ
+## Q
 ## 1.Is it safe to log in? (read this before signing in)
 
+## A
 Tbh, you never have to log in to use this thing btw. Search, play, lyrics and downloads work without an account. Signing in is only for syncing your YouTube Music library, importing playlists from Spotify / Apple Music / Tidal, and Discord status
 
 **How the sign-in works**
@@ -152,6 +154,17 @@ Tbh, you never have to log in to use this thing btw. Search, play, lyrics and do
 - The tokens are meant to be used only to talk to the service you signed in to (for example Spotify's own site to read your playlists).
 - The app is open source under GPL-3.0 so you do not have to take my word for it, you can always read exactly what it does with them :)
 
+## Q
+## 2. Pls add liquid glass
+
+## A
+No, and not now. maybe in form of modules created by someone in the future
+
+## Q
+## 3. Monochrome/flac stream doesnt work
+
+## A
+The server down, its on their side not us. use other anvailable sources
 
 ---
 

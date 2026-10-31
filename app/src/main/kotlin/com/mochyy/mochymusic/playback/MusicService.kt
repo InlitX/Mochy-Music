@@ -109,6 +109,7 @@ import com.mochyy.mochymusic.constants.UsbPassthroughKey
 import com.mochyy.mochymusic.constants.AudioPassMode
 import com.mochyy.mochymusic.constants.AudioPassModeKey
 import com.mochyy.mochymusic.constants.AudioPassFixedVolumeKey
+import com.mochyy.mochymusic.constants.AudioPassRestoreKey
 import com.mochyy.mochymusic.constants.playable
 import com.mochyy.mochymusic.crossmix.CrossmixAnalysisRepository
 import com.mochyy.mochymusic.constants.DisableLoadMoreWhenRepeatAllKey
@@ -191,6 +192,8 @@ import com.mochyy.mochymusic.playback.audio.pass.PassRouterSink
 import com.mochyy.mochymusic.playback.audio.pass.PassSink
 import com.mochyy.mochymusic.playback.audio.pass.PassBlocker
 import com.mochyy.mochymusic.playback.audio.pass.clearPassBlockers
+import com.mochyy.mochymusic.playback.audio.pass.PassBlockersBefore
+import com.mochyy.mochymusic.playback.audio.pass.restorePassBlockers
 import com.mochyy.mochymusic.playback.audio.pass.passBlockersOf
 import com.mochyy.mochymusic.constants.MusicHapticsEnabledKey
 import com.mochyy.mochymusic.constants.MusicHapticsSensitivityKey
@@ -223,7 +226,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -427,12 +433,39 @@ class MusicService :
         player.volume = if (muted) 0f else playerVolume.value
     }
 
-    /** audio pass's "turn these off": every setting that keeps songs off the exclusive output goes back to neutral */
+    /** audio pass's "turn these off": every setting that keeps songs off the exclusive output goes back to neutral, remembering how it was */
     fun clearPassBlockers() {
-        scope.launch { dataStore.edit { it.clearPassBlockers() } }
+        // audio lab and the volume are read before anything changes; the preferences inside the same edit that clears them
+        val lab = audioLab
+        val volume = playerVolume.value
+        scope.launch {
+            dataStore.edit { prefs ->
+                prefs[AudioPassRestoreKey] = passJson.encodeToString(PassBlockersBefore.of(prefs, lab, volume))
+                prefs.clearPassBlockers()
+            }
+        }
         audioLab.clearPassBlockers()
         playerVolume.value = 1f
     }
+
+    /** "turn these back on": everything "turn these off" switched off goes back to how it was */
+    fun restorePassBlockers() {
+        scope.launch {
+            var before: PassBlockersBefore? = null
+            dataStore.edit { prefs ->
+                before = prefs[AudioPassRestoreKey]?.let { runCatching { passJson.decodeFromString<PassBlockersBefore>(it) }.getOrNull() }
+                before?.let(prefs::restorePassBlockers)
+                prefs.remove(AudioPassRestoreKey)
+            }
+            before?.let {
+                audioLab.restorePassBlockers(it)
+                playerVolume.value = it.playerVolume
+            }
+        }
+    }
+
+    /** whether there's a "turn these back on" waiting */
+    val canRestorePassBlockers: Flow<Boolean> by lazy { dataStore.data.map { it[AudioPassRestoreKey] != null }.distinctUntilChanged() }
 
     fun setPreferredAudioDevice(deviceId: Int?) {
         preferredDeviceId = deviceId
@@ -4819,3 +4852,6 @@ private const val WidgetProgressIntervalMs = 1_000L
 
 // the passthrough switch, its mode and whether anything shapes the sound, compared as one so audio pass hears each change once
 private data class PassSettings(val enabled: Boolean, val mode: AudioPassMode, val blocked: Boolean, val fixedVolume: Boolean)
+
+// reads a restore point from an older version even if fields were added since
+private val passJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }

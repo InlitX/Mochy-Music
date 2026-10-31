@@ -5,6 +5,9 @@ package com.mochyy.mochymusic.ui.screens.audiolab
 import android.os.Build
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -85,6 +88,8 @@ class LabTitle(
     val firstDim: Boolean = false,
     /** the second line greyed, as under dac's stuff */
     val secondDim: Boolean = false,
+    /** a small outlined tag after the second line, like dac's stuff's beta */
+    val secondBadge: String? = null,
 )
 
 /** art is drawn at the header's right behind the sheet and is told when it's hidden so it can stop animating, subtitle is a small line under the title */
@@ -265,19 +270,25 @@ private fun LabHeader(
         )
         // a one-word title like gesture has no second line to leave a gap for
         if (title.second.isNotEmpty()) {
-            Text(
-                title.second,
-                fontFamily = InterFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = title.secondSize * keep,
-                lineHeight = title.secondSize * keep * 0.92f,
-                letterSpacing = (-0.04).em,
-                color = if (title.secondDim) Color(0xFF8A8A8E) else Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-                softWrap = false,
-                modifier = Modifier.offset(y = (-2).dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title.second,
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = title.secondSize * keep,
+                    lineHeight = title.secondSize * keep * 0.92f,
+                    letterSpacing = (-0.04).em,
+                    color = if (title.secondDim) Color(0xFF8A8A8E) else Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    softWrap = false,
+                    modifier = Modifier.offset(y = (-2).dp),
+                )
+                title.secondBadge?.let { badge ->
+                    Spacer(Modifier.width(12.dp))
+                    LabBadge(badge)
+                }
+            }
         }
         if (subtitle != null) {
             Spacer(Modifier.height(8.dp))
@@ -291,6 +302,28 @@ private fun LabHeader(
                 modifier = Modifier.widthIn(max = 220.dp),
             )
         }
+    }
+}
+
+/** the yellow outlined pill that marks a page as still being worked on */
+@Composable
+private fun LabBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xFF2C2C2E))
+            .border(1.5.dp, Color(0xFFFFF59D), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text,
+            fontFamily = InterFontFamily,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+            letterSpacing = 0.08.em,
+            color = Color(0xFFFFD866),
+            maxLines = 1,
+        )
     }
 }
 

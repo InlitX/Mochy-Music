@@ -106,4 +106,6 @@
     <string name="audiopass_dac_volume_desc">Diatur di DAC itu sendiri, jadi musiknya tidak diskalakan. Tombol volume juga mengaturnya.</string>
     <string name="audiopass_value_db">%1$s dB</string>
     <string name="audiopass_blocker_lossy_direct">Lagu lossy juga sampai ke DAC tanpa diubah. Lagu itu hanya sudah dikompres sebelum sampai sini.</string>
+    <string name="audiopass_blockers_restore">Nyalakan lagi</string>
+    <string name="audiopass_beta">BETA</string>
 </resources>

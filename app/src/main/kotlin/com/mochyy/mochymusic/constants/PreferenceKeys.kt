@@ -192,6 +192,8 @@ val HiFiResamplerKey = booleanPreferencesKey("hiFiResampler")
 val AudioPassModeKey = stringPreferencesKey("audioPassMode")
 // lets the direct usb driver play a dac that has no volume of its own, at full scale
 val AudioPassFixedVolumeKey = booleanPreferencesKey("audioPassFixedVolume")
+// what "turn these off" on dac's stuff switched off, as json, until "turn these back on" puts it back
+val AudioPassRestoreKey = stringPreferencesKey("audioPassRestore")
 
 /** how the passthrough switch reaches the dac; minSdk is the android each one needs */
 enum class AudioPassMode(val minSdk: Int) {

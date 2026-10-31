@@ -21,6 +21,7 @@ import com.mochyy.mochymusic.eq.ReverbSettings
 import com.mochyy.mochymusic.eq.SpatialSettings
 import com.mochyy.mochymusic.eq.VolumeSettings
 import com.mochyy.mochymusic.extensions.toEnum
+import kotlinx.serialization.Serializable
 
 /** each of these changes the sound on mochy's side, and an output that takes the song untouched can't, so songs play the normal way while one is on */
 enum class PassBlocker { EQUALIZER, AUDIO_FX, VOLUME, NORMALIZATION, SPEED, TRANSITIONS, SILENCE_OR_HAPTICS }
@@ -52,6 +53,68 @@ private fun transitionMode(prefs: Preferences): CrossmixMode {
     val legacy = prefs[CrossfadeEnabledKey] ?: false
     return (prefs[CrossmixModeKey]?.let { runCatching { CrossmixMode.valueOf(it) }.getOrNull() }
         ?: if (legacy) CrossmixMode.MANUAL_CROSSFADE else CrossmixMode.AUTO_CROSSFADE).playable()
+}
+
+/** how every blocker was set just before "turn these off", so "turn these back on" can put each one back as it was */
+@Serializable
+data class PassBlockersBefore(
+    val normalization: Boolean?,
+    val crossmixMode: String?,
+    val crossfade: Boolean?,
+    val transportEffect: String?,
+    val skipSilence: Boolean?,
+    val haptics: Boolean?,
+    val eq: Boolean,
+    val reverb: Boolean,
+    val loudness: Boolean,
+    val spatial: Boolean,
+    val mono: Boolean,
+    val playback: PlaybackSettings,
+    val volumeLimit: Float,
+    val playerVolume: Float,
+) {
+    companion object {
+        /** null keys stay null, so a setting that was never touched goes back to its default rather than to a guess */
+        fun of(prefs: Preferences, store: AudioLabStore, playerVolume: Float) = PassBlockersBefore(
+            normalization = prefs[AudioNormalizationKey],
+            crossmixMode = prefs[CrossmixModeKey],
+            crossfade = prefs[CrossfadeEnabledKey],
+            transportEffect = prefs[TransportEffectKey],
+            skipSilence = prefs[SkipSilenceKey],
+            haptics = prefs[MusicHapticsEnabledKey],
+            eq = store.eq.value.enabled,
+            reverb = store.reverb.value.enabled,
+            loudness = store.loudness.value.enabled,
+            spatial = store.spatial.value.enabled,
+            mono = store.spatial.value.mono,
+            playback = store.playback.value,
+            volumeLimit = store.volume.value.limit,
+            playerVolume = playerVolume,
+        )
+    }
+}
+
+/** puts the preference side back as it was before "turn these off" */
+fun MutablePreferences.restorePassBlockers(before: PassBlockersBefore) {
+    fun <T> put(key: Preferences.Key<T>, value: T?) {
+        if (value == null) remove(key) else this[key] = value
+    }
+    put(AudioNormalizationKey, before.normalization)
+    put(CrossmixModeKey, before.crossmixMode)
+    put(CrossfadeEnabledKey, before.crossfade)
+    put(TransportEffectKey, before.transportEffect)
+    put(SkipSilenceKey, before.skipSilence)
+    put(MusicHapticsEnabledKey, before.haptics)
+}
+
+/** the audio lab side of the same; only what "turn these off" touched comes back, anything set since stays */
+fun AudioLabStore.restorePassBlockers(before: PassBlockersBefore) {
+    updateEq { it.copy(enabled = before.eq) }
+    updateReverb { it.copy(enabled = before.reverb) }
+    updateLoudness { it.copy(enabled = before.loudness) }
+    updateSpatial { it.copy(enabled = before.spatial, mono = before.mono) }
+    updatePlayback { before.playback }
+    updateVolume { it.copy(limit = before.volumeLimit) }
 }
 
 /** turns off the preference side of every blocker; audio lab's own settings and the volume go through their owners */

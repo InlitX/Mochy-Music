@@ -94,6 +94,7 @@ fun AudioPassScreen(navController: NavController) {
     val status by remember(pass) { pass?.status ?: MutableStateFlow(AudioPass.Status.Off) }.collectAsState()
     val dacVolume by remember(pass) { pass?.dacVolume ?: MutableStateFlow(null) }.collectAsState()
     val usbPermitted by remember(pass) { pass?.usbPermitted ?: MutableStateFlow(null) }.collectAsState()
+    val canRestore by remember(service) { service?.canRestorePassBlockers ?: MutableStateFlow(false) }.collectAsState(initial = false)
 
     // the dac's details come from binder calls, so they're read off the main thread whenever the outputs change
     var dac by remember { mutableStateOf<UsbDacDetails?>(null) }
@@ -122,6 +123,7 @@ fun AudioPassScreen(navController: NavController) {
             firstSize = 64.sp,
             secondSize = 30.sp,
             secondDim = true,
+            secondBadge = stringResource(R.string.audiopass_beta),
         ),
         onBack = { navController.navigateUp() },
         subtitle = subtitleFor(shown),
@@ -164,7 +166,13 @@ fun AudioPassScreen(navController: NavController) {
         }
         LabCollapsible(passthrough && mode.exclusive) {
             Spacer(Modifier.height(12.dp))
-            BlockersCard(blockers, lossyToo = mode == AudioPassMode.DIRECT_USB, onClear = { service?.clearPassBlockers() })
+            BlockersCard(
+                active = blockers,
+                lossyToo = mode == AudioPassMode.DIRECT_USB,
+                canRestore = canRestore,
+                onClear = { service?.clearPassBlockers() },
+                onRestore = { service?.restorePassBlockers() },
+            )
         }
     }
 }
@@ -528,7 +536,7 @@ private fun androidName(sdk: Int): String = when (sdk) {
 // ---- blockers ----------------------------------------------------------------------------
 
 @Composable
-private fun BlockersCard(active: Set<PassBlocker>, lossyToo: Boolean, onClear: () -> Unit) {
+private fun BlockersCard(active: Set<PassBlocker>, lossyToo: Boolean, canRestore: Boolean, onClear: () -> Unit, onRestore: () -> Unit) {
     LabCard(padding = 20.dp) {
         Row(verticalAlignment = Alignment.Top) {
             Text(
@@ -554,6 +562,11 @@ private fun BlockersCard(active: Set<PassBlocker>, lossyToo: Boolean, onClear: (
         }
         Spacer(Modifier.height(10.dp))
         Note(stringResource(if (lossyToo) R.string.audiopass_blocker_lossy_direct else R.string.audiopass_blocker_lossy))
+        // what "turn these off" switched off, waiting to come back exactly as it was
+        if (canRestore) {
+            Spacer(Modifier.height(14.dp))
+            PillButton(stringResource(R.string.audiopass_blockers_restore), onClick = onRestore)
+        }
     }
 }
 
