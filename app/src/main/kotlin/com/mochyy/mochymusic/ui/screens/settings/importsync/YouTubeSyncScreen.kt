@@ -19,12 +19,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.AccountEmailKey
 import com.mochyy.mochymusic.constants.AccountNameKey
+import com.mochyy.mochymusic.constants.YtExcludeImportsKey
 import com.mochyy.mochymusic.constants.YtPullHistoryKey
 import com.mochyy.mochymusic.constants.YtReportPlaysKey
 import com.mochyy.mochymusic.constants.YtSyncNewPlaylistsKey
@@ -50,10 +52,12 @@ fun YouTubeSyncScreen(
     val (syncNewPlaylists, onSyncNewPlaylistsChange) = rememberPreference(YtSyncNewPlaylistsKey, false)
     val (reportPlays, onReportPlaysChange) = rememberPreference(YtReportPlaysKey, true)
     val (pullHistory, onPullHistoryChange) = rememberPreference(YtPullHistoryKey, false)
+    val (excludeImports, onExcludeImportsChange) = rememberPreference(YtExcludeImportsKey, false)
     val state by viewModel.youTubeState.collectAsState()
 
     var confirmSignOut by remember { mutableStateOf(false) }
     var confirmUpload by remember { mutableStateOf(false) }
+    var confirmUndo by remember { mutableStateOf(false) }
 
     SubSettingsScaffold(
         title = "Sync",
@@ -129,6 +133,23 @@ fun YouTubeSyncScreen(
         Spacer(Modifier.height(16.dp))
 
         SettingsGroup(
+            title = "Other apps",
+            style = SettingsGroupStyle.Grouped,
+            items = listOf(
+                toggleItem(
+                    title = stringResource(R.string.yt_sync_exclude_title),
+                    description = stringResource(R.string.yt_sync_exclude_desc),
+                    icon = R.drawable.cloud,
+                    checked = excludeImports,
+                    enabled = true,
+                    onChange = onExcludeImportsChange,
+                ),
+            ),
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        SettingsGroup(
             title = "Now",
             style = SettingsGroupStyle.Grouped,
             items = listOf(
@@ -147,6 +168,14 @@ fun YouTubeSyncScreen(
                     iconShape = CircleShape,
                     enabled = signedIn && !state.running,
                     onClick = viewModel::pullHistoryNow,
+                ),
+                SettingsItem(
+                    title = { Text(stringResource(R.string.yt_sync_undo_title)) },
+                    descriptionText = stringResource(R.string.yt_sync_undo_desc),
+                    icon = painterResource(R.drawable.undo),
+                    iconShape = CircleShape,
+                    enabled = signedIn && state.canUndo && !state.running,
+                    onClick = { confirmUndo = true },
                 ),
                 SettingsItem(
                     title = { Text("Put local playlists on YouTube") },
@@ -202,6 +231,39 @@ fun YouTubeSyncScreen(
             Text(
                 "Everything already in your library stays. Sync stops until you sign in again.",
                 style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+
+    if (confirmUndo) {
+        DefaultDialog(
+            onDismiss = { confirmUndo = false },
+            horizontalAlignment = Alignment.Start,
+            title = { Text(stringResource(R.string.yt_sync_undo_dialog_title)) },
+            buttons = {
+                TextButton(onClick = { confirmUndo = false }) { Text("Cancel") }
+                TextButton(onClick = {
+                    confirmUndo = false
+                    viewModel.undoLastSync(withYouTube = false)
+                }) { Text(stringResource(R.string.yt_sync_undo_phone)) }
+                TextButton(
+                    enabled = signedIn,
+                    onClick = {
+                        confirmUndo = false
+                        viewModel.undoLastSync(withYouTube = true)
+                    },
+                ) { Text(stringResource(R.string.yt_sync_undo_both)) }
+            },
+        ) {
+            Text(
+                stringResource(R.string.yt_sync_undo_dialog_body),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.yt_sync_undo_both_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

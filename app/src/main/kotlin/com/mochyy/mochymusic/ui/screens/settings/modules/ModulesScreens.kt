@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +52,7 @@ import com.mochyy.mochymusic.ui.screens.audiolab.LabSectionLabel
 import com.mochyy.mochymusic.ui.screens.audiolab.LabTextAction
 import com.mochyy.mochymusic.ui.screens.audiolab.LabToggleRow
 import com.mochyy.mochymusic.ui.screens.settings.importsync.CaptureWebView
+import com.mochyy.mochymusic.ui.screens.settings.importsync.YouTubeSyncRoute
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
 import com.mochyy.mochymusic.viewmodels.ModulesViewModel
 
@@ -106,7 +108,29 @@ fun ModulesScreen(navController: NavController, viewModel: ModulesViewModel = hi
             }
             Spacer(Modifier.height(10.dp))
         }
+        YouTubeModuleCard { navController.navigate(YouTubeSyncRoute) }
         Spacer(Modifier.height(120.dp))
+    }
+}
+
+@Composable
+private fun YouTubeModuleCard(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(LabColors.Card)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ModuleLogo("youtube")
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.module_youtube_name), fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color.White)
+            Text(stringResource(R.string.module_youtube_desc), fontFamily = InterFontFamily, fontSize = 12.sp, color = LabColors.Secondary)
+        }
+        Icon(painterResource(R.drawable.navigate_next), null, tint = LabColors.Secondary, modifier = Modifier.size(18.dp))
     }
 }
 

@@ -3,6 +3,7 @@
 package com.mochyy.mochymusic.importer
 
 import android.content.Context
+import com.mochyy.mochymusic.constants.YtExcludeImportsKey
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.db.entities.ImportSessionSong
 import com.mochyy.mochymusic.db.entities.ImportedPlaylist
@@ -11,6 +12,8 @@ import com.mochyy.mochymusic.db.entities.PlaylistEntity
 import com.mochyy.mochymusic.db.entities.PlaylistSongMap
 import com.mochyy.mochymusic.extensions.isUserLoggedIn
 import com.mochyy.mochymusic.models.toMediaMetadata
+import com.mochyy.mochymusic.utils.dataStore
+import com.mochyy.mochymusic.utils.get
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
 import kotlinx.coroutines.CancellationException
@@ -51,7 +54,8 @@ internal class ImportSteps(
     suspend fun runImport(parsed: ParsedImport, options: ImportOptions) {
         val matcher = newMatcher()
         val signedIn = context.isUserLoggedIn()
-        val mirror = options.mirrorToYouTube && signedIn
+        val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, false)
+        val mirror = options.mirrorToYouTube && signedIn && !keepOffYouTube
 
         if (parsed.likedSongs.isNotEmpty()) importLiked(matcher, parsed.likedSongs, mirror)
         if (parsed.librarySongs.isNotEmpty()) importLibrarySongs(matcher, parsed.librarySongs)

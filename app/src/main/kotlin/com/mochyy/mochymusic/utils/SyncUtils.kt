@@ -15,6 +15,8 @@ import com.mochyy.mochymusic.constants.InnerTubeCookieKey
 import com.mochyy.mochymusic.constants.LastFullSyncKey
 import com.mochyy.mochymusic.constants.SYNC_COOLDOWN
 import com.mochyy.mochymusic.constants.SelectedYtmPlaylistsKey
+import com.mochyy.mochymusic.constants.YtExcludeImportsKey
+import com.mochyy.mochymusic.constants.YtSyncHoldKey
 import com.mochyy.mochymusic.constants.YtSyncLikedSongsKey
 import com.mochyy.mochymusic.constants.YtSyncSourcesTaggedKey
 import com.mochyy.mochymusic.db.MusicDatabase
@@ -30,6 +32,7 @@ import com.mochyy.mochymusic.extensions.isInternetConnected
 import com.mochyy.mochymusic.extensions.isSyncEnabled
 import com.mochyy.mochymusic.importer.ImportSource
 import com.mochyy.mochymusic.importer.PendingYouTubeLikes
+import com.mochyy.mochymusic.importer.SyncUndo
 import com.mochyy.mochymusic.models.toMediaMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -137,7 +140,7 @@ class SyncUtils @Inject constructor(
 
     private suspend fun processOperation(operation: SyncOperation) {
         when (operation) {
-            is SyncOperation.FullSync -> executeFullSync()
+            is SyncOperation.FullSync -> executeFullSync(manual = false)
             is SyncOperation.LikedSongs -> executeSyncLikedSongs()
             is SyncOperation.LibrarySongs -> executeSyncLibrarySongs()
             is SyncOperation.UploadedSongs -> executeSyncUploadedSongs()
@@ -198,12 +201,12 @@ class SyncUtils @Inject constructor(
         }
     }
 
-    suspend fun performFullSyncSuspend() {
+    suspend fun performFullSyncSuspend(manual: Boolean = false) {
         if (!isLoggedIn()) {
             Timber.w("Skipping full sync - user not logged in")
             return
         }
-        executeFullSync()
+        executeFullSync(manual)
     }
 
     fun tryAutoSync() {
@@ -340,11 +343,17 @@ class SyncUtils @Inject constructor(
         executeSyncArtistsSubscriptions()
     }
 
-    private suspend fun executeFullSync() = withContext(Dispatchers.IO) {
+    private suspend fun executeFullSync(manual: Boolean) = withContext(Dispatchers.IO) {
         if (!isLoggedIn()) {
             Timber.w("Skipping full sync - user not logged in")
             return@withContext
         }
+        if (!manual && context.dataStore.get(YtSyncHoldKey, false)) {
+            Timber.d("Skipping auto sync - an undo is holding YouTube pulls")
+            return@withContext
+        }
+
+        SyncUndo.begin(context, database)
 
         updateState { copy(overallStatus = SyncStatus.Syncing, currentOperation = "Starting full sync") }
 
@@ -386,6 +395,12 @@ class SyncUtils @Inject constructor(
         }
     }
 
+    /** Songs imported from another service, when the user keeps those off YouTube. */
+    private fun excludedFromYouTube(): Set<String> {
+        if (!context.dataStore.get(YtExcludeImportsKey, false)) return emptySet()
+        return database.importedSongIdsExcept(ImportSource.YOUTUBE_MUSIC.key).toSet()
+    }
+
     /** See [YtSyncSourcesTaggedKey]: until one full sync has run, everything YouTube has is marked. */
     private fun sourcesTagged(): Boolean = context.dataStore.get(YtSyncSourcesTaggedKey, false)
 
@@ -402,6 +417,7 @@ class SyncUtils @Inject constructor(
             Timber.w("Skipping likeSong - user not logged in")
             return@withContext
         }
+        if (s.id in excludedFromYouTube()) return@withContext
 
         withRetry {
             YouTube.likeVideo(s.id, s.liked)
@@ -435,12 +451,18 @@ class SyncUtils @Inject constructor(
                     val keptLikes = mutableSetOf<String>()
                     if (pendingLikes.isNotEmpty()) {
                         val localIds = localSongs.map { it.id }.toSet()
+                        val excluded = excludedFromYouTube()
                         PendingYouTubeLikes.remove(context, pendingLikes.filter { it !in localIds || it in remoteIds })
                         localSongs.filter { it.id in pendingLikes && it.id !in remoteIds }.forEach { song ->
-                            if (YouTube.likeVideo(song.id, true).isSuccess) pushedLikes += song.id else keptLikes += song.id
+                            when {
+                                song.id in excluded -> keptLikes += song.id
+                                YouTube.likeVideo(song.id, true).isSuccess -> pushedLikes += song.id
+                                else -> keptLikes += song.id
+                            }
                             delay(150)
                         }
                         PendingYouTubeLikes.remove(context, pushedLikes)
+                        SyncUndo.recordPushedLikes(context, pushedLikes)
                     }
 
                     localSongs.filterNot { it.id in remoteIds || it.id in pushedLikes || it.id in keptLikes }.forEach { song ->

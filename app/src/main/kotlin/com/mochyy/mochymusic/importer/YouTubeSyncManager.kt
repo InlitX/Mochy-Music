@@ -3,7 +3,11 @@
 package com.mochyy.mochymusic.importer
 
 import android.content.Context
+import androidx.datastore.preferences.core.edit
+import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.constants.YtExcludeImportsKey
 import com.mochyy.mochymusic.constants.YtPullHistoryKey
+import com.mochyy.mochymusic.constants.YtSyncHoldKey
 import com.mochyy.mochymusic.db.MusicDatabase
 import com.mochyy.mochymusic.db.entities.Event
 import com.mochyy.mochymusic.db.entities.PlaylistEntity
@@ -40,6 +44,7 @@ data class YtSyncState(
     val running: Boolean = false,
     val label: String = "",
     val message: String? = null,
+    val canUndo: Boolean = false,
 )
 
 /** the manual youtube actions on the sync page; automatic library sync stays in SyncUtils */
@@ -57,9 +62,14 @@ class YouTubeSyncManager @Inject constructor(
     private val _state = MutableStateFlow(YtSyncState())
     val state: StateFlow<YtSyncState> = _state.asStateFlow()
 
+    init {
+        scope.launch { _state.value = _state.value.copy(canUndo = SyncUndo.canUndo(context)) }
+    }
+
     fun syncNow() = launchTask("Syncing with YouTube…") {
         requireSignedIn()
-        syncUtils.performFullSyncSuspend()
+        context.dataStore.edit { it[YtSyncHoldKey] = false }
+        syncUtils.performFullSyncSuspend(manual = true)
         if (context.dataStore.get(YtPullHistoryKey, false)) {
             setLabel("Copying YouTube history…")
             val copied = pullHistory()
@@ -75,11 +85,24 @@ class YouTubeSyncManager @Inject constructor(
         if (copied == 0) "Nothing new in your YouTube history." else "$copied ${if (copied == 1) "play" else "plays"} copied from YouTube history."
     }
 
+    fun undoLastSync(withYouTube: Boolean) = launchTask("Undoing the last sync…") {
+        if (!SyncUndo.canUndo(context)) return@launchTask context.getString(R.string.yt_sync_undo_nothing)
+        if (withYouTube) requireSignedIn()
+        val failed = SyncUndo.undo(context, database, withYouTube)
+        when {
+            failed > 0 -> context.resources.getQuantityString(R.plurals.yt_sync_undo_failed, failed, failed)
+            withYouTube -> context.getString(R.string.yt_sync_undo_done_both)
+            else -> context.getString(R.string.yt_sync_undo_done_phone)
+        }
+    }
+
     fun uploadLocalPlaylists() = launchTask("Creating playlists on YouTube…") {
         requireSignedIn()
+        val keepOffYouTube = context.dataStore.get(YtExcludeImportsKey, false)
         val locals = database.playlistsByNameAsc().first().filter {
             it.playlist.browseId == null && it.playlist.isEditable && !it.playlist.isLocal &&
-                it.playlist.id != PlaylistEntity.LIKED_PLAYLIST_ID && it.playlist.id != PlaylistEntity.DOWNLOADED_PLAYLIST_ID
+                it.playlist.id != PlaylistEntity.LIKED_PLAYLIST_ID && it.playlist.id != PlaylistEntity.DOWNLOADED_PLAYLIST_ID &&
+                !(keepOffYouTube && database.getImportedPlaylist(it.playlist.id)?.source?.let { s -> s != ImportSource.YOUTUBE_MUSIC.key } == true)
         }
         if (locals.isEmpty()) return@launchTask "Every playlist is already on YouTube."
         var created = 0
@@ -112,7 +135,7 @@ class YouTubeSyncManager @Inject constructor(
 
     private fun launchTask(label: String, block: suspend () -> String) {
         if (job?.isActive == true) return
-        _state.value = YtSyncState(running = true, label = label)
+        _state.value = _state.value.copy(running = true, label = label, message = null)
         job = scope.launch {
             var message: String? = null
             try {
@@ -126,7 +149,7 @@ class YouTubeSyncManager @Inject constructor(
                 Timber.e(e, "YouTube sync task failed")
                 message = "Something went wrong: ${e.message ?: e.javaClass.simpleName}"
             } finally {
-                _state.value = YtSyncState(running = false, message = message)
+                _state.value = YtSyncState(running = false, message = message, canUndo = SyncUndo.canUndo(context))
             }
         }
     }

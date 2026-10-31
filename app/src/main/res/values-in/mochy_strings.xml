@@ -860,4 +860,21 @@
     <plurals name="video_mode_seek_seconds">
         <item quantity="other">%d detik</item>
     </plurals>
+    <string name="yt_sync_exclude_title">Jangan kirim musik impor ke YouTube</string>
+    <string name="yt_sync_exclude_desc">Lagu dan playlist dari Spotify dan aplikasi lain tetap di ponsel ini</string>
+    <string name="yt_sync_undo_title">Batalkan sinkron terakhir</string>
+    <string name="yt_sync_undo_desc">Mengembalikan suka, pustaka, dan playlist dari sebelum sinkron terakhir</string>
+    <string name="yt_sync_undo_dialog_title">Batalkan sinkron terakhir?</string>
+    <string name="yt_sync_undo_dialog_body">Pilih tempat pembatalan. Sinkron otomatis dijeda setelah dibatalkan, jadi perubahan tetap sampai kamu tekan Sinkronkan sekarang.</string>
+    <string name="yt_sync_undo_phone">Ponsel ini</string>
+    <string name="yt_sync_undo_both">Ponsel ini dan YouTube</string>
+    <string name="yt_sync_undo_both_hint">Juga menghapus suka yang dikirim sinkron ke YouTube</string>
+    <string name="yt_sync_undo_done_phone">Dibatalkan di ponsel ini. YouTube tidak akan ditarik lagi sampai kamu sinkron sekarang.</string>
+    <string name="yt_sync_undo_done_both">Dibatalkan di ponsel ini dan YouTube. YouTube tidak akan ditarik lagi sampai kamu sinkron sekarang.</string>
+    <string name="yt_sync_undo_nothing">Belum ada yang bisa dibatalkan. Jalankan sinkron dulu.</string>
+    <plurals name="yt_sync_undo_failed">
+        <item quantity="other">Dibatalkan, tapi %1$d suka tidak bisa dihapus dari YouTube. Coba lagi nanti.</item>
+    </plurals>
+    <string name="module_youtube_name">YouTube Music</string>
+    <string name="module_youtube_desc">Sinkronkan suka, pustaka, playlist, dan riwayat</string>
 </resources>
