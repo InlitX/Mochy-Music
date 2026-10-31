@@ -32,7 +32,7 @@
   <a href="https://github.com/realidkroo/mochy-music/blob/main/Roadmap.md">
     <img src="https://shieldcn.dev/badge/Roadmap-View-313244.svg?mode=dark&radius=999&font=geist&split=true&height=28&fontSize=13&labelColor=1e1e2e&labelTextColor=ffffff&color=313244&valueColor=ffffff&logoColor=b4befe" alt="Roadmap">
   </a>
-  <a href="https://discord.gg/mVU8ZJ9kyh">
+  <a href="https://discord.gg/4DAafDMxZb">
   <img src="https://shieldcn.dev/badge/Discord-Join%20Server-313244.svg?mode=dark&radius=999&font=geist&split=true&height=28&fontSize=13&labelColor=1e1e2e&labelTextColor=ffffff&color=313244&valueColor=ffffff&logo=discord&logoColor=b4befe" alt="Mochy's Bar">
 </a>
 
