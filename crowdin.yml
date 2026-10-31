@@ -10,3 +10,5 @@ files:
     translation: /app/src/main/res/values-%android_code%/settings_language.xml
   - source: /app/src/main/res/values/updater_strings.xml
     translation: /app/src/main/res/values-%android_code%/updater_strings.xml
+  - source: /app/src/main/res/values/audiopass_strings.xml
+    translation: /app/src/main/res/values-%android_code%/audiopass_strings.xml

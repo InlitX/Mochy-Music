@@ -54,8 +54,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.mochyy.mochymusic.LocalPlayerConnection
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.AudioQuality
 import com.mochyy.mochymusic.constants.AudioQualityKey
 import com.mochyy.mochymusic.constants.CrossmixMode
@@ -63,6 +66,7 @@ import com.mochyy.mochymusic.constants.CrossmixModeKey
 import com.mochyy.mochymusic.constants.playable
 import com.mochyy.mochymusic.eq.EqPresets
 import com.mochyy.mochymusic.eq.EqSettings
+import com.mochyy.mochymusic.playback.audio.AudioOutputs
 import com.mochyy.mochymusic.ui.component.damageBoundary
 import com.mochyy.mochymusic.ui.component.pressBounce
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
@@ -145,6 +149,22 @@ fun AudioLabScreen(
             ) { TransitionSketch(active = mode != CrossmixMode.OFF) }
         }
 
+        val outputs = LocalPlayerConnection.current?.service?.audioOutputs
+        val devices by remember(outputs) { outputs?.devices ?: kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }.collectAsState()
+        val usbDac = devices.firstOrNull { it.kind == AudioOutputs.Kind.USB }
+        val pass: @Composable (Modifier) -> Unit = { modifier ->
+            SmallHubCard(
+                title = stringResource(R.string.audiopass_hub_title),
+                status = when {
+                    usbDac != null -> usbDac.name.ifBlank { stringResource(R.string.audiopass_kind_usb) }
+                    devices.any { it.isActive && it.kind == AudioOutputs.Kind.BLUETOOTH } -> stringResource(R.string.audiopass_status_bluetooth)
+                    else -> stringResource(R.string.audiopass_status_none)
+                },
+                onClick = { navController.navigate("audio_pass") },
+                modifier = modifier,
+            ) { PassSketch(plugged = usbDac != null) }
+        }
+
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth >= 560.dp) {
                 // a tablet: side by side, so the cards don't stretch into long thin bars
@@ -156,6 +176,7 @@ fun AudioLabScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
                         qualityCard(Modifier.weight(1f).fillMaxHeight())
                         transition(Modifier.weight(1f).fillMaxHeight())
+                        pass(Modifier.weight(1f).fillMaxHeight())
                     }
                 }
             } else {
@@ -164,6 +185,7 @@ fun AudioLabScreen(
                     effect(Modifier)
                     qualityCard(Modifier)
                     transition(Modifier)
+                    pass(Modifier)
                 }
             }
         }
@@ -378,6 +400,21 @@ private fun BoxScope.QualitySketch(quality: AudioQuality, firstProvider: String?
             drawLine(Sketch, Offset(x, size.height / 2 - half), Offset(x, size.height / 2 + half), (step * 0.55f).coerceAtLeast(1.dp.toPx()))
             x += step
         }
+    }
+}
+
+/** a usb-c plug on its cable, brighter while a dac is plugged in */
+@Composable
+private fun BoxScope.PassSketch(plugged: Boolean) {
+    val on by animateFloatAsState(if (plugged) 1f else 0.4f, tween(400), label = "plug")
+    Canvas(Modifier.fillMaxHeight().width(72.dp).align(Alignment.CenterEnd).padding(end = 14.dp, top = 20.dp, bottom = 20.dp)) {
+        val mid = size.height / 2f
+        val color = Sketch.copy(alpha = on)
+        val head = Size(size.width * 0.18f, size.height * 0.36f)
+        drawRoundRect(color, Offset(0f, mid - head.height / 2f), head, CornerRadius(1.5.dp.toPx()), style = Stroke(1.6.dp.toPx()))
+        val body = Size(size.width * 0.42f, size.height * 0.62f)
+        drawRoundRect(color, Offset(head.width, mid - body.height / 2f), body, CornerRadius(4.dp.toPx()), style = Stroke(2.dp.toPx()))
+        drawLine(color, Offset(head.width + body.width, mid), Offset(size.width, mid), 2.dp.toPx(), StrokeCap.Round)
     }
 }
 

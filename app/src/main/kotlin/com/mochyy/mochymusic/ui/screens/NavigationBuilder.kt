@@ -503,6 +503,10 @@ fun NavGraphBuilder.navigationBuilder(
         com.mochyy.mochymusic.ui.screens.audiolab.AudioQualityScreen(navController = navController)
     }
 
+    composable("audio_pass") {
+        com.mochyy.mochymusic.ui.screens.audiolab.AudioPassScreen(navController = navController)
+    }
+
     composable(com.mochyy.mochymusic.ui.screens.settings.modules.ModulesRoute) {
         com.mochyy.mochymusic.ui.screens.settings.modules.ModulesScreen(navController = navController)
     }

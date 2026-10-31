@@ -256,7 +256,7 @@ internal fun ProviderLogo(logo: Int?, size: Int) {
 }
 
 @Composable
-private fun QualityRow(title: String, description: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun QualityRow(title: String, description: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val bg by animateColorAsState(if (selected) Color(0xFF2A2A2E) else Color(0xFF111113), tween(200), label = "row")
     val alpha by animateFloatAsState(if (enabled) 1f else 0.35f, tween(250), label = "enabled")
     val check by animateFloatAsState(if (selected) 1f else 0f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "check")

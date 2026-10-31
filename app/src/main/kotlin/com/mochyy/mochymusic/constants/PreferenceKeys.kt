@@ -189,6 +189,22 @@ val PreferUsbDacKey = booleanPreferencesKey("preferUsbDac")
 val UsbPassthroughKey = booleanPreferencesKey("usbDacPassthrough")
 val HiResOutputKey = booleanPreferencesKey("hiResFloatOutput")
 val HiFiResamplerKey = booleanPreferencesKey("hiFiResampler")
+val AudioPassModeKey = stringPreferencesKey("audioPassMode")
+// lets the direct usb driver play a dac that has no volume of its own, at full scale
+val AudioPassFixedVolumeKey = booleanPreferencesKey("audioPassFixedVolume")
+
+/** how the passthrough switch reaches the dac; minSdk is the android each one needs */
+enum class AudioPassMode(val minSdk: Int) {
+    SONG_RATE(34),
+    BIT_PERFECT(34),
+    DIRECT_USB(24),
+    EXCLUSIVE_USB(27),
+    EXCLUSIVE_DAC(27),
+    ;
+
+    /** whether songs go to an output only mochy plays to, instead of through android's mixer */
+    val exclusive: Boolean get() = this != SONG_RATE
+}
 
 // which service the about sheet's "about" text comes from: "musixmatch" or "youtube"
 val AboutSongSourceKey = stringPreferencesKey("aboutSongSource")

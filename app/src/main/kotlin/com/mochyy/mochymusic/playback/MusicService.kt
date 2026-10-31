@@ -175,6 +175,10 @@ import com.mochyy.mochymusic.playback.audio.SilenceDetectorAudioProcessor
 import com.mochyy.mochymusic.playback.audio.HapticAudioProcessor
 import com.mochyy.mochymusic.playback.audio.CrossmixClockSink
 import com.mochyy.mochymusic.playback.audio.CrossmixTransitionAudioProcessor
+import com.mochyy.mochymusic.playback.audio.pass.LabSound
+import com.mochyy.mochymusic.playback.audio.pass.PassBlocker
+import com.mochyy.mochymusic.playback.audio.pass.clearPassBlockers
+import com.mochyy.mochymusic.playback.audio.pass.passBlockersOf
 import com.mochyy.mochymusic.constants.MusicHapticsEnabledKey
 import com.mochyy.mochymusic.constants.MusicHapticsSensitivityKey
 import com.mochyy.mochymusic.constants.HapticSensitivity
@@ -207,6 +211,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -298,6 +303,10 @@ class MusicService :
 
     /** the outputs, the one picked in the player, the usb dac's mixer, and whether 32-bit float may pass */
     val audioOutputs by lazy { com.mochyy.mochymusic.playback.audio.AudioOutputs(this) }
+
+    // what keeps songs off the exclusive output right now: audio pass lists them and the router reads them
+    private val _passBlockers = MutableStateFlow<Set<PassBlocker>>(emptySet())
+    val passBlockers: StateFlow<Set<PassBlocker>> = _passBlockers.asStateFlow()
     // each player's stats for nerds; weak like the spectra, so a released player takes its own along
     private val playerInspectors = java.util.WeakHashMap<Player, StreamInspector>()
 
@@ -400,6 +409,13 @@ class MusicService :
         isMuted.value = muted
 
         player.volume = if (muted) 0f else playerVolume.value
+    }
+
+    /** audio pass's "turn these off": every setting that keeps songs off the exclusive output goes back to neutral */
+    fun clearPassBlockers() {
+        scope.launch { dataStore.edit { it.clearPassBlockers() } }
+        audioLab.clearPassBlockers()
+        playerVolume.value = 1f
     }
 
     fun setPreferredAudioDevice(deviceId: Int?) {
@@ -865,6 +881,16 @@ class MusicService :
                 settings[PlayerVolumeKey] = volume
             }
         }
+
+        val labSound = combine(
+            combine(audioLab.eq, audioLab.reverb, audioLab.loudness, ::Triple),
+            audioLab.spatial,
+            audioLab.playback,
+            audioLab.volume,
+        ) { (eq, reverb, loudness), spatial, playback, volume -> LabSound(eq, reverb, loudness, spatial, playback, volume) }
+        combine(dataStore.data, labSound, playerVolume) { prefs, lab, volume -> passBlockersOf(prefs, lab, volume) }
+            .distinctUntilChanged()
+            .collect(scope) { _passBlockers.value = it }
 
         currentSong.debounce(1000).collect(scope) { song ->
             updateNotification()
