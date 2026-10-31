@@ -101,22 +101,27 @@ extensions.configure<ApplicationExtension> {
         create("universal") {
             dimension = "abi"
             buildConfigField("String", "ARCHITECTURE", "\"universal\"")
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64") }
         }
         create("arm64") {
             dimension = "abi"
             buildConfigField("String", "ARCHITECTURE", "\"arm64\"")
+            ndk { abiFilters += "arm64-v8a" }
         }
         create("armeabi") {
             dimension = "abi"
             buildConfigField("String", "ARCHITECTURE", "\"armeabi\"")
+            ndk { abiFilters += "armeabi-v7a" }
         }
         create("x86") {
             dimension = "abi"
             buildConfigField("String", "ARCHITECTURE", "\"x86\"")
+            ndk { abiFilters += "x86" }
         }
         create("x86_64") {
             dimension = "abi"
             buildConfigField("String", "ARCHITECTURE", "\"x86_64\"")
+            ndk { abiFilters += "x86_64" }
         }
     }
 
@@ -213,6 +218,14 @@ extensions.configure<ApplicationExtension> {
             signingConfig = signingConfigs.getByName("debug")
             // the provider modules only publish debug and release variants
             matchingFallbacks += listOf("debug")
+        }
+    }
+
+    // audio pass's direct usb driver and aaudio exclusive output (app/src/main/cpp)
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
