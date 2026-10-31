@@ -170,6 +170,9 @@ class AudioOutputs(private val context: Context) {
         _mixer.value = set?.copy(deviceName = device.productName?.toString().orEmpty().ifBlank { "USB DAC" })
     }
 
+    /** audio pass's bit-perfect output is about to set the dac's mixer itself, so ours steps out of the way first */
+    fun releaseMixer() = clearMixer()
+
     private fun clearMixer() {
         val device = mixedDevice ?: return
         mixedDevice = null

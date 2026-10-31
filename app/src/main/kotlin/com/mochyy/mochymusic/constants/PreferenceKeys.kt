@@ -204,6 +204,12 @@ enum class AudioPassMode(val minSdk: Int) {
 
     /** whether songs go to an output only mochy plays to, instead of through android's mixer */
     val exclusive: Boolean get() = this != SONG_RATE
+
+    companion object {
+        /** android 14 brought the dac's own mixer; before it only mochy's own driver reaches the dac */
+        val Default: AudioPassMode
+            get() = if (android.os.Build.VERSION.SDK_INT >= 34) SONG_RATE else DIRECT_USB
+    }
 }
 
 // which service the about sheet's "about" text comes from: "musixmatch" or "youtube"

@@ -57,6 +57,13 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.analytics.PlaybackStats
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.DecoderReuseEvaluation
+import androidx.media3.exoplayer.FormatHolder
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
@@ -99,6 +106,9 @@ import com.mochyy.mochymusic.constants.HiFiResamplerKey
 import com.mochyy.mochymusic.constants.HiResOutputKey
 import com.mochyy.mochymusic.constants.PreferUsbDacKey
 import com.mochyy.mochymusic.constants.UsbPassthroughKey
+import com.mochyy.mochymusic.constants.AudioPassMode
+import com.mochyy.mochymusic.constants.AudioPassModeKey
+import com.mochyy.mochymusic.constants.AudioPassFixedVolumeKey
 import com.mochyy.mochymusic.constants.playable
 import com.mochyy.mochymusic.crossmix.CrossmixAnalysisRepository
 import com.mochyy.mochymusic.constants.DisableLoadMoreWhenRepeatAllKey
@@ -176,6 +186,9 @@ import com.mochyy.mochymusic.playback.audio.HapticAudioProcessor
 import com.mochyy.mochymusic.playback.audio.CrossmixClockSink
 import com.mochyy.mochymusic.playback.audio.CrossmixTransitionAudioProcessor
 import com.mochyy.mochymusic.playback.audio.pass.LabSound
+import com.mochyy.mochymusic.playback.audio.pass.AudioPass
+import com.mochyy.mochymusic.playback.audio.pass.PassRouterSink
+import com.mochyy.mochymusic.playback.audio.pass.PassSink
 import com.mochyy.mochymusic.playback.audio.pass.PassBlocker
 import com.mochyy.mochymusic.playback.audio.pass.clearPassBlockers
 import com.mochyy.mochymusic.playback.audio.pass.passBlockersOf
@@ -303,6 +316,9 @@ class MusicService :
 
     /** the outputs, the one picked in the player, the usb dac's mixer, and whether 32-bit float may pass */
     val audioOutputs by lazy { com.mochyy.mochymusic.playback.audio.AudioOutputs(this) }
+
+    /** the exclusive output every player shares: bit-perfect, aaudio exclusive and the direct usb driver */
+    val audioPass by lazy { AudioPass(this, audioOutputs) }
 
     // what keeps songs off the exclusive output right now: audio pass lists them and the router reads them
     private val _passBlockers = MutableStateFlow<Set<PassBlocker>>(emptySet())
@@ -695,6 +711,7 @@ class MusicService :
         audioOutputs.passthrough = dataStore.get(UsbPassthroughKey, false)
         audioOutputs.resampler = dataStore.get(HiFiResamplerKey, false)
         audioOutputs.start()
+        audioPass.start()
         player = createExoPlayer()
         player.addListener(this@MusicService)
         observeOutputSettings()
@@ -738,7 +755,7 @@ class MusicService :
         }
         mediaSession =
             MediaLibrarySession
-                .Builder(this, TransportFadingPlayer(player, transport), mediaLibrarySessionCallback)
+                .Builder(this, TransportFadingPlayer(player, transport, audioPass), mediaLibrarySessionCallback)
                 .setSessionActivity(
                     PendingIntent.getActivity(
                         this,
@@ -891,6 +908,15 @@ class MusicService :
         combine(dataStore.data, labSound, playerVolume) { prefs, lab, volume -> passBlockersOf(prefs, lab, volume) }
             .distinctUntilChanged()
             .collect(scope) { _passBlockers.value = it }
+
+        combine(dataStore.data, passBlockers) { prefs, blockers ->
+            PassSettings(
+                enabled = prefs[UsbPassthroughKey] ?: false,
+                mode = prefs[AudioPassModeKey].toEnum(AudioPassMode.Default),
+                blocked = blockers.isNotEmpty(),
+                fixedVolume = prefs[AudioPassFixedVolumeKey] ?: false,
+            )
+        }.distinctUntilChanged().collect(scope) { audioPass.update(it.enabled, it.mode, it.blocked, it.fixedVolume) }
 
         currentSong.debounce(1000).collect(scope) { song ->
             updateNotification()
@@ -3796,11 +3822,14 @@ class MusicService :
         inspector: StreamInspector,
     ) =
         object : DefaultRenderersFactory(this) {
+            // the renderer below tells it which file each song comes from, so it can tell a lossless song from a lossy one
+            private var router: PassRouterSink? = null
+
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
-            ) = CrossmixClockSink(com.mochyy.mochymusic.playback.audio.PrecisionSink(DefaultAudioSink
+            ) = CrossmixClockSink(PassRouterSink(com.mochyy.mochymusic.playback.audio.PrecisionSink(DefaultAudioSink
                 .Builder(this@MusicService)
                 // float is only ever let through by PrecisionSink, while nothing it would skip is on
                 .setEnableFloatOutput(true)
@@ -3820,7 +3849,29 @@ class MusicService :
                         SilenceSkippingAudioProcessor(2_000_000, 20_000, 256),
                         SonicAudioProcessor(),
                     ),
-                ).build(), audioOutputs, inspector), crossmixProcessor, audioFx, replayGain, spectrum)
+                ).build(), audioOutputs, inspector), PassSink(audioPass), audioPass).also { router = it }, crossmixProcessor, audioFx, replayGain, spectrum)
+
+            // media3's own audio renderer, built the same way, that hands the router each song's file format before its decoder starts
+            override fun buildAudioRenderers(
+                context: Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                audioSink: AudioSink,
+                eventHandler: Handler,
+                eventListener: AudioRendererEventListener,
+                out: ArrayList<Renderer>,
+            ) {
+                val songs = router
+                out.add(object : MediaCodecAudioRenderer(
+                    context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, audioSink,
+                ) {
+                    override fun onInputFormatChanged(formatHolder: FormatHolder): DecoderReuseEvaluation? {
+                        songs?.sourceFormat = formatHolder.format
+                        return super.onInputFormatChanged(formatHolder)
+                    }
+                })
+            }
         }.apply {
             // a phone's first-choice decoder failing to start (a vendor FLAC decoder on a 24-bit
             // file, say) moves on to its next one instead of failing the song
@@ -3954,6 +4005,7 @@ class MusicService :
 
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
         audioOutputs.release()
+        audioPass.release()
         castConnectionHandler?.release()
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
@@ -4236,7 +4288,7 @@ class MusicService :
         sleepTimer.player = player
 
         try {
-            (mediaSession as MediaSession).player = TransportFadingPlayer(player, transport)
+            (mediaSession as MediaSession).player = TransportFadingPlayer(player, transport, audioPass)
         } catch (e: Exception) {
             timber.log.Timber.e(e, "Failed to swap player in MediaSession")
         }
@@ -4624,7 +4676,7 @@ class MusicService :
             })
 
             try {
-                (mediaSession as MediaSession).player = TransportFadingPlayer(incoming, transport)
+                (mediaSession as MediaSession).player = TransportFadingPlayer(incoming, transport, audioPass)
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "Failed to swap player in MediaSession")
             }
@@ -4764,3 +4816,6 @@ class MusicService :
 
 /** How often a placed home screen widget's progress is redrawn while playing. */
 private const val WidgetProgressIntervalMs = 1_000L
+
+// the passthrough switch, its mode and whether anything shapes the sound, compared as one so audio pass hears each change once
+private data class PassSettings(val enabled: Boolean, val mode: AudioPassMode, val blocked: Boolean, val fixedVolume: Boolean)
