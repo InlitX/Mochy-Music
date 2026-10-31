@@ -83,6 +83,8 @@ class LabTitle(
     val secondSize: TextUnit = 46.sp,
     /** the first line greyed, as on Audio FX */
     val firstDim: Boolean = false,
+    /** the second line greyed, as under dac's stuff */
+    val secondDim: Boolean = false,
 )
 
 /** art is drawn at the header's right behind the sheet and is told when it's hidden so it can stop animating, subtitle is a small line under the title */
@@ -270,7 +272,7 @@ private fun LabHeader(
                 fontSize = title.secondSize * keep,
                 lineHeight = title.secondSize * keep * 0.92f,
                 letterSpacing = (-0.04).em,
-                color = Color.White,
+                color = if (title.secondDim) Color(0xFF8A8A8E) else Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 softWrap = false,

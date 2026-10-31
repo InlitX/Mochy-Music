@@ -2,8 +2,8 @@
 <resources>
     <!-- audio pass: audio lab's page for usb dacs, bluetooth codecs and bit-perfect output -->
     <string name="audiopass_hub_title">Audio Pass</string>
-    <string name="audiopass_title_first">Audio</string>
-    <string name="audiopass_title_second">Pass</string>
+    <string name="audiopass_title_first">DAC</string>
+    <string name="audiopass_title_second">dan lainnya</string>
     <string name="audiopass_joined">%1$s · %2$s</string>
 
     <string name="audiopass_status_label">status</string>
@@ -91,4 +91,19 @@
     <string name="audiopass_blocker_transitions">Crossfade atau efek fade</string>
     <string name="audiopass_blocker_silence">Lewati hening atau haptik</string>
     <string name="audiopass_blocker_lossy">Lagu lossy (YouTube, Apple Music) selalu diputar dengan cara biasa.</string>
+    <string name="audiopass_now_bitperfect">Bit-perfect ke %1$s · %2$s kHz · %3$s-bit</string>
+    <string name="audiopass_now_untouched">Tanpa diubah ke %1$s · %2$s kHz · %3$s-bit. Lagunya sendiri sudah dikompres sebelum sampai sini.</string>
+    <string name="audiopass_now_inexact">Sampai ke %1$s tanpa diubah, tapi sampel lagu ini sudah dibulatkan sebelum sampai ke Mochy.</string>
+    <string name="audiopass_now_waiting">Siap. Lagu berikutnya yang bisa diterima langsung ke DAC.</string>
+    <string name="audiopass_now_fell">Lagu %1$s kHz %2$s-bit tidak bisa membuka DAC dengan cara ini, jadi diputar dengan cara biasa.</string>
+    <string name="audiopass_usb_title">USB langsung</string>
+    <string name="audiopass_usb_permission">Izinkan akses USB</string>
+    <string name="audiopass_usb_permission_hint">Android bertanya setiap kali DAC dicolokkan. Sebelum diizinkan, lagu diputar dengan cara biasa.</string>
+    <string name="audiopass_usb_no_dac">Colokkan DAC USB, lalu Mochy yang mengurusnya.</string>
+    <string name="audiopass_fixed_volume">DAC tanpa volume sendiri</string>
+    <string name="audiopass_fixed_volume_desc">Diputar penuh, jadi hanya kenop DAC yang bisa mengecilkannya. Bisa sangat keras di headphone yang sensitif.</string>
+    <string name="audiopass_dac_volume">Volume DAC</string>
+    <string name="audiopass_dac_volume_desc">Diatur di DAC itu sendiri, jadi musiknya tidak diskalakan. Tombol volume juga mengaturnya.</string>
+    <string name="audiopass_value_db">%1$s dB</string>
+    <string name="audiopass_blocker_lossy_direct">Lagu lossy juga sampai ke DAC tanpa diubah. Lagu itu hanya sudah dikompres sebelum sampai sini.</string>
 </resources>

@@ -1,4 +1,4 @@
-// audio lab's page for what the music plays through: the dac's or headphones' details, the output switches and the bit-perfect modes
+// dac's stuff, audio pass's page: the dac's or headphones' details, the output switches and the bit-perfect modes
 
 package com.mochyy.mochymusic.ui.screens.audiolab
 
@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
+import com.mochyy.mochymusic.constants.AudioPassFixedVolumeKey
 import com.mochyy.mochymusic.constants.AudioPassMode
 import com.mochyy.mochymusic.constants.AudioPassModeKey
 import com.mochyy.mochymusic.constants.HiFiResamplerKey
@@ -63,6 +64,7 @@ import com.mochyy.mochymusic.playback.audio.BluetoothCodecWatcher
 import com.mochyy.mochymusic.playback.audio.LdacQuality
 import com.mochyy.mochymusic.playback.audio.UsbDacDetails
 import com.mochyy.mochymusic.playback.audio.UsbDacReader
+import com.mochyy.mochymusic.playback.audio.pass.AudioPass
 import com.mochyy.mochymusic.playback.audio.pass.PassBlocker
 import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.theme.InterFontFamily
@@ -88,6 +90,10 @@ fun AudioPassScreen(navController: NavController) {
     val outputs = service?.audioOutputs
     val devices by remember(outputs) { outputs?.devices ?: MutableStateFlow(emptyList()) }.collectAsState()
     val blockers by remember(service) { service?.passBlockers ?: MutableStateFlow(emptySet()) }.collectAsState()
+    val pass = service?.audioPass
+    val status by remember(pass) { pass?.status ?: MutableStateFlow(AudioPass.Status.Off) }.collectAsState()
+    val dacVolume by remember(pass) { pass?.dacVolume ?: MutableStateFlow(null) }.collectAsState()
+    val usbPermitted by remember(pass) { pass?.usbPermitted ?: MutableStateFlow(null) }.collectAsState()
 
     // the dac's details come from binder calls, so they're read off the main thread whenever the outputs change
     var dac by remember { mutableStateOf<UsbDacDetails?>(null) }
@@ -113,13 +119,12 @@ fun AudioPassScreen(navController: NavController) {
         title = LabTitle(
             stringResource(R.string.audiopass_title_first),
             stringResource(R.string.audiopass_title_second),
-            firstSize = 40.sp,
-            secondSize = 84.sp,
-            firstDim = true,
+            firstSize = 64.sp,
+            secondSize = 30.sp,
+            secondDim = true,
         ),
         onBack = { navController.navigateUp() },
         subtitle = subtitleFor(shown),
-        art = { AudioPassPicture(plugged = shown is Shown.Dac, wireless = shown is Shown.Bluetooth) },
     ) {
         StatusCard(shown, mixerRate, onPermission = bluetooth::refresh)
 
@@ -145,19 +150,24 @@ fun AudioPassScreen(navController: NavController) {
         }
         Spacer(Modifier.height(12.dp))
         val (passthrough, onPassthrough) = rememberPreference(UsbPassthroughKey, defaultValue = false)
-        val (mode, onMode) = rememberEnumPreference(AudioPassModeKey, defaultValue = defaultPassMode())
-        PassthroughCard(passthrough, onPassthrough, mode, onMode)
+        val (mode, onMode) = rememberEnumPreference(AudioPassModeKey, defaultValue = AudioPassMode.Default)
+        PassthroughCard(passthrough, onPassthrough, mode, onMode, status.takeIf { mode.exclusive })
 
+        LabCollapsible(passthrough && mode == AudioPassMode.DIRECT_USB) {
+            Spacer(Modifier.height(12.dp))
+            DirectUsbCard(
+                permitted = usbPermitted,
+                volume = dacVolume,
+                onAllow = { pass?.requestUsbPermission() },
+                onVolume = { db -> pass?.setDacVolume(db) },
+            )
+        }
         LabCollapsible(passthrough && mode.exclusive) {
             Spacer(Modifier.height(12.dp))
-            BlockersCard(blockers, onClear = { service?.clearPassBlockers() })
+            BlockersCard(blockers, lossyToo = mode == AudioPassMode.DIRECT_USB, onClear = { service?.clearPassBlockers() })
         }
     }
 }
-
-/** android 14 brought the dac's own mixer; before it only mochy's own driver can reach the dac */
-internal fun defaultPassMode(): AudioPassMode =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) AudioPassMode.SONG_RATE else AudioPassMode.DIRECT_USB
 
 @Composable
 private fun rememberBluetoothCodec(): BluetoothCodecWatcher {
@@ -392,6 +402,7 @@ private fun PassthroughCard(
     onChange: (Boolean) -> Unit,
     mode: AudioPassMode,
     onMode: (AudioPassMode) -> Unit,
+    status: AudioPass.Status?,
 ) {
     LabCard(padding = 10.dp) {
         LabToggleRow(
@@ -418,7 +429,75 @@ private fun PassthroughCard(
                     ) { onMode(option) }
                 }
             }
+            statusLine(status)?.let { line ->
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.padding(horizontal = 6.dp)) { Note(line, color = Color(0xFFD1D1D6)) }
+                Spacer(Modifier.height(4.dp))
+            }
         }
+    }
+}
+
+/** what the exclusive output is doing with the song playing now, in a sentence */
+@Composable
+private fun statusLine(status: AudioPass.Status?): String? = when (status) {
+    null, AudioPass.Status.Off -> null
+    AudioPass.Status.Waiting -> stringResource(R.string.audiopass_now_waiting)
+    is AudioPass.Status.Fell -> stringResource(R.string.audiopass_now_fell, khz(status.sampleRate), status.sourceBits.toString())
+    is AudioPass.Status.Playing -> when {
+        !status.exact -> stringResource(R.string.audiopass_now_inexact, status.device)
+        status.lossless -> stringResource(R.string.audiopass_now_bitperfect, status.device, khz(status.sampleRate), status.bits.toString())
+        else -> stringResource(R.string.audiopass_now_untouched, status.device, khz(status.sampleRate), status.bits.toString())
+    }
+}
+
+// ---- direct usb --------------------------------------------------------------------------
+
+@Composable
+private fun DirectUsbCard(
+    permitted: Boolean?,
+    volume: AudioPass.DacVolume?,
+    onAllow: () -> Unit,
+    onVolume: (Double) -> Unit,
+) {
+    val (fixedVolume, onFixedVolume) = rememberPreference(AudioPassFixedVolumeKey, defaultValue = false)
+    LabCard(padding = 10.dp) {
+        Column(Modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
+            Text(
+                stringResource(R.string.audiopass_usb_title),
+                fontFamily = InterFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.White,
+            )
+            Spacer(Modifier.height(4.dp))
+            when (permitted) {
+                null -> Note(stringResource(R.string.audiopass_usb_no_dac))
+                false -> {
+                    Note(stringResource(R.string.audiopass_usb_permission_hint))
+                    Spacer(Modifier.height(10.dp))
+                    PillButton(stringResource(R.string.audiopass_usb_permission), onClick = onAllow)
+                }
+                true -> Unit
+            }
+        }
+        if (volume != null) {
+            Spacer(Modifier.height(6.dp))
+            LabPanel {
+                // the bar moves in steps the dac really has, read back after each change
+                LabSlider(
+                    label = stringResource(R.string.audiopass_dac_volume),
+                    valueText = stringResource(R.string.audiopass_value_db, String.format(Locale.ROOT, "%.1f", volume.currentDb)),
+                    value = AudioPass.levelOf(volume),
+                    onValueChange = { level -> onVolume(AudioPass.dbAt(volume, level)) },
+                    valueRange = 0f..1f,
+                )
+                Note(stringResource(R.string.audiopass_dac_volume_desc))
+            }
+        }
+        LabToggleRow(
+            title = stringResource(R.string.audiopass_fixed_volume),
+            subtitle = stringResource(R.string.audiopass_fixed_volume_desc),
+            checked = fixedVolume,
+            onCheckedChange = onFixedVolume,
+        )
     }
 }
 
@@ -449,7 +528,7 @@ private fun androidName(sdk: Int): String = when (sdk) {
 // ---- blockers ----------------------------------------------------------------------------
 
 @Composable
-private fun BlockersCard(active: Set<PassBlocker>, onClear: () -> Unit) {
+private fun BlockersCard(active: Set<PassBlocker>, lossyToo: Boolean, onClear: () -> Unit) {
     LabCard(padding = 20.dp) {
         Row(verticalAlignment = Alignment.Top) {
             Text(
@@ -474,7 +553,7 @@ private fun BlockersCard(active: Set<PassBlocker>, onClear: () -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Note(stringResource(R.string.audiopass_blocker_lossy))
+        Note(stringResource(if (lossyToo) R.string.audiopass_blocker_lossy_direct else R.string.audiopass_blocker_lossy))
     }
 }
 

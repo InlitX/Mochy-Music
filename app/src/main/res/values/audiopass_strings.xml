@@ -2,8 +2,8 @@
 <resources>
     <!-- audio pass: audio lab's page for usb dacs, bluetooth codecs and bit-perfect output -->
     <string name="audiopass_hub_title">Audio Pass</string>
-    <string name="audiopass_title_first">Audio</string>
-    <string name="audiopass_title_second">Pass</string>
+    <string name="audiopass_title_first">Dac\'s</string>
+    <string name="audiopass_title_second">stuff</string>
     <string name="audiopass_joined">%1$s · %2$s</string>
 
     <string name="audiopass_status_label">status</string>
@@ -91,4 +91,19 @@
     <string name="audiopass_blocker_transitions">Crossfade or a fade effect</string>
     <string name="audiopass_blocker_silence">Skip silence or haptics</string>
     <string name="audiopass_blocker_lossy">Lossy songs (YouTube, Apple Music) always play the normal way.</string>
+    <string name="audiopass_now_bitperfect">Bit-perfect to %1$s · %2$s kHz · %3$s-bit</string>
+    <string name="audiopass_now_untouched">Untouched to %1$s · %2$s kHz · %3$s-bit. The song itself was compressed before it got here.</string>
+    <string name="audiopass_now_inexact">Reaching %1$s unchanged, but this song\'s samples were already rounded before Mochy got them.</string>
+    <string name="audiopass_now_waiting">Ready. The next song it can take goes straight to the DAC.</string>
+    <string name="audiopass_now_fell">A %1$s kHz %2$s-bit song couldn\'t open the DAC this way, so it plays the normal way.</string>
+    <string name="audiopass_usb_title">Direct USB</string>
+    <string name="audiopass_usb_permission">Allow USB access</string>
+    <string name="audiopass_usb_permission_hint">Android asks each time the DAC is plugged in. Until you allow it, songs play the normal way.</string>
+    <string name="audiopass_usb_no_dac">Plug in a USB DAC and Mochy takes it from here.</string>
+    <string name="audiopass_fixed_volume">DACs without a volume of their own</string>
+    <string name="audiopass_fixed_volume_desc">Plays them at full scale, so only their own knob turns them down. This can be very loud with sensitive headphones.</string>
+    <string name="audiopass_dac_volume">DAC volume</string>
+    <string name="audiopass_dac_volume_desc">Set on the DAC itself, so the music isn\'t scaled. The volume keys move it too.</string>
+    <string name="audiopass_value_db">%1$s dB</string>
+    <string name="audiopass_blocker_lossy_direct">Lossy songs go to the DAC untouched too. They were only compressed before they got here.</string>
 </resources>
