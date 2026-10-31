@@ -26,6 +26,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,10 +95,12 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionOnScreen
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -163,8 +166,10 @@ import com.mochyy.mochymusic.ui.screens.recap.recapBarcodeCaption
 import com.mochyy.mochymusic.ui.screens.recap.recapBarcodePayload
 import com.mochyy.mochymusic.ui.screens.recap.recapDots
 import com.mochyy.mochymusic.ui.screens.recap.rememberRecapTime
+import com.mochyy.mochymusic.core.updater.DiscordUrl
 import com.mochyy.mochymusic.ui.screens.settings.devspace.DevAvatar
 import com.mochyy.mochymusic.ui.screens.settings.devspace.DevPeople
+import com.mochyy.mochymusic.ui.screens.settings.devspace.openDevUrl
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.IdCardAspect
 import com.mochyy.mochymusic.ui.screens.setup.onboarding.ProfileIdCard
 import com.mochyy.mochymusic.ui.screens.update.UpdateHeadline
@@ -217,6 +222,7 @@ private val PageCard = Color(0xFF0F0F0F)
 
 @Composable
 fun ProfileScreen(navController: NavController) {
+    val context = LocalContext.current
     val database = LocalDatabase.current
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
@@ -725,6 +731,8 @@ fun ProfileScreen(navController: NavController) {
                         )
                         Spacer(Modifier.height(16.dp))
                         DeveloperCard(onClick = { navController.navigate("developer_space") })
+                        Spacer(Modifier.height(16.dp))
+                        DiscordCard(onClick = { context.openDevUrl(DiscordUrl) })
                         Spacer(Modifier.height(28.dp))
                         Text("Settings", style = PageTitle.copy(fontSize = 15.sp), modifier = Modifier.padding(start = 2.dp, bottom = 10.dp))
                         OpenSettingsRow(onClick = { navController.navigate("mochy_settings") })
@@ -1095,6 +1103,38 @@ private fun DeveloperCard(onClick: () -> Unit) {
         Text(
             "meet da dev and contributors :3",
             style = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = (-0.6).sp, color = Color(0xFF9A9A9A)),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun DiscordCard(onClick: () -> Unit) {
+    val face = 30.dp
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(PageCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.mochy_discord),
+            contentDescription = "Discord",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(face)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "Join mochy’s discord server!",
+            style = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = (-0.6).sp, color = Color.White),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),

@@ -26,30 +26,34 @@ import com.mochyy.mochymusic.ui.component.LocalBlurQuality
 import com.mochyy.mochymusic.ui.component.rememberCoverBlurAvailable
 import kotlin.math.roundToInt
 
-// the frost starts at the middle of the title, where the cover starts fading, and runs past the screen's bottom so it never ends in view
-private const val FrostTop = 0.565f
+// the frost starts above the title row and runs past the screen's bottom so it never ends in view
+private const val FrostTop = 0.50f
+private const val FrostTitle = 0.565f
 private const val FrostBottom = 1.03f
 
-// full strength by the cover's bottom edge (0.645 of the screen with the cover zoomed in), held from there down
-private const val FullAt = (0.645f - FrostTop) / (FrostBottom - FrostTop)
+// 70% of peak blur by the middle of the title (the shader grows as t^2, so t = sqrt(0.7)), full strength right below it and held from there down
+private const val FrostFull = FrostTop + (FrostTitle - FrostTop) / 0.83666f
+private const val TitleAt = (FrostTitle - FrostTop) / (FrostBottom - FrostTop)
+private const val FullAt = (FrostFull - FrostTop) / (FrostBottom - FrostTop)
 
 private val FrostRadius = 40.dp
 
-// one pass growing from sharp to full frost by the cover's edge, then held all the way down
+// one pass growing from sharp to 70% at the title's middle and full frost just under it, then held all the way down
 private val ProgressiveMask = Brush.verticalGradient(
     0f to Color.Transparent,
     0.04f to Color.Black,
     1f to Color.Black,
 )
 
-// one even blur (low quality, android 12): eased in down to the cover's edge, then held
+// one even blur (low quality, android 12): 70% by the middle of the title, full just below, then held
 private val FlatMask = Brush.verticalGradient(
     0f to Color.Transparent,
+    TitleAt to Color.Black.copy(alpha = 0.7f),
     FullAt to Color.Black,
     1f to Color.Black,
 )
 
-// the frost over the cover fading into its blurred copy: sharp at the middle of the title, fully frosted from the cover's edge down
+// the frost over the cover fading into its blurred copy: starts above the title, 70% at the title's middle, full from just under it down
 @Composable
 fun CoverFrost(
     glassState: GlassState,
