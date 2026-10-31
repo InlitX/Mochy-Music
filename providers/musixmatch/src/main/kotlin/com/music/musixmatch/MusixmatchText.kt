@@ -27,3 +27,11 @@ internal fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.
 
 internal fun JsonObject.bool(key: String): Boolean? =
     (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.intOrNull?.let { n -> n == 1 } }
+
+// a title written two ways on youtube ("フィナーレ。 - Finale.", "フィナーレ。(Finale.)") is searched whole, then each way alone: musixmatch only knows one of them
+internal fun titleVariants(title: String): List<String> {
+    val variants = mutableListOf(title)
+    Regex("""^(.+?)\s*[(（\[](.+?)[)）\]]\s*$""").find(title)?.let { variants += it.groupValues[1]; variants += it.groupValues[2] }
+    title.split(Regex("""\s+[-–—/|]\s+|\s*[／｜]\s*""")).takeIf { it.size == 2 }?.let { variants += it }
+    return variants.map { it.trim() }.filter { normalize(it).isNotEmpty() }.distinct()
+}

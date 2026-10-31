@@ -28,6 +28,8 @@ object Musixmatch {
     private const val Tag = "Musixmatch"
     // a title match (80 or 40) plus the artist (40): anything less is a different song
     private const val GoodMatch = 60
+    // each copy is a page load through the bot check, so only a few are tried
+    private const val MaxDuplicates = 3
 
     @Volatile
     private var appContext: Context? = null
@@ -92,29 +94,47 @@ object Musixmatch {
             .getOrDefault(Lookup.Failed)
         // a blocked or offline try is asked again the next time the sheet opens
         if (lookup !is Lookup.Failed) songs[key] = lookup
-        // info, not debug: release builds keep it, so a lookup that comes up empty can be read over adb
-        android.util.Log.i(Tag, "$title by $artist: ${lookup::class.simpleName}${(lookup as? Lookup.Found)?.song?.pageUrl?.let { " at $it" }.orEmpty()}")
+        // info, not debug: release builds keep it, so a lookup that comes up empty can be read over adb; spelled out because r8 renames the classes
+        val outcome = when (lookup) {
+            is Lookup.Found -> "found at ${lookup.song.pageUrl}" + lookup.song.alternatePages.takeIf { it.isNotEmpty() }?.let { ", ${it.size} more copies" }.orEmpty()
+            Lookup.Missing -> "missing"
+            Lookup.Failed -> "couldn't ask"
+        }
+        android.util.Log.i(Tag, "$title by $artist: $outcome")
         (lookup as? Lookup.Found)?.song
     }
 
-    // the song with what its page says it's about, or null when the page couldn't be read this time
+    // the song with what its page says it's about, or null when no page could be read this time
     suspend fun readPage(song: MusixmatchSong): MusixmatchSong? = withContext(Dispatchers.IO) {
         if (song.pageRead) return@withContext song
         val url = song.pageUrl ?: return@withContext null
         pages[url]?.let { return@withContext it }
+        val read = readOne(song, url)
+        // this copy says nothing about the song, or wouldn't open: musixmatch keeps duplicates, and another one often has it
+        val better = if (read?.meaning != null) null else song.alternatePages.take(MaxDuplicates).firstNotNullOfOrNull { other ->
+            readOne(song, other)?.takeIf { it.meaning != null }
+        }
+        val result = better ?: read
+        // the next look at this song lands straight on the copy that had something
+        result?.also { pages[url] = it }
+    }
+
+    private suspend fun readOne(song: MusixmatchSong, url: String): MusixmatchSong? {
+        pages[url]?.let { return it }
         val track = runCatching { page(url.removePrefix(Site)) }
             .onFailure { Timber.tag(Tag).w(it, "couldn't read $url") }
             .getOrNull()
             ?.let(::trackOf)
-        android.util.Log.i(Tag, "page $url: ${if (track != null) "read" else "couldn't read"}")
-        track?.let { merge(song, it, url) }?.also { pages[url] = it }
+        val read = track?.let { merge(song, it, url) }
+        android.util.Log.i(Tag, "page $url: ${if (read == null) "couldn't read" else if (read.meaning != null) "read, has a meaning" else "read, nothing about the song"}")
+        return read?.also { pages[url] = it }
     }
 
     private suspend fun lookUp(title: String, artist: String, durationSeconds: Int?): Lookup {
         // the page will need the hidden browser: it starts and gets past the bot check while the api searches
         if (plainPagesWork != true) appContext?.let(MusixmatchBrowser::warmUp)
         when (val search = MusixmatchApi.search(client, appContext, title, artist, durationSeconds)) {
-            is MusixmatchApi.Search.Hit -> return Lookup.Found(MusixmatchApi.songOf(search.track, title, artist))
+            is MusixmatchApi.Search.Hit -> return Lookup.Found(MusixmatchApi.songOf(search.track, title, artist, search.duplicates))
             MusixmatchApi.Search.Missing -> return Lookup.Missing
             MusixmatchApi.Search.Failed -> android.util.Log.i(Tag, "the app api turned us away, searching the web for $title by $artist")
         }
@@ -126,8 +146,8 @@ object Musixmatch {
     private suspend fun webLookUp(title: String, artist: String): Lookup {
         val found = searchPaths(title, artist)
         android.util.Log.i(Tag, "web search for $title by $artist: ${found ?: "couldn't search"}")
-        // the web search's best pages first, then a guess at the address for when it found none
-        val paths = (found.orEmpty() + guessPath(title, artist)).distinct()
+        // the web search's best pages first, then a guess at the address for each way the title is written
+        val paths = (found.orEmpty() + titleVariants(title).drop(1).ifEmpty { listOf(title) }.map { guessPath(it, artist) } + guessPath(title, artist)).distinct()
         var anyAnswer = found != null
         for (path in paths.take(3)) {
             val page = page(path)

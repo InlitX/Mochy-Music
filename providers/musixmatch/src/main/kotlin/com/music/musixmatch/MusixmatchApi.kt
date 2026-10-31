@@ -23,7 +23,8 @@ internal object MusixmatchApi {
     private const val LengthSlackSeconds = 3
 
     sealed interface Search {
-        data class Hit(val track: JsonObject) : Search
+        /** the best page, and the other copies musixmatch keeps of the same song, best first */
+        data class Hit(val track: JsonObject, val duplicates: List<JsonObject>) : Search
         data object Missing : Search
         /** no connection, or musixmatch wants a captcha for every token we can get */
         data object Failed : Search
@@ -35,15 +36,29 @@ internal object MusixmatchApi {
     private var token: String? = null
 
     fun search(client: OkHttpClient, context: Context?, title: String, artist: String, durationSeconds: Int?): Search {
-        val byName = tracks(client, context, "q_track" to title, "q_artist" to artist) ?: return Search.Failed
-        pick(byName, title, artist, durationSeconds)?.let { return Search.Hit(it) }
-        // a title written another way ("フィナーレ。" for "Finale.") only turns up in the loose search, and only its length gives it away
-        val loose = tracks(client, context, "q" to "$artist $title") ?: return Search.Failed
-        return pick(loose, title, artist, durationSeconds)?.let { Search.Hit(it) } ?: Search.Missing
+        val titles = titleVariants(title)
+        val found = mutableListOf<JsonObject>()
+        for (variant in titles) {
+            found += tracks(client, context, "q_track" to variant, "q_artist" to artist) ?: return Search.Failed
+            // the same title with its analysis is as good as it gets, so the other ways of writing it aren't asked for
+            val best = rank(found, titles, artist, durationSeconds).firstOrNull()
+            if (best != null && best.exactTitle && best.analysed) break
+        }
+        var ranked = rank(found, titles, artist, durationSeconds)
+        // a title written another way can still only turn up in the loose search, where only its length gives it away
+        for (variant in titles) {
+            if (ranked.isNotEmpty()) break
+            val loose = tracks(client, context, "q" to "$artist $variant") ?: return Search.Failed
+            ranked = rank(loose, titles, artist, durationSeconds)
+        }
+        val best = ranked.firstOrNull() ?: return Search.Missing
+        // copies with the very same title by the same artist are kept in case the best one's page has nothing on the song
+        val duplicates = ranked.drop(1).filter { it.exactTitle }.map { it.track }
+        return Search.Hit(best.track, duplicates)
     }
 
     // what the app api says about a song: everything but the meaning, which only its page has
-    fun songOf(track: JsonObject, title: String, artist: String): MusixmatchSong {
+    fun songOf(track: JsonObject, title: String, artist: String, duplicates: List<JsonObject> = emptyList()): MusixmatchSong {
         val genres = listOf("primary_genres", "secondary_genres").flatMap { key ->
             (track.obj(key)?.get("music_genre_list") as? JsonArray).orEmpty()
                 .mapNotNull { (it as? JsonObject)?.obj("music_genre")?.string("music_genre_name") }
@@ -63,32 +78,47 @@ internal object MusixmatchApi {
             pageUrl = track.string("track_share_url")?.substringBefore('?')?.let(::decodeUrl)
                 ?: track.string("commontrack_vanity_id")?.let { "https://www.musixmatch.com/lyrics/$it" },
             lengthSeconds = track.int("track_length")?.takeIf { it > 0 },
+            alternatePages = duplicates.mapNotNull(::pageOf).distinct().filter { it != pageOf(track) },
         )
     }
 
-    // musixmatch keeps empty copies of popular songs under a numbered artist ("NewJeans-5/DITTO"): the copy with the song's analysis wins
-    private fun pick(tracks: List<JsonObject>, title: String, artist: String, durationSeconds: Int?): JsonObject? {
+    private fun pageOf(track: JsonObject): String? = track.string("track_share_url")?.substringBefore('?')?.let(::decodeUrl)
+        ?: track.string("commontrack_vanity_id")?.let { "https://www.musixmatch.com/lyrics/$it" }
+
+    internal class Candidate(val track: JsonObject, val score: Int, val exactTitle: Boolean, val analysed: Boolean)
+
+    // musixmatch keeps copies of popular songs under a numbered or tribute artist ("NewJeans-5/DITTO", "Tonight i'm Adele"): the artist's own copy with the song's analysis comes first
+    internal fun rank(tracks: List<JsonObject>, titles: List<String>, artist: String, durationSeconds: Int?): List<Candidate> {
         val wantedArtist = normalize(artist)
-        val wantedTitle = normalize(title)
+        val wantedTitles = titles.map(::normalize)
         return tracks
+            .distinctBy { it.string("track_share_url") ?: it.int("track_id") }
             .filter { sameWords(normalize(it.string("artist_name").orEmpty()), wantedArtist) }
             .mapNotNull { track ->
                 val name = normalize(track.string("track_name").orEmpty())
                 val sameLength = durationSeconds != null &&
                     track.int("track_length")?.let { abs(it - durationSeconds) <= LengthSlackSeconds } == true
+                val exact = name in wantedTitles
                 val titleScore = when {
-                    name == wantedTitle -> 3
-                    sameWords(name, wantedTitle) -> 2
+                    exact -> 3
+                    wantedTitles.any { sameWords(name, it) } -> 2
                     sameLength -> 1
                     else -> return@mapNotNull null
                 }
-                val analysed = if (track.int("has_lyrics_analysis") == 1) 2 else 0
-                track to titleScore * 4 + analysed + (if (sameLength) 1 else 0)
+                val analysed = track.int("has_lyrics_analysis") == 1
+                // "adele" is adele; "tonight i'm adele" only has her name in it, and that matters more than a few seconds of length
+                val ownArtist = normalize(track.string("artist_name").orEmpty()) == wantedArtist
+                // an address like "/track-1" is a page made before the song had its name, often left empty
+                val namedPage = track.string("track_share_url")?.let { url -> wantedTitles.any { sameWords(normalize(slugOf(url)), it) } } == true
+                val score = titleScore * 4 + (if (ownArtist) 2 else 0) + (if (analysed) 2 else 0) + (if (sameLength) 1 else 0) + (if (namedPage) 2 else 0)
+                Candidate(track, score, exact, analysed)
             }
-            // ties keep musixmatch's own order, which is by rating
-            .maxByOrNull { it.second }
-            ?.first
+            // sortedBy is stable, so ties keep musixmatch's own order, which is by rating
+            .sortedByDescending { it.score }
     }
+
+    // the song part of a page address, "/lyrics/eill-3/Finale" gives "Finale"
+    private fun slugOf(url: String): String = decodeUrl(url.substringBefore('?').substringAfterLast('/')).replace('-', ' ')
 
     /** the search's tracks, best rated first; null when musixmatch couldn't be asked */
     private fun tracks(client: OkHttpClient, context: Context?, vararg query: Pair<String, String>): List<JsonObject>? {
