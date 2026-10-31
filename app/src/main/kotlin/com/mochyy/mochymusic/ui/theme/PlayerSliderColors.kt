@@ -26,7 +26,7 @@ object PlayerSliderColors {
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                 }
             }
-            PlayerBackgroundStyle.COVER_GRADIENT, PlayerBackgroundStyle.DARK_GRADIENT, PlayerBackgroundStyle.APPLE_MUSIC -> {
+            PlayerBackgroundStyle.COVER_GRADIENT, PlayerBackgroundStyle.DARK_GRADIENT, PlayerBackgroundStyle.APPLE_MUSIC, PlayerBackgroundStyle.AMBIENT -> {
                 Color.White.copy(alpha = 0.4f)
             }
         }

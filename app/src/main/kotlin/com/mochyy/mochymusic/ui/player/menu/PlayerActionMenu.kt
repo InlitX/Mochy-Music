@@ -106,6 +106,9 @@ fun PlayerActionMenu(
         if (songId != null) downloadUtil.getDownload(songId) else flowOf(null)
     }.collectAsState(initial = null)
     val librarySong by remember(database, songId) { database.song(songId) }.collectAsState(initial = null)
+    // only a song autoplay picked is ours to stop recommending, a song you chose yourself stays as it is
+    val queue by playerConnection.queueSnapshot.collectAsState()
+    val isAutoplaySong = queue.items.getOrNull(queue.currentIndex)?.isAutoplay == true
 
     var showChoosePlaylistDialog by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
@@ -334,6 +337,17 @@ fun PlayerActionMenu(
                         }
                     },
                 )
+                if (isAutoplaySong) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    MenuRow(
+                        icon = R.drawable.thumb_down,
+                        title = androidx.compose.ui.res.stringResource(R.string.not_recommended_menu),
+                        onClick = {
+                            onDismiss()
+                            playerConnection.stopRecommendingCurrent()
+                        },
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(SectionGap))
 

@@ -4,12 +4,10 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,20 +16,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val CardColor = Color(0xFF232323)
-private val CardHeight = 167.dp
-private val BannerHeight = 110.dp
+private val CardShape = RoundedCornerShape(16.dp)
+private val IconShape = RoundedCornerShape(8.dp)
 
 /** grey line under a settings page's big title, as in the integrations and discord mocks */
 @Composable
@@ -45,98 +40,53 @@ internal fun IntegrationPageSubtitle(text: String) {
     )
 }
 
-/** one service on the integrations page: its banner fading into the card, with the app icon and name over the fade */
+/** one service on the integrations page: its app icon, its name and one short line about it */
 @Composable
-internal fun IntegrationBannerCard(
+internal fun IntegrationRow(
     name: String,
+    description: String,
     @DrawableRes icon: Int,
     onClick: () -> Unit,
-    banner: @Composable BoxScope.() -> Unit,
+    // the colour behind the icon, for a round logo that should still read as a square tile
+    iconBackground: Color = Color.Transparent,
 ) {
-    Box(
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(CardHeight)
-            .clip(RoundedCornerShape(20.dp))
+            .heightIn(min = 64.dp)
+            .clip(CardShape)
             .background(CardColor)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Box(
+        Image(
+            painter = painterResource(icon),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(BannerHeight)
-                .clipToBounds()
-                // the banner melts into the card instead of ending in a hard edge
-                .drawWithCache {
-                    val fade = Brush.verticalGradient(
-                        0.74f to Color.Transparent,
-                        1f to CardColor,
-                    )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(fade)
-                    }
-                },
-            content = banner,
+                .size(34.dp)
+                .clip(IconShape)
+                .background(iconBackground),
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 18.dp, bottom = 22.dp),
-        ) {
-            Image(
-                painter = painterResource(icon),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(10.dp)),
-            )
+        Column(Modifier.padding(start = 12.dp)) {
             Text(
                 text = name,
                 color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(start = 16.dp, top = 22.dp),
+                fontSize = 15.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = description,
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-    }
-}
-
-/** a banner that's one of the user's pictures, filling the width */
-@Composable
-internal fun BoxScope.PictureBanner(@DrawableRes picture: Int) {
-    Image(
-        painter = painterResource(picture),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        // a touch closer than a plain crop, as the mock frames the Discord banner
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                scaleX = 1.1f
-                scaleY = 1.1f
-            },
-    )
-}
-
-/** a plain colour banner, with the service's wordmark on it when there is one */
-@Composable
-internal fun BoxScope.ColorBanner(color: Color, @DrawableRes wordmark: Int? = null) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(color),
-    )
-    wordmark?.let {
-        Image(
-            painter = painterResource(it),
-            contentDescription = null,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 21.dp)
-                .height(57.dp),
-        )
     }
 }

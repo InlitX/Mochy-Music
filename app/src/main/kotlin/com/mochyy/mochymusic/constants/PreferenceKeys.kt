@@ -595,6 +595,9 @@ enum class PlayerBackgroundStyle {
     DARK_GRADIENT,
 
     APPLE_MUSIC,
+
+    // the cover's colours drifting slowly, following a playing video or animated cover as it changes
+    AMBIENT,
 }
 
 enum class PlayerCoverStyle {
@@ -617,7 +620,10 @@ enum class PlayerCoverStyle {
  * each of which can be turned sideways from its menu.
  */
 enum class PlayerStyle(val displayName: String, val selectorName: String) {
-    DEFAULT("Flagship", "Default"),
+    // the flagship as it is now: frosted cover fade, moving cover colours, the new buttons and bottom bar
+    FLAGSHIP("Flagship", "Flagship"),
+    // the flagship before its layout refresh, kept as a variant under it in the selector
+    CLASSIC("Classic", "Classic"),
     /** the flagship with a record player for its cover, whose arm is the seek bar */
     TURNTABLE("Turntable", "Turntable"),
     // the song's youtube video across the whole screen, turned sideways, with its lyrics in a pane
@@ -628,18 +634,34 @@ enum class PlayerStyle(val displayName: String, val selectorName: String) {
     TIMELINE("Timeline", "Timeline"),
     LYRICS("Lyrics", "Lyrics stage");
 
-    val editable: Boolean get() = this == DEFAULT || this == TURNTABLE || this == POSTER || this == IPOD
+    val editable: Boolean get() = this == FLAGSHIP || this == CLASSIC || this == TURNTABLE || this == POSTER || this == IPOD
 
     /** drawn by the flagship's own player (cover, controls, card), not a design of its own */
-    val flagshipFamily: Boolean get() = this == DEFAULT || this == TURNTABLE
+    val flagshipFamily: Boolean get() = this == FLAGSHIP || this == CLASSIC || this == TURNTABLE
+
+    // the two flagships the full editor works on: cover, middle part, controls and bottom bar
+    val hasFullEditor: Boolean get() = this == FLAGSHIP || this == CLASSIC
 
     companion object {
         /** the styles these replaced, so a stored choice lands on its nearest successor */
         fun fromStored(name: String?): PlayerStyle? = when (name) {
             "SIMPLE", "SIMPLE_COMPACT" -> TIMELINE
             "LYRICS_ABSTRACT" -> LYRICS
+            // everyone on the old flagship moves to the new one once; picking classic later sticks
+            "DEFAULT" -> FLAGSHIP
             else -> null
         }
+
+        // the selector's columns, each look with its variants stacked under it, a swipe down away
+        val selectorColumns: List<List<PlayerStyle>> = listOf(
+            listOf(FLAGSHIP, CLASSIC),
+            listOf(TURNTABLE),
+            listOf(VIDEO),
+            listOf(IPOD),
+            listOf(POSTER),
+            listOf(TIMELINE),
+            listOf(LYRICS),
+        )
     }
 }
 
@@ -687,6 +709,22 @@ enum class PlayerBottomBarStyle(val displayName: String) {
 }
 
 val PlayerBottomBarStyleKey = stringPreferencesKey("playerBottomBarStyle")
+
+// the new flagship keeps its own bottom bar, so it shows the volume bar it was designed with even where classic has the cards
+val FlagshipBottomBarStyleKey = stringPreferencesKey("flagshipBottomBarStyle")
+
+// the new flagship's own background, the moving cover colours out of the box
+val FlagshipBackgroundStyleKey = stringPreferencesKey("flagshipBackgroundStyle")
+
+// how the new flagship lays out its play buttons
+enum class FlagshipTransportLayout {
+    // back, play and next, wide apart with nothing round them
+    THREE,
+    // ten seconds back and forward on the outside, play in a white circle
+    TEN_SECONDS,
+}
+
+val FlagshipTransportLayoutKey = stringPreferencesKey("flagshipTransportLayout")
 
 /** how far the player's controls were held and dragged from their usual place in the editor, in dp (down is positive) */
 val PlayerControlsShiftKey = floatPreferencesKey("playerControlsShift")

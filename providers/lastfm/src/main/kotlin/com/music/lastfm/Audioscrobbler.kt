@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.security.MessageDigest
+import java.util.Locale
 
 /** a song as a scrobbling service wants it, times are in seconds */
 @Serializable
@@ -40,21 +41,16 @@ class AudioscrobblerException(val code: Int, message: String) : Exception(messag
     /** worth trying the same request again later */
     val isTemporary: Boolean get() = code in TemporaryCodes
 
-    /** signing in: the user hasn't allowed mochy on the page yet */
-    val isWaitingForUser: Boolean get() = code == TOKEN_NOT_AUTHORIZED
-
-    /** signing in: the token is too old or unknown so a new one is needed */
-    val isTokenExpired: Boolean get() = code == TOKEN_EXPIRED || code == INVALID_TOKEN
+    /** signing in: the username or password is wrong, both services answer this with the same code */
+    val isWrongLogin: Boolean get() = code == AUTH_FAILED
 
     companion object {
         /** not one of the service's codes: the server itself failed or answered with no json */
         const val SERVER_ERROR = -1
-        private const val INVALID_TOKEN = 4
+        private const val AUTH_FAILED = 4
         private const val INVALID_PARAMETERS = 6
         private const val INVALID_RESOURCE = 7
         private const val INVALID_SESSION = 9
-        private const val TOKEN_NOT_AUTHORIZED = 14
-        private const val TOKEN_EXPIRED = 15
         private val TemporaryCodes = setOf(SERVER_ERROR, 8, 11, 16, 29)
     }
 }
@@ -62,22 +58,23 @@ class AudioscrobblerException(val code: Int, message: String) : Exception(messag
 /** one audioscrobbler 2.0 server (last.fm or a copy of its api like libre.fm), calls are signed with md5, network failures are IOExceptions and the service's own errors AudioscrobblerException */
 class Audioscrobbler(
     private val apiRoot: String,
-    private val authPage: String,
     private val apiKey: String,
     private val secret: String,
+    /** libre.fm only takes the old md5 login token on sign-in, it turns a plain password away */
+    private val signsInWithToken: Boolean = false,
 ) {
     /** false in a build made without this service's api key, which can't sign anyone in */
     val isConfigured: Boolean get() = apiKey.isNotEmpty() && secret.isNotEmpty()
 
-    /** a request token, the first step of signing in */
-    suspend fun getToken(): String = call("auth.getToken").string("token") ?: throw unreadable()
-
-    /** the service's page where the user signs in and lets mochy scrobble for them */
-    fun authUrl(token: String): String = "$authPage?api_key=$apiKey&token=$token"
-
-    /** once the user has allowed mochy on authUrl, until then this fails with AudioscrobblerException.isWaitingForUser */
-    suspend fun getSession(token: String): AudioscrobblerSession {
-        val session = call("auth.getSession", mapOf("token" to token))["session"] as? JsonObject ?: throw unreadable()
+    /** signs in straight from mochy's own form, the password only goes to the service over https and isn't kept */
+    suspend fun getMobileSession(username: String, password: String): AudioscrobblerSession {
+        val login = if (signsInWithToken) {
+            mapOf("authToken" to md5(username.lowercase(Locale.ROOT) + md5(password)))
+        } else {
+            mapOf("password" to password)
+        }
+        val session = call("auth.getMobileSession", mapOf("username" to username) + login)["session"] as? JsonObject
+            ?: throw unreadable()
         return AudioscrobblerSession(
             name = session.string("name") ?: throw unreadable(),
             key = session.string("key") ?: throw unreadable(),
@@ -136,10 +133,11 @@ class Audioscrobbler(
         return json
     }
 
-    private fun signature(params: Map<String, String>): String {
-        val text = params.toSortedMap().entries.joinToString("") { it.key + it.value } + secret
-        return MessageDigest.getInstance("MD5").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
-    }
+    private fun signature(params: Map<String, String>): String =
+        md5(params.toSortedMap().entries.joinToString("") { it.key + it.value } + secret)
+
+    private fun md5(text: String): String =
+        MessageDigest.getInstance("MD5").digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
     private fun ScrobbleTrack.params(index: Int?): Map<String, String> {
         val suffix = index?.let { "[$it]" }.orEmpty()

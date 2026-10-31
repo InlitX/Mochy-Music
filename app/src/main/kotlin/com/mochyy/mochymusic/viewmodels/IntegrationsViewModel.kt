@@ -5,6 +5,7 @@ package com.mochyy.mochymusic.viewmodels
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.scrobble.ScrobbleSite
 import com.mochyy.mochymusic.scrobble.Scrobbler
 import com.mochyy.mochymusic.utils.dataStore
@@ -39,12 +40,11 @@ class IntegrationsViewModel @Inject constructor(
     val pending: StateFlow<Int> = scrobbler.pending
 
     /** What "Send now" did, for a short message; cleared once shown. */
-    private val _sendResult = MutableStateFlow<String?>(null)
-    val sendResult: StateFlow<String?> = _sendResult.asStateFlow()
+    private val _sendResult = MutableStateFlow<Int?>(null)
+    val sendResult: StateFlow<Int?> = _sendResult.asStateFlow()
 
-    suspend fun requestToken(site: ScrobbleSite): String = scrobbler.requestToken(site)
-
-    suspend fun finishSignIn(site: ScrobbleSite, token: String): String? = scrobbler.finishSignIn(site, token)
+    suspend fun signIn(site: ScrobbleSite, username: String, password: String): String =
+        scrobbler.signIn(site, username, password)
 
     fun signOut(site: ScrobbleSite) {
         viewModelScope.launch { scrobbler.signOut(site) }
@@ -52,11 +52,7 @@ class IntegrationsViewModel @Inject constructor(
 
     fun sendNow() {
         viewModelScope.launch {
-            _sendResult.value = if (scrobbler.send()) {
-                "All sent"
-            } else {
-                "Couldn't send them yet. Mochy keeps trying whenever you're online."
-            }
+            _sendResult.value = if (scrobbler.send()) R.string.scrobble_all_sent else R.string.scrobble_send_later
         }
     }
 

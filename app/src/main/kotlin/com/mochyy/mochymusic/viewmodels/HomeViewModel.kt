@@ -49,6 +49,7 @@ import com.mochyy.mochymusic.playback.PlayerConnection
 import com.mochyy.mochymusic.utils.ArtistVideos
 import com.mochyy.mochymusic.utils.FeedVideoKind
 import com.mochyy.mochymusic.utils.HomeVideo
+import com.mochyy.mochymusic.utils.NotRecommended
 import com.mochyy.mochymusic.utils.SongVersions
 import com.mochyy.mochymusic.utils.SyncUtils
 import com.mochyy.mochymusic.utils.dataStore
@@ -385,11 +386,13 @@ class HomeViewModel @Inject constructor(
         // something you play all the time, something you played just now. one seed per artist.
         val playCounts = playEvents.groupingBy { it.song.id }.eachCount()
         val mostPlayed = recent.sortedByDescending { playCounts[it.id] ?: 0 }
+        val hidden = NotRecommended.songs
         val seeds = buildList<Song> {
             fun takeFrom(songs: List<Song>, count: Int) {
                 songs.shuffled()
                     .filter { song ->
-                        none { it.id == song.id } &&
+                        song.id !in hidden &&
+                            none { it.id == song.id } &&
                             none { it.artists.firstOrNull()?.id == song.artists.firstOrNull()?.id }
                     }
                     .take(count)
@@ -412,7 +415,7 @@ class HomeViewModel @Inject constructor(
                     if (endpoint != null) {
                         YouTube.related(endpoint).onSuccess { page ->
                             val candidates = page.songs.filter { item ->
-                                item.id != seed.id &&
+                                item.id != seed.id && item.id !in hidden &&
                                     !(hideVideoSongs && item.isVideoSong) &&
                                     !(hideExplicit && item.explicit)
                             }
@@ -450,13 +453,15 @@ class HomeViewModel @Inject constructor(
                 val topSongs = database.mostPlayedSongs(fromTimeStamp = thirtyDaysAgo, limit = 20)
                     .first()
                     .filterVideoSongs(hideVideoSongs)
+                    .filterNot { it.id in NotRecommended }
 
                 quickPicks.value = topSongs.distinctBy { it.id }.take(20)
             }
             QuickPicks.LAST_LISTEN -> {
                 val song = database.recentEvents(1).first().firstOrNull()?.song
                 if (song != null && database.hasRelatedSongs(song.id)) {
-                    quickPicks.value = database.getRelatedSongs(song.id).first().filterVideoSongs(hideVideoSongs).shuffled().take(20)
+                    quickPicks.value = database.getRelatedSongs(song.id).first().filterVideoSongs(hideVideoSongs)
+                        .filterNot { it.id in NotRecommended }.shuffled().take(20)
                 }
             }
         }
@@ -750,6 +755,7 @@ class HomeViewModel @Inject constructor(
         val hideExplicit = context.dataStore.get(HideExplicitKey, false)
         val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false)
         val fromTimeStamp = System.currentTimeMillis() - 86400000L * 7 * 2
+        val hidden = NotRecommended.songs
 
         coroutineScope {
             val artistDeferreds = database.mostPlayedArtists(fromTimeStamp, limit = 15).first()
@@ -767,6 +773,7 @@ class HomeViewModel @Inject constructor(
                                 .distinctBy { item -> item.id }
                                 .filterExplicit(hideExplicit)
                                 .filterVideoSongs(hideVideoSongs)
+                                .filterNot { it.id in hidden }
                                 .shuffled()
                                 .take(12)
                                 .ifEmpty { return@async null }
@@ -791,6 +798,7 @@ class HomeViewModel @Inject constructor(
                                 .distinctBy { it.id }
                                 .filterExplicit(hideExplicit)
                                 .filterVideoSongs(hideVideoSongs)
+                                .filterNot { it.id in hidden }
                                 .shuffled()
                                 .ifEmpty { return@async null }
                         )
@@ -817,6 +825,7 @@ class HomeViewModel @Inject constructor(
                                 .distinctBy { it.id }
                                 .filterExplicit(hideExplicit)
                                 .filterVideoSongs(hideVideoSongs)
+                                .filterNot { it.id in hidden }
                                 .shuffled()
                                 .take(10)
                                 .ifEmpty { return@async null }
@@ -921,6 +930,7 @@ class HomeViewModel @Inject constructor(
         val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false)
         val hideYoutubeShorts = context.dataStore.get(HideYoutubeShortsKey, false)
         val disableAiFilter = context.dataStore.get(DisableAiFilterKey, false)
+        val hidden = NotRecommended.songs
 
         // each source on its own: one failing request must not cancel the others (that took whole
         // sections down with it), and an unexpected throw shouldn't reach the crash handler
@@ -938,6 +948,7 @@ class HomeViewModel @Inject constructor(
                             .filterVideoSongs(hideVideoSongs)
                             .filterYoutubeShorts(hideYoutubeShorts)
                             .filterAiGenerated(disableAiFilter).distinctBy { it.id }
+                            .filterNot { it.id in hidden }
                         if (filteredItems.isEmpty()) null else section.copy(items = filteredItems)
                     }
                     homePage.value = page.copy(sections = songVersionsOf(filteredSections))

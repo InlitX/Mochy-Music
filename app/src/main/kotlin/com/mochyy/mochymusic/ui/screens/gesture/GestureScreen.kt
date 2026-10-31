@@ -232,7 +232,7 @@ private fun PlayerSection() {
     val context = LocalContext.current
     val playerConnection = LocalPlayerConnection.current
     val playerSheetState = LocalPlayerBottomSheetState.current
-    val playerStyle by rememberEnumPreference(PlayerStyleKey, defaultValue = PlayerStyle.DEFAULT)
+    val playerStyle by rememberEnumPreference(PlayerStyleKey, defaultValue = PlayerStyle.FLAGSHIP)
     val playFirst = stringResource(R.string.customise_play_first)
     PlayerStyleCard(
         selected = playerStyle,

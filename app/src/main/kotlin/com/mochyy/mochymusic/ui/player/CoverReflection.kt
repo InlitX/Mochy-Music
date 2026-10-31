@@ -31,10 +31,10 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 // the picture is this small before it's blurred; stretched over the screen that's a soft, heavy blur for almost nothing
-private const val ReflectionPx = 96
+internal const val ReflectionPx = 96
 
 // blur radius in those small pixels, roughly 95px on a phone screen
-private const val ReflectionBlurPx = 6
+internal const val ReflectionBlurPx = 6
 
 // how strong the mirror is where it meets the cover
 private const val ReflectionStrength = 0.92f
@@ -56,6 +56,8 @@ internal fun CoverReflection(
     // 0 to 1, read while drawing, so fading it never needs a layer
     alpha: () -> Float,
     modifier: Modifier = Modifier,
+    // the new flagship's: kept whole all the way down, the cover's own picture blurred under the controls
+    steady: Boolean = false,
 ) {
     if (url == null) return
     val context = LocalContext.current
@@ -77,7 +79,7 @@ internal fun CoverReflection(
             val bitmap = picture ?: return@drawBehind
             val a = alpha().coerceIn(0f, 1f)
             if (a <= 0.004f) return@drawBehind
-            mesh.draw(this, bitmap, coverHeight(), magnify(), a)
+            mesh.draw(this, bitmap, coverHeight(), magnify(), a, steady)
         },
     )
 }
@@ -88,7 +90,7 @@ private class ReflectionMesh {
     private val colors = IntArray((MeshRows + 1) * 2)
     private val paint = android.graphics.Paint().apply { isFilterBitmap = true }
 
-    fun draw(scope: DrawScope, bitmap: Bitmap, coverHeight: Float, magnify: Float, alpha: Float): Unit = with(scope) {
+    fun draw(scope: DrawScope, bitmap: Bitmap, coverHeight: Float, magnify: Float, alpha: Float, steady: Boolean): Unit = with(scope) {
         val w = size.width
         val h = size.height
         if (w <= 0f || h <= 0f || coverHeight <= 0f) return
@@ -105,7 +107,7 @@ private class ReflectionMesh {
             val v = bh * row / MeshRows
             // flipped: the cover's bottom row sits at the top, and rows further up the picture go further down
             val y = (srcBottom - v) * scale
-            val fade = fadeAt(y / h) * alpha
+            val fade = if (steady) alpha else fadeAt(y / h) * alpha
             val colour = android.graphics.Color.argb((fade * 255f).roundToInt().coerceIn(0, 255), 255, 255, 255)
             for (col in 0..1) {
                 val u = bw * col

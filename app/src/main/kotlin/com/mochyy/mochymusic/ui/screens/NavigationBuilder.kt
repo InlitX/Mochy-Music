@@ -522,16 +522,6 @@ fun NavGraphBuilder.navigationBuilder(
     }
 
     composable(
-        route = com.mochyy.mochymusic.ui.screens.settings.modules.ModuleSignInRoutePattern,
-        arguments = listOf(navArgument("id") { type = NavType.StringType }),
-    ) { entry ->
-        com.mochyy.mochymusic.ui.screens.settings.modules.ModuleSignInScreen(
-            navController = navController,
-            id = entry.arguments?.getString("id").orEmpty(),
-        )
-    }
-
-    composable(
         route = "browse/{browseId}",
         arguments = listOf(
             navArgument("browseId") {

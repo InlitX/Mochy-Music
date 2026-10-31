@@ -265,12 +265,15 @@ class InnerTube {
         cpn: String,
         playlistId: String?,
         client: YouTubeClient = YouTubeClient.WEB_REMIX,
+        extraParams: Map<String, String> = emptyMap(),
     ) = withRetry {
         httpClient.get(url) {
             ytClient(client, true)
             parameter("ver", "2")
             parameter("c", client.clientName)
+            parameter("cver", client.clientVersion)
             parameter("cpn", cpn)
+            extraParams.forEach { (name, value) -> parameter(name, value) }
 
             if (playlistId != null) {
                 parameter("list", playlistId)

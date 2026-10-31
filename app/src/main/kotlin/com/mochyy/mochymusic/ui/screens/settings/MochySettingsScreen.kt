@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.scrobble.ScrobbleSite
+import com.mochyy.mochymusic.ui.screens.settings.importsync.YouTubeSyncRoute
 import com.mochyy.mochymusic.ui.screens.settings.integrations.IntegrationsRoute
 import com.mochyy.mochymusic.ui.screens.settings.integrations.discord.DiscordRoute
 import com.mochyy.mochymusic.ui.screens.settings.integrations.scrobbleServiceRoute
@@ -204,6 +205,7 @@ private val SettingsIndex = listOf(
     SettingsEntry("Libre.fm", "Integrations", scrobbleServiceRoute(ScrobbleSite.LIBREFM), "librefm scrobble scrobbling history stats account sign in"),
     SettingsEntry("Now Playing", "Integrations", scrobbleServiceRoute(ScrobbleSite.LASTFM), "scrobble now playing status profile lastfm librefm"),
     SettingsEntry("Send likes", "Integrations", scrobbleServiceRoute(ScrobbleSite.LASTFM), "love loved songs lastfm librefm scrobble"),
+    SettingsEntry("YouTube Music", "Integrations", YouTubeSyncRoute, "youtube ytm sync account sign in likes library playlists history"),
 
     // Storage
     SettingsEntry("Storage", "Storage", "storage_settings", "space disk size cache downloads clear free junk delete"),

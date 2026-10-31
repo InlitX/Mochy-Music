@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +46,8 @@ import androidx.navigation.NavController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
 import com.mochyy.mochymusic.module.AccountState
+import com.mochyy.mochymusic.module.ModuleFeature
+import com.mochyy.mochymusic.module.jiosaavn.JioSaavnModule
 import com.mochyy.mochymusic.module.applemusic.AppleMusicModule
 import com.mochyy.mochymusic.module.monochrome.MonochromeModule
 import com.mochyy.mochymusic.modules.SourceModules
@@ -90,6 +93,9 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
         if (id == SourceModules.YouTubeId) youTubeOn
         else entries.any { it.module.info.id == id && it.enabled && it.account is AccountState.SignedIn }
     }
+    // a module that's switched off isn't part of this page at all, only youtube and the modules that are on show up
+    val shownModules = entries.filter { it.enabled && it.adds(ModuleFeature.AudioSource) }
+    val shownOrder = order.filter { id -> id == SourceModules.YouTubeId || shownModules.any { it.id == id } }
     // the first provider in the order that's on plays everything it has
     val first = order.firstOrNull(usable)
     val effective = when (first) {
@@ -100,10 +106,21 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
             if (pick == AppleMusicModule.OptionHe64) Effective(AudioQuality.MEDIUM, "Apple Music", "HE-AAC 64")
             else Effective(AudioQuality.HIGH, "Apple Music", "AAC 256")
         }
-        else -> {
+        JioSaavnModule.Id -> {
+            val pick = entries.firstOrNull { it.id == first }?.picks?.get(JioSaavnModule.ChoiceQuality) ?: JioSaavnModule.Option320
+            Effective(if (pick == JioSaavnModule.Option96) AudioQuality.MEDIUM else AudioQuality.HIGH, "JioSaavn", "AAC $pick")
+        }
+        SourceModules.YouTubeId -> {
             val tier = if (quality == AudioQuality.AUTO) (if (metered) AudioQuality.MEDIUM else AudioQuality.HIGH) else quality
             val option = YouTubeOptions.first { it.quality == tier }
             Effective(tier, "YouTube · ${option.title}", option.format)
+        }
+        // a module added from a link: its name, and the stream it picked when it offers a choice
+        else -> {
+            val entry = entries.firstOrNull { it.id == first }
+            val choice = entry?.module?.choices?.firstOrNull { it.id == "quality" }
+            val picked = choice?.options?.firstOrNull { it.id == entry.picks[choice.id] } ?: choice?.options?.firstOrNull()
+            Effective(AudioQuality.HIGH, entry?.module?.info?.name ?: first, picked?.label ?: stringResource(R.string.quality_module_stream))
         }
     }
 
@@ -129,7 +146,7 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
             }
 
             // each module's own qualities, under its name
-            entries.forEach { entry ->
+            shownModules.forEach { entry ->
                 val id = entry.module.info.id
                 val active = entry.enabled && entry.account is AccountState.SignedIn
                 Spacer(Modifier.height(6.dp))
@@ -167,7 +184,7 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
         Spacer(Modifier.height(24.dp))
         LabSheetTitle("Provider")
         ProviderOrder(
-            order = order,
+            order = shownOrder,
             name = modules::nameOf,
             logo = ::providerLogo,
             usable = usable,
@@ -179,24 +196,16 @@ fun AudioQualityScreen(navController: NavController, modules: ModulesViewModel =
                 }
             },
             onTap = { id ->
+                // youtube switches right here; a module's switch is on its own page, switching it off here would make it vanish under the finger
                 if (id == SourceModules.YouTubeId) {
                     modules.setEnabled(id, !youTubeOn)
                 } else {
-                    val entry = entries.firstOrNull { it.module.info.id == id }
-                    // not signed in: there's nothing to switch on yet, so its sign-in opens
-                    if (entry == null || entry.account !is AccountState.SignedIn) {
-                        navController.navigate(com.mochyy.mochymusic.ui.screens.settings.modules.moduleRoute(id))
-                    } else {
-                        modules.setEnabled(id, !entry.enabled)
-                    }
+                    navController.navigate(com.mochyy.mochymusic.ui.screens.settings.modules.moduleRoute(id))
                 }
             },
-            onReorder = modules::setOrder,
+            onReorder = modules::setVisibleOrder,
         )
-        Footnote(
-            "Tap a provider to turn it on or off, or to sign in. Drag its handle to change the order: " +
-                "each song plays from the first one that's on and has it.",
-        )
+        Footnote(stringResource(R.string.quality_provider_footnote))
     }
 }
 
@@ -230,7 +239,7 @@ private fun ProviderCaption(logo: Int?, name: String, status: String, on: Boolea
         Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.graphicsLayer { alpha = if (on) 1f else 0.45f }) { ProviderLogo(logo, size = 24) }
+        Box(Modifier.graphicsLayer { alpha = if (on) 1f else 0.45f }) { ProviderLogo(logo, size = 24, name = name) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(name, fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
@@ -239,8 +248,9 @@ private fun ProviderCaption(logo: Int?, name: String, status: String, on: Boolea
     }
 }
 
+// a provider with no logo of its own (jiosaavn, a module from a link) shows its first letter instead of a blank tile
 @Composable
-internal fun ProviderLogo(logo: Int?, size: Int) {
+internal fun ProviderLogo(logo: Int?, size: Int, name: String? = null) {
     Box(
         modifier = Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.26f).dp)).background(Color(0xFFD9D9D9)),
         contentAlignment = Alignment.Center,
@@ -251,6 +261,8 @@ internal fun ProviderLogo(logo: Int?, size: Int) {
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.size(size.dp),
             )
+        } else if (name != null) {
+            Text(name.take(1).uppercase(), fontFamily = InterFontFamily, fontWeight = FontWeight.Bold, fontSize = (size * 0.44f).sp, color = Color.Black.copy(alpha = 0.7f))
         }
     }
 }

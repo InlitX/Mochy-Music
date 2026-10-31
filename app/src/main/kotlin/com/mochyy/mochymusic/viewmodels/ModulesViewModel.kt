@@ -14,7 +14,11 @@ import com.mochyy.mochymusic.module.DiagnosticStep
 import com.mochyy.mochymusic.module.ResolveResult
 import com.mochyy.mochymusic.module.StreamDrm
 import com.mochyy.mochymusic.module.TrackQuery
+import com.mochyy.mochymusic.modules.CatalogModule
+import com.mochyy.mochymusic.modules.ModuleCatalog
+import com.mochyy.mochymusic.modules.ModuleRegistry
 import com.mochyy.mochymusic.modules.SourceModules
+import org.json.JSONObject
 import com.mochyy.mochymusic.playback.custom.WidevineDrm
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -26,11 +30,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** The Modules settings: each module's account, switch, quality, and its playback test. */
+/** The Modules settings: each module's account, switch, choices, its playback test, and adding new ones. */
 @HiltViewModel
 class ModulesViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val modules: SourceModules,
+    private val registry: ModuleRegistry,
+    private val moduleCatalog: ModuleCatalog,
 ) : ViewModel() {
 
     val entries = modules.entries
@@ -38,7 +44,8 @@ class ModulesViewModel @Inject constructor(
     /** the provider order: module ids and "youtube" */
     val order = modules.order
 
-    fun setOrder(ids: List<String>) = modules.setOrder(ids)
+    /** reorders only the providers a page shows, the switched-off modules it hides keep their places */
+    fun setVisibleOrder(ids: List<String>) = modules.setVisibleOrder(ids)
 
     /** YouTube Music's switch; it's not a module, so it isn't in [entries] */
     val youTubeEnabled = modules.youTubeEnabled
@@ -65,21 +72,21 @@ class ModulesViewModel @Inject constructor(
     fun setPick(id: String, choiceId: String, optionId: String) = modules.setPick(id, choiceId, optionId)
 
     fun signOut(id: String) {
-        modules.module(id)?.signOut()
+        registry.module(id)?.signOut()
         modules.setEnabled(id, false)
         _steps.value = emptyList()
     }
 
     fun verify(id: String) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { runCatching { modules.module(id)?.verifyAccount() } }
+            withContext(Dispatchers.IO) { runCatching { registry.module(id)?.verifyAccount() } }
             modules.refresh()
         }
     }
 
     /** a header from the sign-in page; [onDone] runs once, when the account is in */
     fun onSignInHeader(id: String, name: String, value: String, url: String, onDone: (AccountState) -> Unit) {
-        val module = modules.module(id) ?: return
+        val module = registry.module(id) ?: return
         if (signedIn || !module.onSignInHeader(name, value, url)) return
         signedIn = true
         viewModelScope.launch {
@@ -93,6 +100,45 @@ class ModulesViewModel @Inject constructor(
     fun resetSignIn() {
         signedIn = false
     }
+
+    /** what the import's musickit probe read off music.apple.com: the same two tokens the web player sends as headers */
+    fun onApplePageProbe(id: String, raw: String?, onDone: (AccountState) -> Unit) {
+        if (raw.isNullOrBlank() || raw == "null") return
+        val tokens = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        tokens.optString("dev").takeIf { it.length > 20 && it != "null" }?.let {
+            onSignInHeader(id, "authorization", "Bearer $it", AppleApi, onDone)
+        }
+        tokens.optString("user").takeIf { it.length > 20 && it != "null" }?.let {
+            onSignInHeader(id, "media-user-token", it, AppleApi, onDone)
+        }
+    }
+
+    /** apple also keeps the user token as a cookie on music.apple.com */
+    fun onAppleCookies(id: String, cookies: String?, onDone: (AccountState) -> Unit) {
+        cookies?.split(';')?.forEach { pair ->
+            if (pair.substringBefore('=').trim().equals("media-user-token", ignoreCase = true)) {
+                onSignInHeader(id, "media-user-token", pair.substringAfter('=').trim(), "https://music.apple.com/", onDone)
+            }
+        }
+    }
+
+    // ---- finding and adding modules ----
+
+    suspend fun check(link: String): ModuleRegistry.LinkCheck = registry.check(link)
+
+    /** adds a checked module, switched off so nothing changes until the user turns it on; gives back its id */
+    fun install(ready: ModuleRegistry.LinkCheck.Ready): String {
+        val id = registry.install(ready)
+        modules.refresh()
+        return id
+    }
+
+    fun remove(id: String) {
+        registry.remove(id)
+        modules.refresh()
+    }
+
+    suspend fun catalog(): Result<List<CatalogModule>> = moduleCatalog.load()
 
     /** the module's own steps, then whether this phone's Widevine actually gets a license */
     fun runTest(id: String, track: TrackQuery) {
@@ -221,5 +267,9 @@ class ModulesViewModel @Inject constructor(
             session?.let { runCatching { mediaDrm.closeSession(it) } }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) mediaDrm.close() else @Suppress("DEPRECATION") mediaDrm.release()
         }
+    }
+
+    private companion object {
+        const val AppleApi = "https://amp-api.music.apple.com/"
     }
 }

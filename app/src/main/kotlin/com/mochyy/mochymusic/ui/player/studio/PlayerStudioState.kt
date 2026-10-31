@@ -148,7 +148,34 @@ fun Modifier.studioAnchor(anchors: StudioAnchors?, slot: (StudioAnchors) -> Muta
  * lives with the player for as long as the player does.
  */
 @Stable
-class PlayerStudioState internal constructor(private val scope: CoroutineScope) {
+class PlayerStudioState internal constructor(
+    private val scope: CoroutineScope,
+    // the selector's columns of style indexes, each look's variants under it; empty puts every style in a column of its own
+    val columns: List<List<Int>> = emptyList(),
+) {
+    // which column a style's card is in, and how far down it
+    fun columnOf(style: Int): Int = columns.indexOfFirst { style in it }.takeIf { it >= 0 } ?: style
+    fun rowOf(style: Int): Int = columns.getOrNull(columnOf(style))?.indexOf(style)?.coerceAtLeast(0) ?: 0
+    fun rowCount(column: Int): Int = columns.getOrNull(column)?.size ?: 1
+
+    // the style index of the card at that column and row
+    fun styleAt(column: Int, row: Int): Int =
+        columns.getOrNull(column)?.let { it.getOrNull(row.coerceIn(0, it.lastIndex)) } ?: column
+
+    private val rowMotions = HashMap<Int, Motion>()
+
+    init {
+        // made up front, so a card being drawn never has to make one
+        columns.indices.forEach { rows(it) }
+    }
+
+    // each column's position among its variants, in cards; each keeps where it was left while the others are swiped through
+    fun rows(column: Int): Motion = rowMotions.getOrPut(column) { Motion(scope) }
+
+    // the column the live player's card is in, and its row there
+    val liveColumn: Int get() = columnOf(livePage)
+    val liveRow: Int get() = rowOf(livePage)
+
     var stage by mutableStateOf(StudioStage.PLAYER)
         private set
 
@@ -167,7 +194,7 @@ class PlayerStudioState internal constructor(private val scope: CoroutineScope) 
     /** the bottom bar pulled up to the middle of the screen, its styles beside it */
     val bar = Motion(scope)
 
-    /** the selector's position, in cards */
+    /** the selector's position across its columns, in cards */
     val page = Motion(scope)
     /**
      * 1 while a newly picked style's card still covers the live player, which is building that
@@ -227,7 +254,10 @@ class PlayerStudioState internal constructor(private val scope: CoroutineScope) 
     fun open(livePage: Int) {
         if (stage != StudioStage.PLAYER) return
         this.livePage = livePage
-        page.value = livePage.toFloat()
+        page.value = liveColumn.toFloat()
+        // every column opens on its main look, the live one on the variant that's playing
+        rowMotions.forEach { (column, motion) -> motion.value = if (column == liveColumn) liveRow.toFloat() else 0f }
+        rows(liveColumn).value = liveRow.toFloat()
         handoff.value = 0f
         stage = StudioStage.SELECTOR
         sheet = null
@@ -245,10 +275,10 @@ class PlayerStudioState internal constructor(private val scope: CoroutineScope) 
      * card, which keeps covering it while the style is built behind it; only then does the player
      * grow back out, the card fading into it. Nothing heavy happens while anything moves.
      */
-    fun settleOn(index: Int, restyled: Boolean, after: () -> Unit = {}) {
+    fun settleOn(index: Int, restyled: Boolean, velocity: Float = 0f, after: () -> Unit = {}) {
         livePage = index
         if (!restyled) {
-            go(StudioStage.PLAYER)
+            go(StudioStage.PLAYER, velocity)
             after()
             return
         }
@@ -256,24 +286,27 @@ class PlayerStudioState internal constructor(private val scope: CoroutineScope) 
         stage = StudioStage.PLAYER
         sheet = null
         // a tapped card at the side glides to the middle meanwhile
-        page.animateTo(index.toFloat())
+        page.animateTo(liveColumn.toFloat())
+        rows(liveColumn).animateTo(liveRow.toFloat())
         scope.launch {
             repeat(HandoffFrames) { withFrameNanos { } }
             if (stage != StudioStage.PLAYER) return@launch
-            go(StudioStage.PLAYER)
+            go(StudioStage.PLAYER, velocity)
             after()
         }
     }
 
-    fun go(target: StudioStage) {
+    // selectorVelocity carries a swipe down's speed into the cards sinking back into the player
+    fun go(target: StudioStage, selectorVelocity: Float = 0f) {
         stage = target
         sheet = null
         when (target) {
             StudioStage.PLAYER -> {
                 if (handoff.value > 0f) handoff.animateTo(0f, spec = androidx.compose.animation.core.tween(280, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
-                selector.animateTo(0f); edit.animateTo(0f); cover.animateTo(0f)
+                selector.animateTo(0f, velocity = selectorVelocity); edit.animateTo(0f); cover.animateTo(0f)
                 backdrop.animateTo(0f); middle.animateTo(0f); menu.animateTo(0f); bar.animateTo(0f)
-                page.animateTo(livePage.toFloat())
+                page.animateTo(liveColumn.toFloat())
+                rows(liveColumn).animateTo(liveRow.toFloat())
             }
             StudioStage.SELECTOR -> {
                 handoff.value = 0f
@@ -320,7 +353,8 @@ class PlayerStudioState internal constructor(private val scope: CoroutineScope) 
         stage = StudioStage.PLAYER
         sheet = null
         listOf(selector, edit, cover, backdrop, middle, menu, bar, handoff).forEach { it.value = 0f }
-        page.value = livePage.toFloat()
+        page.value = liveColumn.toFloat()
+        rows(liveColumn).value = liveRow.toFloat()
         coverPage.value = coverCommitted.toFloat()
         backdropPage.value = backdropCommitted.toFloat()
         barPage.value = barCommitted.toFloat()
@@ -333,9 +367,9 @@ class PlayerStudioState internal constructor(private val scope: CoroutineScope) 
 }
 
 @Composable
-fun rememberPlayerStudioState(): PlayerStudioState {
+fun rememberPlayerStudioState(columns: List<List<Int>> = emptyList()): PlayerStudioState {
     val scope = rememberCoroutineScope()
-    return remember(scope) { PlayerStudioState(scope) }
+    return remember(scope, columns) { PlayerStudioState(scope, columns) }
 }
 
 // ---- geometry ---------------------------------------------------------------------------

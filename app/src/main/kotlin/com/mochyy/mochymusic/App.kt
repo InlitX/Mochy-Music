@@ -78,6 +78,7 @@ class App : Application(), SingletonImageLoader.Factory {
         }
 
         PreferencesCache.start(this, applicationScope)
+        com.mochyy.mochymusic.utils.NotRecommended.init(this)
 
         applicationScope.launch(Dispatchers.IO) {
             try {

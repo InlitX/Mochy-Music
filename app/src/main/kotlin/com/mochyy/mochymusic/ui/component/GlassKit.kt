@@ -519,6 +519,8 @@ fun GlassPillBackground(
     bleed: Boolean = false,
     // grows the blur from sharp at the start to blurRadius at the far end, in one pass (android 13+)
     progressive: BlurDirection? = null,
+    // how far along the progressive blur reaches its full radius (1 is the far end), holding it from there on
+    progressiveRamp: Float = 1f,
     modifier: Modifier = Modifier
 ) {
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -539,6 +541,7 @@ fun GlassPillBackground(
         tileMode = tileMode,
         mask = mask,
         growDown = progressive?.let { it == BlurDirection.TopToBottom },
+        growRamp = progressiveRamp,
         modifier = modifier
             .then(if (shape != null) Modifier.clip(shape) else Modifier)
             .then(

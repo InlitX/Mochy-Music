@@ -26,14 +26,24 @@ private const val BackgroundAutoCap = 720
 fun YouTubeVideoBackground(
     video: SongVideo?,
     isPlaying: Boolean,
-    glassState: GlassState,
+    // null when nothing mirrors the video, so its picture isn't recorded for nobody
+    glassState: GlassState?,
     modifier: Modifier = Modifier,
+    // the flagship's moving backdrop following the video's colours
+    onFrameColors: ((List<androidx.compose.ui.graphics.Color>) -> Unit)? = null,
+    // told when the video's picture is up over the cover, and when it's gone again
+    onShowingChange: ((Boolean) -> Unit)? = null,
 ) {
     if (video == null) return
     // a decoder for every song skipped past ran memory past a gigabyte and got the app killed, so the video waits for the song to stay
     val settledId = rememberSettled(video.videoId, VideoSettleMs) ?: return
     if (settledId != video.videoId) return
     val session = rememberYouTubeVideoSession(settledId)
+    val currentOnShowing by rememberUpdatedState(onShowingChange)
+    androidx.compose.runtime.LaunchedEffect(session) {
+        androidx.compose.runtime.snapshotFlow { session.hasFrame }.collect { currentOnShowing?.invoke(it) }
+    }
+    androidx.compose.runtime.DisposableEffect(session) { onDispose { currentOnShowing?.invoke(false) } }
     val playing by rememberUpdatedState(isPlaying)
     DriveYouTubeVideo(session, video, isPlaying, autoCap = BackgroundAutoCap)
     Box(modifier = modifier) {
@@ -42,6 +52,7 @@ fun YouTubeVideoBackground(
             isPlaying = isPlaying,
             glassState = glassState,
             glassActive = { playing },
+            onFrameColors = onFrameColors,
             modifier = Modifier.fillMaxSize(),
         )
         // the cover shows until the first picture, so only a picture that froze mid-song gets a loader

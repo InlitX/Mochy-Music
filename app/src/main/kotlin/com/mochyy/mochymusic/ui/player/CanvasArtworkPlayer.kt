@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -63,6 +66,10 @@ private object CanvasVideoCache {
 /** how long a canvas has to stay before its video starts */
 private const val CanvasSettleMs = 700L
 
+// the playing canvas is read this small, this often, for the backdrop's colours
+private const val CanvasSamplePx = 32
+private const val CanvasSampleMs = 1_500L
+
 @Composable
 fun CanvasArtworkPlayer(
     primaryUrl: String?,
@@ -72,6 +79,8 @@ fun CanvasArtworkPlayer(
     blurRadiusPx: Float = 0f,
     // told when the first frame is up and when it's gone again, so a mirror of it knows when there's something to show
     onReadyChange: ((Boolean) -> Unit)? = null,
+    // the flagship's moving backdrop, fed four tones from a tiny copy of the playing frame
+    onFrameColors: ((List<androidx.compose.ui.graphics.Color>) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val primary = primaryUrl?.takeIf { it.isNotBlank() }
@@ -81,6 +90,9 @@ fun CanvasArtworkPlayer(
     var currentUrl by remember(initial) { mutableStateOf(initial) }
     var isVideoReady by remember(initial) { mutableStateOf(false) }
     val currentOnReadyChange by rememberUpdatedState(onReadyChange)
+    // nothing to show with the app in the background, and a looping canvas kept decoding there for nobody
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val shouldPlay = isPlaying && lifecycle.isAtLeast(Lifecycle.State.STARTED)
     LaunchedEffect(isVideoReady) { currentOnReadyChange?.invoke(isVideoReady) }
     DisposableEffect(Unit) { onDispose { currentOnReadyChange?.invoke(false) } }
 
@@ -145,19 +157,29 @@ fun CanvasArtworkPlayer(
         }
     val aspectRatioFrameLayout = remember {
         AspectRatioFrameLayout(context).apply {
-            layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            // zoomed past the cover's box and centred inside the frame below, not by compose
+            layoutParams = android.widget.FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT, android.view.Gravity.CENTER)
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        }
+    }
+    // exactly the cover's size: given the zoomed view itself, compose shifted it left to centre it, and the cover's glass recorded it
+    // from that shifted corner, so its mirror and blurred copy lost their right side (the cut on animated covers)
+    val frame = remember {
+        android.widget.FrameLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            clipChildren = true
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
     }
     // the texture outlives a session, so a new url's player draws into the same view
     val texture = remember { CanvasTexture() }
     val session = remember(initial) {
-        CanvasVideoSession(context, mediaSourceFactory, isPlaying).also { texture.session = it }
+        CanvasVideoSession(context, mediaSourceFactory, shouldPlay).also { texture.session = it }
     }
 
-    LaunchedEffect(isPlaying) {
-        session.setPlaying(isPlaying)
+    LaunchedEffect(shouldPlay) {
+        session.setPlaying(shouldPlay)
     }
 
     DisposableEffect(session, primary, fallback) {
@@ -203,7 +225,7 @@ fun CanvasArtworkPlayer(
                 .build()
 
         isVideoReady = false
-        session.load(mediaItem, isPlaying)
+        session.load(mediaItem, shouldPlay)
     }
 
     DisposableEffect(session) {
@@ -218,17 +240,35 @@ fun CanvasArtworkPlayer(
         label = "canvasAlpha"
     )
 
+    val currentOnFrameColors by rememberUpdatedState(onFrameColors)
+    val sampling = onFrameColors != null
+    LaunchedEffect(isVideoReady, sampling, shouldPlay) {
+        if (!isVideoReady || !sampling) return@LaunchedEffect
+        val sample = android.graphics.Bitmap.createBitmap(CanvasSamplePx, CanvasSamplePx, android.graphics.Bitmap.Config.ARGB_8888)
+        val pixels = IntArray(CanvasSamplePx * CanvasSamplePx)
+        // a paused canvas never changes, so it's read once and left alone
+        do {
+            val view = aspectRatioFrameLayout.getChildAt(0) as? TextureView
+            if (view != null && view.isAvailable && runCatching { view.getBitmap(sample) }.isSuccess) {
+                sample.getPixels(pixels, 0, CanvasSamplePx, 0, 0, CanvasSamplePx, CanvasSamplePx)
+                currentOnFrameColors?.invoke(
+                    com.mochyy.mochymusic.ui.player.flagship.ambientTones(pixels, CanvasSamplePx, CanvasSamplePx)
+                )
+            }
+            kotlinx.coroutines.delay(CanvasSampleMs)
+        } while (shouldPlay)
+    }
+
     AndroidView(
         factory = { viewContext ->
-            aspectRatioFrameLayout.apply {
-                if (childCount == 0) {
+            if (aspectRatioFrameLayout.childCount == 0) {
                 val textureView = TextureView(viewContext).apply {
                     layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
                     surfaceTextureListener = texture
                 }
-                addView(textureView)
-                }
+                aspectRatioFrameLayout.addView(textureView)
             }
+            frame.apply { if (childCount == 0) addView(aspectRatioFrameLayout) }
         },
         update = { view ->
 

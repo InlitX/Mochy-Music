@@ -327,12 +327,16 @@ class MainActivity : ComponentActivity() {
     // each return to the app binds again, release the connection it replaces or its listener and poller keep running
     private fun connectTo(binder: MusicBinder) {
         val previous = playerConnection
-        playerConnection = PlayerConnection(this, binder, database, lifecycleScope)
+        playerConnection = PlayerConnection(this, binder, database, lifecycleScope).also {
+            // the retry above can land after onStop, so it starts resting if the app is already hidden
+            it.isUiVisible.value = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+        }
         previous?.dispose()
     }
 
     override fun onStart() {
         super.onStart()
+        playerConnection?.isUiVisible?.value = true
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -348,6 +352,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        playerConnection?.isUiVisible?.value = false
         unbindService(serviceConnection)
         super.onStop()
     }
@@ -1344,7 +1349,7 @@ class MainActivity : ComponentActivity() {
         // the full video mode fills the screen sideways, a status bar down one side of it would cut into the picture
         val (playerStyle) = com.mochyy.mochymusic.utils.rememberEnumPreference(
             com.mochyy.mochymusic.constants.PlayerStyleKey,
-            com.mochyy.mochymusic.constants.PlayerStyle.DEFAULT,
+            com.mochyy.mochymusic.constants.PlayerStyle.FLAGSHIP,
         )
         val hideStatusBar = !statusBarShown || playerStyle == com.mochyy.mochymusic.constants.PlayerStyle.VIDEO
         // Back in the app (from Home, the recents, a dialog) it's hidden again: with

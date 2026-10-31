@@ -347,6 +347,8 @@ constructor(
      */
     private fun losslessStream(mediaId: String): Pair<String, Map<String, String>>? {
         losslessStreams[mediaId]?.let { return it }
+        // a module switched off is detached everywhere, downloads too
+        if (!sourceModules.isEnabled(MonochromeModule.Id)) return null
         val module = sourceModules.module(MonochromeModule.Id) ?: return null
         val song = runBlocking(Dispatchers.IO) { database.song(mediaId).first() } ?: return null
         val track = TrackQuery(

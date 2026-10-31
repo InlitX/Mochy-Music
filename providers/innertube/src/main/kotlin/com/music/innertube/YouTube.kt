@@ -65,6 +65,7 @@ import com.music.innertube.pages.SearchSummary
 import com.music.innertube.pages.SearchSummaryPage
 import io.ktor.client.call.body
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Url
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -1216,25 +1217,42 @@ object YouTube {
         innerTube.player(client, videoId, playlistId, signatureTimestamp, poToken).body<PlayerResponse>()
     }
 
-    suspend fun registerPlayback(playlistId: String? = null, playbackTracking: String) = runCatching {
-        val cpn = (1..16).map {
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"[Random.Default.nextInt(
-                0,
-                64
-            )]
-        }.joinToString("")
+    // a fresh id for one listen, youtube ties a song's play and its watch time together by it
+    fun newPlaybackNonce(): String = (1..16).map {
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"[Random.Default.nextInt(0, 64)]
+    }.joinToString("")
 
-        val playbackUrl = playbackTracking.replace(
-            "https://s.youtube.com",
-            "https://music.youtube.com",
-        )
-
+    suspend fun registerPlayback(
+        playlistId: String? = null,
+        playbackTracking: String,
+        cpn: String = newPlaybackNonce(),
+    ) = runCatching {
         innerTube.registerPlayback(
-            url = playbackUrl,
+            url = musicStatsUrl(playbackTracking),
             playlistId = playlistId,
             cpn = cpn
         )
     }
+
+    // says which stretches of a song were heard, fields the link already carries (like len) aren't sent twice
+    suspend fun reportWatchtime(
+        watchtimeTracking: String,
+        cpn: String,
+        params: Map<String, String>,
+        playlistId: String? = null,
+    ) = runCatching {
+        val url = musicStatsUrl(watchtimeTracking)
+        val alreadyInUrl = Url(url).parameters.names()
+        innerTube.registerPlayback(
+            url = url,
+            playlistId = playlistId,
+            cpn = cpn,
+            extraParams = params.filterKeys { it !in alreadyInUrl },
+        )
+    }
+
+    // the player hands out s.youtube.com links, the music site takes the same ones for its own plays
+    private fun musicStatsUrl(url: String) = url.replace("https://s.youtube.com", "https://music.youtube.com")
 
     suspend fun next(endpoint: WatchEndpoint, continuation: String? = null): Result<NextResult> = runCatching {
         val response = innerTube.next(

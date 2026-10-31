@@ -40,6 +40,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -61,8 +63,13 @@ import com.mochyy.mochymusic.constants.PlayerStyle
 import com.mochyy.mochymusic.ui.player.styles.AlternatePlayerStyle
 import com.mochyy.mochymusic.ui.player.styles.StyleActions
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import com.mochyy.mochymusic.ui.utils.stableStatusBars
+
+// a card a row above the one in view is gone: it fades as it slides up out of the way
+private fun rowLeaving(row: Int, rowPosition: Float): Float = (1f - (rowPosition - row)).coerceIn(0f, 1f)
 
 /** the selector's geometry at progress [e] (0 the full player, 1 cards) on a [w] x [h] screen */
 internal class CardGeometry(val e: Float, val w: Float, val h: Float, gapPx: Float) {
@@ -71,8 +78,12 @@ internal class CardGeometry(val e: Float, val w: Float, val h: Float, gapPx: Flo
     val centerY = h / 2f + (CardCenterY * h - h / 2f) * e
     val cardW = w * scale
     val cardH = h * scale
+    // a column's variants sit one card and a gap apart, top to bottom
+    val strideY = h * scale + gapPx
     fun centerX(page: Int, position: Float) = w / 2f + (page - position) * stride
+    fun centerY(row: Int, rowPosition: Float) = centerY + (row - rowPosition) * strideY
     fun visible(page: Int, position: Float) = abs(centerX(page, position) - w / 2f) < w / 2f + cardW / 2f
+    fun visibleY(row: Int, rowPosition: Float) = abs(centerY(row, rowPosition) - h / 2f) < h / 2f + cardH / 2f
 }
 
 /**
@@ -99,8 +110,13 @@ fun Modifier.studioSheetLayer(studio: PlayerStudioState): Modifier = graphicsLay
     if (e > 0.0005f) {
         val g = CardGeometry(e, w, h, gap)
         scale = g.scale
-        tx = g.centerX(studio.livePage, studio.page.value) - w / 2f
-        ty = g.centerY - h / 2f
+        val column = studio.liveColumn
+        val rowPosition = studio.rows(column).value
+        tx = g.centerX(column, studio.page.value) - w / 2f
+        ty = g.centerY(studio.liveRow, rowPosition) - h / 2f
+        // scrolled past it, it fades away upward instead of hanging behind the header
+        val leaving = rowLeaving(studio.liveRow, rowPosition)
+        if (leaving < 1f) alpha = leaving
         corner = CardCorner.toPx() * e.coerceIn(0f, 1f)
     }
     if (b > 0.0005f) {
@@ -120,23 +136,13 @@ fun Modifier.studioSheetLayer(studio: PlayerStudioState): Modifier = graphicsLay
     clip = true
 }
 
-/**
- * The player selector: every style as a card, the live player one of them. Holding the player (or
- * "edit player") shrinks the player straight into its card - the same pixels, nothing swapped or
- * faded - while the other styles slide in beside it, each previewed as itself. Swiping looks
- * through them; a tap on a card, Set, or a swipe down puts the style in view on (the back button
- * leaves it as it was). The editable styles have Edit beside Set; the others' Set fills the width.
- *
- * Laid out like the rest of the app: a small "Styles" header with the style in view under it and
- * the back button beside it, the cards, page dots, and one tight row of buttons. Every card stays
- * composed while the selector is up and only its layer moves, so a swipe never has to build a
- * card on the way.
- */
+// the player selector: every style as a card, the live player one of them, the flagship's older layouts stacked under it
 @Composable
 fun PlayerSelectorOverlay(
     studio: PlayerStudioState,
     styles: List<PlayerStyle>,
-    onSet: (Int) -> Unit,
+    // a style index, and how fast the cards were sinking when a swipe down set it
+    onSet: (Int, Float) -> Unit,
     /** the editor for the focused style (its index) */
     onEdit: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -151,15 +157,23 @@ fun PlayerSelectorOverlay(
     val previewActions = remember { StyleActions(onOtherMenu = {}, onEditPlayer = {}) }
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val currentOnSet by rememberUpdatedState(onSet)
-    val focused by remember(studio, styles.size) {
-        derivedStateOf { studio.page.value.roundToInt().coerceIn(0, styles.lastIndex) }
+    val columnCount = if (studio.columns.isEmpty()) styles.size else studio.columns.size
+    val lastColumn = columnCount - 1
+    val focusedColumn by remember(studio, columnCount) {
+        derivedStateOf { studio.page.value.roundToInt().coerceIn(0, lastColumn) }
+    }
+    val focused by remember(studio, columnCount) {
+        derivedStateOf {
+            val column = focusedColumn
+            val row = studio.rows(column).value.roundToInt().coerceIn(0, studio.rowCount(column) - 1)
+            studio.styleAt(column, row).coerceIn(0, styles.lastIndex)
+        }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
         val gapPx = with(density) { CardGap.toPx() }
-        val last = styles.lastIndex
         fun geometry() = CardGeometry(studio.selector.value, w, h, gapPx)
         // where the cards sit once the selector is up: the dots and the buttons hang under them
         val restingBottomPx = CardGeometry(1f, w, h, gapPx).let { it.centerY + it.cardH / 2f }
@@ -168,17 +182,22 @@ fun PlayerSelectorOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .then(
-                    if (!active) Modifier else Modifier.pointerInput(styles.size, w) {
+                    if (!active) Modifier else Modifier.pointerInput(columnCount, w) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             val tracker = VelocityTracker()
                             tracker.addPointerInputChange(down)
                             val startPage = studio.page.value
+                            val column = focusedColumn
+                            val rows = studio.rows(column)
+                            val startRow = rows.value
+                            val lastRow = studio.rowCount(column) - 1
                             var dx = 0f
                             var dy = 0f
-                            var mode = 0 // 0 undecided, 1 horizontal, 2 vertical
+                            var mode = 0 // 0 undecided, 1 across the columns, 2 up and down
                             var released = false
-                            val stride = CardGeometry(1f, w, h, gapPx).stride
+                            val resting = CardGeometry(1f, w, h, gapPx)
+                            val sinkRange = h * 0.9f
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -196,64 +215,98 @@ fun PlayerSelectorOverlay(
                                 if (mode == 1) {
                                     change.consume()
                                     // past the ends it resists
-                                    val raw = startPage - dx / stride
+                                    val raw = startPage - dx / resting.stride
                                     studio.page.value = when {
                                         raw < 0f -> raw * 0.3f
-                                        raw > last -> last + (raw - last) * 0.3f
+                                        raw > lastColumn -> lastColumn + (raw - lastColumn) * 0.3f
                                         else -> raw
                                     }
                                 } else if (mode == 2) {
                                     change.consume()
-                                    // pulling down lets the cards sink back toward the player
-                                    studio.selector.value = (1f - (dy.coerceAtLeast(0f) / (h * 0.9f))).coerceIn(0f, 1f)
+                                    // the variants follow the finger; pulled down past the top one, the cards sink back toward the player
+                                    val raw = startRow - dy / resting.strideY
+                                    if (raw < 0f) {
+                                        rows.value = 0f
+                                        studio.selector.value = (1f + raw * resting.strideY / sinkRange).coerceIn(0f, 1f)
+                                    } else {
+                                        studio.selector.value = 1f
+                                        rows.value = if (raw > lastRow) lastRow + (raw - lastRow) * 0.3f else raw
+                                    }
                                 }
                             }
                             val velocity = tracker.calculateVelocity()
                             when (mode) {
                                 0 -> if (released) {
-                                    // a tap on a card puts that style on: the player grows out of it
-                                    val g = CardGeometry(1f, w, h, gapPx)
                                     val y = down.position.y
-                                    if (y > g.centerY - g.cardH / 2f && y < g.centerY + g.cardH / 2f) {
-                                        val tapped = (studio.page.value + (down.position.x - w / 2f) / g.stride).roundToInt()
-                                        if (tapped in 0..last) currentOnSet(tapped)
+                                    val tappedColumn = (studio.page.value + (down.position.x - w / 2f) / resting.stride).roundToInt()
+                                    if (tappedColumn !in 0..lastColumn) return@awaitEachGesture
+                                    val rowPosition = studio.rows(tappedColumn).value
+                                    val tappedRow = (rowPosition + (y - resting.centerY) / resting.strideY).roundToInt()
+                                    if (tappedRow !in 0 until studio.rowCount(tappedColumn)) return@awaitEachGesture
+                                    val onCard = abs(y - resting.centerY(tappedRow, rowPosition)) < resting.cardH / 2f
+                                    if (!onCard) return@awaitEachGesture
+                                    if (tappedColumn == focusedColumn && tappedRow != rowPosition.roundToInt()) {
+                                        // a tap on the variant peeking below brings it up
+                                        studio.rows(tappedColumn).animateTo(tappedRow.toFloat())
+                                    } else {
+                                        // a tap on a card puts that style on: the player grows out of it
+                                        currentOnSet(studio.styleAt(tappedColumn, tappedRow), 0f)
                                     }
                                 }
                                 1 -> {
-                                    val flick = (-velocity.x / stride).coerceIn(-3f, 3f)
-                                    val target = (studio.page.value + flick * 0.3f).roundToInt().coerceIn(0, last)
+                                    val flick = (-velocity.x / resting.stride).coerceIn(-3f, 3f)
+                                    val target = (studio.page.value + flick * 0.3f).roundToInt().coerceIn(0, lastColumn)
                                     studio.page.animateTo(target.toFloat(), velocity = flick)
                                 }
-                                // pulled down far (or fast) enough: the style in view goes on, as with Set
-                                2 -> if (dy > 120.dp.toPx() || velocity.y > 1_400f) {
-                                    currentOnSet(studio.page.value.roundToInt().coerceIn(0, last))
+                                2 -> if (studio.selector.value < 0.999f) {
+                                    // the cards follow the finger down, so they keep its speed whichever way they go
+                                    val sinkVelocity = -velocity.y / sinkRange
+                                    val pulled = (1f - studio.selector.value) * sinkRange
+                                    if (pulled > 120.dp.toPx() || velocity.y > 1_400f) {
+                                        currentOnSet(studio.styleAt(column, 0), sinkVelocity)
+                                    } else {
+                                        studio.selector.animateTo(1f, velocity = sinkVelocity)
+                                    }
                                 } else {
-                                    studio.selector.animateTo(1f)
+                                    // a quick flick moves on a variant, a slow one settles on the nearest; either way it keeps the finger's speed
+                                    val rowVelocity = (-velocity.y / resting.strideY).coerceIn(-4f, 4f)
+                                    val position = rows.value
+                                    val target = when {
+                                        rowVelocity > 0.35f -> maxOf(ceil(position), (position + rowVelocity * 0.25f).roundToInt().toFloat())
+                                        rowVelocity < -0.35f -> minOf(floor(position), (position + rowVelocity * 0.25f).roundToInt().toFloat())
+                                        else -> position.roundToInt().toFloat()
+                                    }.coerceIn(0f, lastRow.toFloat())
+                                    rows.animateTo(target, velocity = rowVelocity)
                                 }
                             }
                         }
                     }
                 ),
         ) {
-            // the other styles, as themselves
+            // every style, as itself
             styles.forEachIndexed { index, style ->
                 key(style) {
+                    val column = studio.columnOf(index)
+                    val row = studio.rowOf(index)
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
                                 val g = geometry()
                                 val position = studio.page.value
+                                val rowPosition = studio.rows(column).value
                                 // the live card is the player itself, except while a newly picked
                                 // style is being built behind it: then its card covers it, and
                                 // fades into it as it grows
                                 val live = index == studio.livePage
-                                val visible = g.visible(index, position) && (!live || studio.handoff.value > 0.001f)
-                                alpha = if (!visible) 0f else if (live) studio.handoff.value.coerceIn(0f, 1f) else 1f
+                                val leaving = rowLeaving(row, rowPosition)
+                                val visible = g.visible(column, position) && g.visibleY(row, rowPosition) && leaving > 0f &&
+                                    (!live || studio.handoff.value > 0.001f)
+                                alpha = if (!visible) 0f else if (live) studio.handoff.value.coerceIn(0f, 1f) * leaving else leaving
                                 scaleX = g.scale
                                 scaleY = g.scale
-                                translationX = g.centerX(index, position) - w / 2f
-                                translationY = g.centerY - h / 2f
+                                translationX = g.centerX(column, position) - w / 2f
+                                translationY = g.centerY(row, rowPosition) - h / 2f
                                 // springs settle a hair past their ends: a corner must never go below zero
                                 shape = RoundedCornerShape(CardCorner.toPx() * g.e.coerceIn(0f, 1f) / g.scale.coerceAtLeast(0.01f))
                                 clip = true
@@ -262,36 +315,78 @@ fun PlayerSelectorOverlay(
                     ) {
                         // every card built, the live one too: picking a style hands over to its
                         // card, which mustn't be built in the frame it has to cover the player
-                        if (style == PlayerStyle.DEFAULT) {
-                            FlagshipPreview()
-                        } else if (style == PlayerStyle.TURNTABLE) {
-                            FlagshipPreview(turntable = true)
-                        } else {
-                            AlternatePlayerStyle(style = style, actions = previewActions, preview = true, modifier = Modifier.fillMaxSize())
+                        when (style) {
+                            PlayerStyle.FLAGSHIP -> FlagshipPreview(flagship = true)
+                            PlayerStyle.CLASSIC -> FlagshipPreview()
+                            PlayerStyle.TURNTABLE -> FlagshipPreview(turntable = true)
+                            else -> AlternatePlayerStyle(style = style, actions = previewActions, preview = true, modifier = Modifier.fillMaxSize())
                         }
                     }
                 }
             }
 
-            // a hairline round every card, the live one included
+            // a hairline round every card, the live one included, and the focused column's variant dots
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val g = geometry()
                 if (g.e < 0.02f) return@Canvas
+                val e = g.e.coerceIn(0f, 1f)
                 val stroke = 1.dp.toPx()
-                val radius = CardCorner.toPx() * g.e.coerceIn(0f, 1f)
+                val radius = CardCorner.toPx() * e
                 val position = studio.page.value
                 styles.indices.forEach { index ->
-                    if (!g.visible(index, position)) return@forEach
-                    val cx = g.centerX(index, position)
+                    val column = studio.columnOf(index)
+                    val row = studio.rowOf(index)
+                    val rowPosition = studio.rows(column).value
+                    if (!g.visible(column, position) || !g.visibleY(row, rowPosition)) return@forEach
+                    val cx = g.centerX(column, position)
+                    val cy = g.centerY(row, rowPosition)
                     drawRoundRect(
-                        color = Color.White.copy(alpha = 0.16f * g.e.coerceIn(0f, 1f)),
-                        topLeft = Offset(cx - g.cardW / 2f + stroke / 2f, g.centerY - g.cardH / 2f + stroke / 2f),
+                        color = Color.White.copy(alpha = 0.16f * e * rowLeaving(row, rowPosition)),
+                        topLeft = Offset(cx - g.cardW / 2f + stroke / 2f, cy - g.cardH / 2f + stroke / 2f),
                         size = Size(g.cardW - stroke, g.cardH - stroke),
                         cornerRadius = CornerRadius(radius),
                         style = Stroke(stroke),
                     )
                 }
+                val column = focusedColumn
+                val count = studio.rowCount(column)
+                if (count > 1) {
+                    // they fade as a swipe leaves the column, and the one in view is white
+                    val settled = (1f - abs(position - column) * 2f).coerceIn(0f, 1f)
+                    val dot = 8.dp.toPx()
+                    val step = 17.dp.toPx()
+                    val x = (w - g.cardW) / 4f
+                    val top = g.centerY - g.cardH / 2f + 26.dp.toPx()
+                    val rowPosition = studio.rows(column).value.coerceIn(0f, (count - 1).toFloat())
+                    repeat(count) { i ->
+                        val near = (1f - abs(rowPosition - i)).coerceIn(0f, 1f)
+                        drawCircle(
+                            color = Color.White.copy(alpha = (0.32f + 0.6f * near) * settled * e),
+                            radius = dot / 2f,
+                            center = Offset(x, top + i * step),
+                        )
+                    }
+                }
             }
+
+            // the variant peeking in below fades into the dark under the buttons, so they always read
+            Spacer(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithCache {
+                        val from = restingBottomPx + 2.dp.toPx()
+                        val scrim = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.9f),
+                            startY = from,
+                            endY = from + 64.dp.toPx(),
+                        )
+                        onDrawBehind {
+                            val e = studio.selector.value.coerceIn(0f, 1f)
+                            if (e > 0.01f) drawRect(scrim, topLeft = Offset(0f, from), alpha = e)
+                        }
+                    },
+            )
 
             // header: back, and "Styles" with the style in view under it, sliding down from above
             Box(
@@ -356,12 +451,12 @@ fun PlayerSelectorOverlay(
                         }
                     },
             ) {
-                Canvas(modifier = Modifier.size(width = (styles.size * 11).dp, height = 5.dp)) {
+                Canvas(modifier = Modifier.size(width = (columnCount * 11).dp, height = 5.dp)) {
                     val dot = 5.dp.toPx()
                     val step = 11.dp.toPx()
-                    val position = studio.page.value.coerceIn(0f, last.toFloat())
-                    val start = (size.width - (styles.size - 1) * step - dot) / 2f
-                    styles.indices.forEach { i ->
+                    val position = studio.page.value.coerceIn(0f, lastColumn.toFloat())
+                    val start = (size.width - (columnCount - 1) * step - dot) / 2f
+                    repeat(columnCount) { i ->
                         // the dot in view is white, its neighbours fade in as a swipe reaches them
                         val near = (1f - abs(position - i)).coerceIn(0f, 1f)
                         drawCircle(
@@ -382,7 +477,7 @@ fun PlayerSelectorOverlay(
                     if (style?.editable == true) {
                         CardButton("Edit", enabled = active, onClick = { onEdit(focused) }, modifier = Modifier.weight(1f))
                     }
-                    CardButton("Set", enabled = active, onClick = { currentOnSet(focused) }, modifier = Modifier.weight(1f))
+                    CardButton("Set", enabled = active, onClick = { currentOnSet(focused, 0f) }, modifier = Modifier.weight(1f))
                 }
             }
         }

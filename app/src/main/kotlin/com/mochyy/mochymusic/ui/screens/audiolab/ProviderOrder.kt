@@ -136,7 +136,7 @@ fun ProviderOrder(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.graphicsLayer { alpha = if (on) 1f else 0.45f }) {
-                            ProviderLogo(logo(id), size = 38)
+                            ProviderLogo(logo(id), size = 38, name = name(id))
                         }
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f).graphicsLayer { alpha = if (on) 1f else 0.5f }) {

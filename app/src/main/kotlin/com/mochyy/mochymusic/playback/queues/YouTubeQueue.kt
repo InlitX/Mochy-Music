@@ -8,6 +8,7 @@ import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.pages.NextResult
 import com.mochyy.mochymusic.extensions.toMediaItem
 import com.mochyy.mochymusic.models.MediaMetadata
+import com.mochyy.mochymusic.utils.NotRecommended
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -38,12 +39,20 @@ class YouTubeQueue(
                         }
                     }
 
+                    val mix = isMix()
                     endpoint = nextResult.endpoint
                     continuation = nextResult.continuation
+                    val items = nextResult.items.map { it.toMediaItem() }
+                    val index = nextResult.currentIndexFor(preloadItem?.id ?: endpoint.videoId)
+                    if (!mix) {
+                        return@withContext Queue.Status(title = nextResult.title, items = items, mediaItemIndex = index)
+                    }
+                    // the song you started from still plays even if you hid it, only what youtube adds around it goes
+                    val hidden = NotRecommended.songs
                     return@withContext Queue.Status(
                         title = nextResult.title,
-                        items = nextResult.items.map { it.toMediaItem() },
-                        mediaItemIndex = nextResult.currentIndexFor(preloadItem?.id ?: endpoint.videoId),
+                        items = items.filterIndexed { i, item -> i == index || item.mediaId !in hidden },
+                        mediaItemIndex = index - items.take(index).count { it.mediaId in hidden },
                     )
                 } catch (e: Exception) {
                     lastException = e
@@ -68,7 +77,8 @@ class YouTubeQueue(
                     endpoint = nextResult.endpoint
                     continuation = nextResult.continuation
                     failedPageLoads = 0
-                    return@withContext nextResult.items.map { it.toMediaItem() }
+                    val items = nextResult.items.map { it.toMediaItem() }
+                    return@withContext if (isMix()) items.filter { it.mediaId !in NotRecommended } else items
                 } catch (e: Exception) {
                     lastException = e
                     if (attempt < MAX_RETRIES) delay(RETRY_DELAY_MS * (attempt + 1))
@@ -81,6 +91,12 @@ class YouTubeQueue(
             }
             throw lastException ?: Exception("Failed to get next page")
         }
+    }
+
+    // a song on its own or a radio is youtube picking for you, curated (RDCLAK) and normal playlists and albums play as they are
+    private fun isMix(): Boolean {
+        val playlistId = endpoint.playlistId ?: return true
+        return playlistId.startsWith("RD") && !playlistId.startsWith("RDCLAK")
     }
 
     private fun radioEndpoint(): WatchEndpoint? {

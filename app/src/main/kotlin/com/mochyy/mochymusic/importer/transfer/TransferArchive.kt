@@ -56,12 +56,13 @@ internal object TransferArchive {
     // media3's own database, it holds the list of downloads and the index of the download folder
     const val MediaDatabaseName = "exoplayer_internal.db"
 
-    // the app's own shared preferences worth keeping (audio lab, eq profiles, the home algorithm, source picks, ui scale),
+    // the app's own shared preferences worth keeping (audio lab, eq profiles, the home algorithm, hidden songs, source picks, ui scale),
     // by the name they travel under in the zip and the file name on this phone, so a renamed file still lands in the right place
     val PrefsToCarry = mapOf(
         "audio_lab" to "audio_lab",
         "nanosonic_eq_profiles" to "nanosonic_eq_profiles",
         "listening_signals" to "listening_signals",
+        "not_recommended" to com.mochyy.mochymusic.utils.NotRecommended.PREFS_NAME,
         "source_modules" to "source_modules",
         "display" to "mochy_settings",
     )

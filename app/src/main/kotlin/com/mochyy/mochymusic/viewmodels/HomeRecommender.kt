@@ -9,6 +9,7 @@ import com.mochyy.mochymusic.db.entities.Artist
 import com.mochyy.mochymusic.db.entities.Song
 import com.mochyy.mochymusic.models.MediaMetadata
 import com.mochyy.mochymusic.utils.ListeningGenres
+import com.mochyy.mochymusic.utils.NotRecommended
 import com.music.innertube.YouTube
 import com.music.innertube.models.AlbumItem
 import com.music.innertube.models.BrowseEndpoint
@@ -68,7 +69,7 @@ data class HomeCategory(
 class TasteProfile(
     /** songs played in the last three months */
     val heard: Set<String>,
-    /** songs you skipped lately; they never come back as a recommendation */
+    /** songs you skipped lately or said not to recommend again; they never come back as a recommendation */
     val avoidSongs: Set<String>,
     /** artists you keep skipping, lowercased */
     val avoidArtists: Set<String>,
@@ -111,7 +112,7 @@ class HomeRecommender(
         }
 
         val skips = signals.recentSkips()
-        val avoidSongs = skips.mapTo(HashSet()) { it.songId }
+        val avoidSongs = skips.mapTo(HashSet(NotRecommended.songs)) { it.songId }
         val avoidArtists = skips
             .flatMap { it.artists }
             .map { it.lowercase() }

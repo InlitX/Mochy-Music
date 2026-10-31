@@ -45,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -90,6 +91,7 @@ internal fun SheetTextField(
     maxLines: Int = if (singleLine) 1 else 4,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     leading: (@Composable () -> Unit)? = null,
 ) {
     BasicTextField(
@@ -99,6 +101,7 @@ internal fun SheetTextField(
         maxLines = maxLines,
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
+        visualTransformation = visualTransformation,
         textStyle = TextStyle(
             color = Color.White,
             fontFamily = InterFontFamily,

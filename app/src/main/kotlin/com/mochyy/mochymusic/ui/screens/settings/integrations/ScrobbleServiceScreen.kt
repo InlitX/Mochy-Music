@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -59,15 +61,14 @@ fun ScrobbleServiceScreen(
 
     fun signIn() {
         var sheet: PopupSheetHandle? = null
-        sheet = overlay.showWithHandle(fullBleed = true) {
+        sheet = overlay.showWithHandle {
             ScrobbleSignInContent(
                 site = site,
                 viewModel = viewModel,
                 onSignedIn = { name ->
                     sheet?.dismiss()
-                    Toast.makeText(context, "Signed in to ${site.label} as $name. Songs you play are scrobbled from now on.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.scrobble_signed_in, site.label, name), Toast.LENGTH_LONG).show()
                 },
-                onClose = { sheet?.dismiss() },
             )
         }
     }
@@ -75,9 +76,9 @@ fun ScrobbleServiceScreen(
     SubSettingsScaffold(
         title = site.label,
         onBack = { navController.navigateUp() },
-        backLabel = "Integrations",
+        backLabel = stringResource(R.string.integrations),
     ) {
-        IntegrationPageSubtitle("Scrobbling")
+        IntegrationPageSubtitle(stringResource(R.string.scrobble_page_subtitle))
         ScrobbleAccountGroup(
             site = site,
             username = accounts[site],
@@ -87,32 +88,37 @@ fun ScrobbleServiceScreen(
         Spacer(Modifier.height(16.dp))
 
         // shared by both services, so it reads the same on either page
+        val nowPlayingTitle = stringResource(R.string.scrobble_now_playing)
+        val sendLikesTitle = stringResource(R.string.scrobble_send_likes)
         SettingsGroup(
-            title = "While you listen",
+            title = stringResource(R.string.scrobble_while_listening),
             style = SettingsGroupStyle.Grouped,
             items = listOfNotNull(
                 SettingsItem(
-                    title = { Text("Now Playing") },
+                    title = { Text(nowPlayingTitle) },
                     highlightKey = "Now Playing",
-                    descriptionText = "Show the song you're on right now on your profile",
+                    searchText = nowPlayingTitle,
+                    descriptionText = stringResource(R.string.scrobble_now_playing_desc),
                     icon = painterResource(R.drawable.music_note),
                     iconShape = CircleShape,
                     onClick = { onNowPlayingChange(!nowPlaying) },
                     trailingContent = { AppSwitch(checked = nowPlaying, onCheckedChange = onNowPlayingChange) },
                 ),
                 SettingsItem(
-                    title = { Text("Send likes") },
+                    title = { Text(sendLikesTitle) },
                     highlightKey = "Send likes",
-                    descriptionText = "Liking a song here loves it there too",
+                    searchText = sendLikesTitle,
+                    descriptionText = stringResource(R.string.scrobble_send_likes_desc),
                     icon = painterResource(R.drawable.favorite),
                     iconShape = CircleShape,
                     onClick = { onSendLikesChange(!sendLikes) },
                     trailingContent = { AppSwitch(checked = sendLikes, onCheckedChange = onSendLikesChange) },
                 ),
                 if (pending > 0) {
+                    val waiting = pluralStringResource(R.plurals.scrobble_plays_waiting, pending, pending)
                     SettingsItem(
-                        title = { Text(if (pending == 1) "1 play waiting to send" else "$pending plays waiting to send") },
-                        descriptionText = "They go out on their own once you're online. Tap to send now",
+                        title = { Text(waiting) },
+                        descriptionText = stringResource(R.string.scrobble_plays_waiting_desc),
                         icon = painterResource(R.drawable.cloud),
                         iconShape = CircleShape,
                         onClick = viewModel::sendNow,
@@ -138,13 +144,11 @@ private fun ScrobbleAccountGroup(
     val items = if (username == null) {
         listOf(
             SettingsItem(
-                title = { Text("Sign in to ${site.label}") },
+                title = { Text(stringResource(R.string.scrobble_sign_in_title, site.label)) },
                 highlightKey = site.label,
-                descriptionText = if (site.api.isConfigured) {
-                    "Keep your listening history, stats and recommendations there"
-                } else {
-                    "Not set up in this build of Mochy"
-                },
+                descriptionText = stringResource(
+                    if (site.api.isConfigured) R.string.scrobble_sign_in_desc else R.string.scrobble_not_set_up,
+                ),
                 icon = painterResource(R.drawable.login),
                 iconShape = CircleShape,
                 enabled = site.api.isConfigured,
@@ -154,29 +158,32 @@ private fun ScrobbleAccountGroup(
     } else {
         listOf(
             SettingsItem(
-                title = { Text("Scrobble to ${site.label}") },
+                title = { Text(stringResource(R.string.scrobble_to, site.label)) },
                 highlightKey = site.label,
-                descriptionText = if (enabled) "Signed in as $username" else "Paused. Signed in as $username",
+                descriptionText = stringResource(
+                    if (enabled) R.string.scrobble_signed_in_as else R.string.scrobble_paused_signed_in_as,
+                    username,
+                ),
                 icon = painterResource(R.drawable.music_history),
                 iconShape = CircleShape,
                 onClick = { onEnabledChange(!enabled) },
                 trailingContent = { AppSwitch(checked = enabled, onCheckedChange = onEnabledChange) },
             ),
             SettingsItem(
-                title = { Text("Open your profile") },
-                descriptionText = "Your scrobbles and stats on ${site.label}",
+                title = { Text(stringResource(R.string.scrobble_open_profile)) },
+                descriptionText = stringResource(R.string.scrobble_open_profile_desc, site.label),
                 icon = painterResource(R.drawable.web_link),
                 iconShape = CircleShape,
                 onClick = { uriHandler.openUri(site.profileUrl(username)) },
             ),
             SettingsItem(
-                title = { Text("Sign out") },
-                descriptionText = "Mochy stops scrobbling to ${site.label}",
+                title = { Text(stringResource(R.string.scrobble_sign_out)) },
+                descriptionText = stringResource(R.string.scrobble_sign_out_desc, site.label),
                 icon = painterResource(R.drawable.logout),
                 iconShape = CircleShape,
                 onClick = onSignOut,
             ),
         )
     }
-    SettingsGroup(title = "Account", style = SettingsGroupStyle.Grouped, items = items)
+    SettingsGroup(title = stringResource(R.string.scrobble_account), style = SettingsGroupStyle.Grouped, items = items)
 }

@@ -39,6 +39,7 @@ include(":providers:wikipedia")
 include(":modules:api")
 include(":modules:applemusic")
 include(":modules:monochrome")
+include(":modules:jiosaavn")
 
 
 // local newpipe extractor

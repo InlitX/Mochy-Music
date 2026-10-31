@@ -316,6 +316,12 @@ class SongCarousel internal constructor(private val scope: CoroutineScope) {
         firePendingSkip()
     }
 
+    // back on its song if something left it part-way: a moving cover rides the row, so even a sliver off shows as a cut
+    fun ensureSettled() {
+        if (dragging || job?.isActive == true) return
+        if (abs(position - restingStep()) > RestDistance) glideTo(restingStep())
+    }
+
     // the finger came up without swiping: whatever was caught settles on its song again
     fun letGo() {
         if (dragging) return

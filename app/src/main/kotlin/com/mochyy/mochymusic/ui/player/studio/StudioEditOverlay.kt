@@ -104,6 +104,7 @@ internal val PlayerBackgroundStyle.studioName: String
         PlayerBackgroundStyle.SOLID -> "Solid"
         PlayerBackgroundStyle.DARK_GRADIENT -> "Dark gradient"
         PlayerBackgroundStyle.APPLE_MUSIC -> "Apple Music"
+        PlayerBackgroundStyle.AMBIENT -> "Ambient"
     }
 
 private fun inter(size: TextUnit, weight: FontWeight = FontWeight.Bold) = studioText(size, weight)

@@ -454,6 +454,7 @@ internal fun ExpandingCardSurface(
     transition: PlayerPageTransition,
     morph: CardMorphState,
     modifier: Modifier = Modifier,
+    look: PlayerCardLook = ClassicCardLook,
 ) {
     val active by remember {
         derivedStateOf {
@@ -473,20 +474,20 @@ internal fun ExpandingCardSurface(
 
                 val card = morph.cardRectOr(size.width, size.height, this)
                 val r = expandingCardRect(card, size.width, size.height, e)
-                val radius = mixF(PlayerCardCorner.toPx(), 0f, t)
+                val radius = mixF(look.corner.toPx(), 0f, t)
                 val corner = androidx.compose.ui.geometry.CornerRadius(radius, radius)
-                val fill = FrontCardFillAlpha * (1f - smoothstepF((t - 0.3f) / 0.65f))
+                val fill = look.frontFill * (1f - smoothstepF((t - 0.3f) / 0.65f))
                 if (fill > 0.002f) {
                     drawRoundRect(Color.White.copy(alpha = fill), r.topLeft, r.size, corner)
                 }
-                val border = FrontCardBorderAlpha * (1f - smoothstepF(t / 0.55f))
+                val border = look.frontBorder * (1f - smoothstepF(t / 0.55f))
                 if (border > 0.002f) {
                     drawRoundRect(
                         color = Color.White.copy(alpha = border),
                         topLeft = r.topLeft,
                         size = r.size,
                         cornerRadius = corner,
-                        style = Stroke(width = 1.dp.toPx()),
+                        style = Stroke(width = look.borderWidth.toPx()),
                     )
                 }
             },
@@ -503,6 +504,7 @@ internal fun Modifier.pageTransitionLayer(
     page: PlayerPage,
     transition: PlayerPageTransition,
     morph: CardMorphState,
+    look: PlayerCardLook = ClassicCardLook,
     crossfadeProgress: () -> Float,
 ): Modifier {
     val cardClip = remember { InsetRoundRectShape() }
@@ -515,7 +517,7 @@ internal fun Modifier.pageTransitionLayer(
                 cardClip.top = r.top
                 cardClip.right = r.right
                 cardClip.bottom = r.bottom
-                cardClip.radius = mixF(PlayerCardCorner.toPx(), 0f, e.coerceIn(0f, 1f))
+                cardClip.radius = mixF(look.corner.toPx(), 0f, e.coerceIn(0f, 1f))
                 shape = cardClip
                 clip = true
             } else {

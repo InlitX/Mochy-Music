@@ -17,7 +17,8 @@ import kotlin.math.min
  * pause holds the clock. MusicService says when songs start, pause, resume and stop.
  */
 class ScrobbleTimer(
-    private val scope: CoroutineScope,
+    // read fresh each time, the service swaps in a new scope after its old one ends and a kept one would drop every scrobble
+    private val scope: () -> CoroutineScope,
     private val scrobbler: Scrobbler,
 ) {
     var minSongSeconds = DEFAULT_MIN_SONG_SECONDS
@@ -69,7 +70,7 @@ class ScrobbleTimer(
         val song = track ?: return
         if (remainingMs <= 0 || runningSince != 0L) return
         runningSince = SystemClock.elapsedRealtime()
-        job = scope.launch {
+        job = scope().launch {
             delay(remainingMs)
             remainingMs = 0
             runningSince = 0

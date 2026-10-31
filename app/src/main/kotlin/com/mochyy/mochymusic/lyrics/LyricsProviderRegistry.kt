@@ -20,15 +20,25 @@ object LyricsProviderRegistry {
         "YouTubeCaptions" to YouTubeCaptionsLyricsProvider,
     )
 
-    val providerNames = providerMap.keys.toList()
+    // lyrics from modules that are on, set by the module registry; a module switched off simply isn't in here
+    @Volatile
+    private var moduleProviders: Map<String, ModuleLyricsProvider> = emptyMap()
 
-    fun getProviderByName(name: String): LyricsProvider? = providerMap[name]
+    fun setModuleProviders(providers: List<ModuleLyricsProvider>) {
+        moduleProviders = providers.associateBy { it.name }
+    }
+
+    val providerNames: List<String> get() = moduleProviders.keys.toList() + providerMap.keys
+
+    fun getProviderByName(name: String): LyricsProvider? = providerMap[name] ?: moduleProviders[name]
 
     /** A saved order, with any source added since it was saved at the end, in default order. */
     fun deserializeProviderOrder(orderString: String): List<String> {
         if (orderString.isBlank()) return getDefaultProviderOrder()
         val saved = orderString.split(",").map { it.trim() }.filter { it in providerNames }.distinct()
-        return saved + getDefaultProviderOrder().filter { it !in saved }
+        // a lyrics module someone just turned on goes first, they added it to be asked
+        val newModules = moduleProviders.keys.filter { it !in saved }
+        return newModules + saved + getDefaultProviderOrder().filter { it !in saved && it !in newModules }
     }
 
     fun serializeProviderOrder(providers: List<String>): String =
@@ -37,7 +47,7 @@ object LyricsProviderRegistry {
     // NetEase, QQ Music and KuGou near the end: they are Chinese services, and LyricsHelper only
     // believes them first-hand for Chinese songs. NetEase leads them because it often has word
     // timing. YouTube's auto captions last of all - they are speech recognition.
-    fun getDefaultProviderOrder(): List<String> = listOf(
+    fun getDefaultProviderOrder(): List<String> = moduleProviders.keys.toList() + listOf(
         "BetterLyrics",
         "YouLyPlus",
         "Paxsenix",
@@ -77,7 +87,7 @@ object LyricsProviderRegistry {
         "YouTubeSubtitle" -> "YouTube Subtitle"
         "YouTubeMusic"    -> "YouTube Music"
         "YouTubeCaptions" -> "YouTube Auto Captions"
-        else              -> name
+        else              -> moduleProviders[name]?.displayName ?: name
     }
 
     /**

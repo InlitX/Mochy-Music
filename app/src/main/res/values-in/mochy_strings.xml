@@ -206,8 +206,45 @@
     <string name="lyrics_romanize_macedonian">Romanisasi lirik Makedonia</string>
     <string name="integrations">Integrasi</string>
     <string name="lastfm_integration">Integrasi Last.fm</string>
-    <string name="username">Username</string>
-    <string name="password">Password</string>
+    <string name="username">Nama pengguna</string>
+    <string name="password">Kata sandi</string>
+    <!-- Integrations page, and signing in to Last.fm and Libre.fm right in the app -->
+    <string name="integration_discord_desc">Rich Presence</string>
+    <string name="integration_scrobbling_desc">Scrobbling %1$s</string>
+    <string name="scrobble_page_subtitle">Scrobbling</string>
+    <string name="scrobble_account">Akun</string>
+    <string name="scrobble_sign_in_title">Masuk ke %1$s</string>
+    <string name="scrobble_sign_in_desc">Simpan riwayat dengar, statistik, dan rekomendasimu di sana</string>
+    <string name="scrobble_not_set_up">Belum disiapkan di versi Mochy ini</string>
+    <string name="scrobble_to">Scrobble ke %1$s</string>
+    <string name="scrobble_signed_in_as">Masuk sebagai %1$s</string>
+    <string name="scrobble_paused_signed_in_as">Dijeda. Masuk sebagai %1$s</string>
+    <string name="scrobble_open_profile">Buka profilmu</string>
+    <string name="scrobble_open_profile_desc">Scrobble dan statistikmu di %1$s</string>
+    <string name="scrobble_sign_out">Keluar</string>
+    <string name="scrobble_sign_out_desc">Mochy berhenti scrobble ke %1$s</string>
+    <string name="scrobble_while_listening">Saat kamu mendengarkan</string>
+    <string name="scrobble_now_playing">Sedang Diputar</string>
+    <string name="scrobble_now_playing_desc">Tampilkan lagu yang sedang kamu putar di profilmu</string>
+    <string name="scrobble_send_likes">Kirim suka</string>
+    <string name="scrobble_send_likes_desc">Lagu yang kamu sukai di sini juga jadi favorit di sana</string>
+    <plurals name="scrobble_plays_waiting">
+        <item quantity="other">%d putaran menunggu dikirim</item>
+    </plurals>
+    <string name="scrobble_plays_waiting_desc">Terkirim sendiri begitu kamu online. Ketuk untuk kirim sekarang</string>
+    <string name="scrobble_all_sent">Semua sudah terkirim</string>
+    <string name="scrobble_send_later">Belum bisa dikirim. Mochy terus mencoba setiap kamu online.</string>
+    <string name="scrobble_signed_in">Masuk ke %1$s sebagai %2$s. Lagu yang kamu putar di-scrobble mulai sekarang.</string>
+    <string name="scrobble_signed_out">%1$s mengeluarkan Mochy. Masuk lagi di Pengaturan → Integrasi agar tetap scrobble.</string>
+    <string name="scrobble_sign_in_body">Pakai nama pengguna dan kata sandi %1$s-mu. Mochy hanya menyimpan kunci masuk dari %1$s, tidak pernah kata sandimu.</string>
+    <string name="scrobble_username_hint">Nama pengguna %1$s-mu</string>
+    <string name="scrobble_password_hint">Kata sandi %1$s-mu</string>
+    <string name="scrobble_sign_in_button">Masuk</string>
+    <string name="scrobble_signing_in">Sedang masuk…</string>
+    <string name="scrobble_sign_in_wrong">Nama pengguna atau kata sandi salah. Periksa lalu coba lagi.</string>
+    <string name="scrobble_sign_in_busy">%1$s belum bisa memproses masukmu sekarang. Coba lagi sebentar lagi.</string>
+    <string name="scrobble_sign_in_offline">Tidak bisa menghubungi %1$s. Periksa koneksimu lalu coba lagi.</string>
+    <string name="scrobble_sign_up">Belum punya akun? Buat di %1$s</string>
     <string name="enable_scrobbling">Aktifkan scrobbling</string>
     <string name="lastfm_now_playing">Kirim Now Playing</string>
     <string name="scrobbling_configuration">Atur Scrobbling</string>
@@ -959,4 +996,6 @@
     <string name="module_youtube_desc">Sinkronkan suka, pustaka, playlist, dan riwayat</string>
     <string name="about_song_provided_by">dari %1$s</string>
     <string name="about_song_nothing_yet">%1$s belum punya cerita tentang lagu ini.</string>
+    <string name="not_recommended_menu">Jangan rekomendasikan lagi</string>
+    <string name="not_recommended_done">Kami tidak akan merekomendasikan lagu ini lagi</string>
 </resources>

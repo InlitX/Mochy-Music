@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
+import androidx.compose.ui.res.stringResource
 import com.mochyy.mochymusic.constants.DiscLabelContent
 import com.mochyy.mochymusic.constants.DiscLabelContentKey
 import com.mochyy.mochymusic.constants.DiscNameKey
@@ -49,6 +50,8 @@ import com.mochyy.mochymusic.constants.PlayerEndTimestamp
 import com.mochyy.mochymusic.constants.PlayerEndTimestampKey
 import com.mochyy.mochymusic.ui.component.AppSwitch
 import com.mochyy.mochymusic.ui.component.ButtonStyle
+import com.mochyy.mochymusic.constants.FlagshipTransportLayout
+import com.mochyy.mochymusic.ui.player.flagship.TransportLayoutPreview
 import com.mochyy.mochymusic.ui.component.PlayerTransportButtons
 import com.mochyy.mochymusic.ui.component.SeekBarStyle
 import com.mochyy.mochymusic.ui.component.SeekBarTrack
@@ -72,6 +75,9 @@ fun StudioSheets(
     onSeekBarStyle: (SeekBarStyle) -> Unit,
     menuLayout: PlayerMenuLayout,
     transportColors: TransportColors,
+    // set on the new flagship, whose controls sheet picks its button layout instead of a button style
+    transportLayout: FlagshipTransportLayout? = null,
+    onTransportLayout: (FlagshipTransportLayout) -> Unit = {},
 ) {
     val sheet = studio.sheet ?: return
     MenuSheetSurface(onDismiss = { studio.sheet = null }, wrapHeight = true) { _ ->
@@ -80,7 +86,19 @@ fun StudioSheets(
             androidx.compose.material3.LocalTextStyle provides studioText(StudioType.Body),
         ) {
         when (sheet) {
-            StudioSheet.CONTROLS -> OptionSheet("Controls") {
+            StudioSheet.CONTROLS -> if (transportLayout != null) OptionSheet("Controls") {
+                FlagshipTransportLayout.entries.forEach { layout ->
+                    OptionRow(selected = layout == transportLayout, onClick = { onTransportLayout(layout) }) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            TransportLayoutPreview(layout)
+                            TwoLines(
+                                stringResource(if (layout == FlagshipTransportLayout.THREE) R.string.flagship_layout_three else R.string.flagship_layout_ten),
+                                stringResource(if (layout == FlagshipTransportLayout.THREE) R.string.flagship_layout_three_caption else R.string.flagship_layout_ten_caption),
+                            )
+                        }
+                    }
+                }
+            } else OptionSheet("Controls") {
                 ButtonStyle.entries.forEach { style ->
                     OptionRow(selected = style == buttonStyle, onClick = { onButtonStyle(style) }, caption = style.displayName) {
                         if (style == ButtonStyle.DEFAULT) {

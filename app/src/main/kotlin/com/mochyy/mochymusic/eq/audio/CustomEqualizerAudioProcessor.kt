@@ -30,6 +30,8 @@ class CustomEqualizerAudioProcessor : AudioProcessor {
 
     private var work = DoubleArray(0)
     private var fadeWork = DoubleArray(0)
+    // the pcm on its way in and out, moved in one copy: a getShort or putShort per sample was a native call each
+    private var pcm = ShortArray(0)
     private val limiter = PeakLimiter()
 
     private var buffer: ByteBuffer = EMPTY_BUFFER
@@ -72,11 +74,20 @@ class CustomEqualizerAudioProcessor : AudioProcessor {
             inputBuffer.position(inputBuffer.limit())
             return
         }
+        syncDesign()
+        // with no eq to apply the chain is only the limiter's delay, so the pcm is copied through it as it is
+        if (bank == null && !fading && limiter.isResting && !AudioTap.wanted) {
+            limiter.delayPcm(inputBuffer, replaceOutputBuffer(bytes))
+            outputBuffer.flip()
+            return
+        }
         val frames = bytes / (2 * channels)
         val count = frames * channels
         ensureWork(count)
         val scale = 1.0 / 32768.0
-        for (i in 0 until count) work[i] = inputBuffer.getShort() * scale
+        inputBuffer.asShortBuffer().get(pcm, 0, count)
+        inputBuffer.position(inputBuffer.position() + count * 2)
+        for (i in 0 until count) work[i] = pcm[i] * scale
         render(frames, replaceOutputBuffer(bytes))
     }
 
@@ -94,7 +105,9 @@ class CustomEqualizerAudioProcessor : AudioProcessor {
 
         if (AudioTap.wanted) AudioTap.write(tapId, work, frames, channels, sampleRate)
 
-        for (i in 0 until count) out.putShort(toPcm(work[i]))
+        for (i in 0 until count) pcm[i] = toPcm(work[i])
+        out.asShortBuffer().put(pcm, 0, count)
+        out.position(out.position() + count * 2)
         out.flip()
     }
 
@@ -112,6 +125,7 @@ class CustomEqualizerAudioProcessor : AudioProcessor {
         if (work.size >= count) return
         work = DoubleArray(count)
         fadeWork = DoubleArray(count)
+        pcm = ShortArray(count)
     }
 
     private fun mixFade(frames: Int) {
@@ -284,9 +298,9 @@ class CustomEqualizerAudioProcessor : AudioProcessor {
     companion object {
         private const val FadeSeconds = 0.03
         private val EMPTY_BUFFER: ByteBuffer = ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder())
-
-        /** rounded, not cut toward zero: cutting adds a faint grit to quiet passages */
-        private fun toPcm(sample: Double): Short =
-            Math.round(sample * 32768.0).coerceIn(-32768L, 32767L).toShort()
     }
 }
+
+/** rounded, not cut toward zero: cutting adds a faint grit to quiet passages */
+internal fun toPcm(sample: Double): Short =
+    Math.round(sample * 32768.0).coerceIn(-32768L, 32767L).toShort()

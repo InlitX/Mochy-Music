@@ -1,16 +1,8 @@
-//
-// The contract between Mochy and a source module (Apple Music first). A module finds the track
-// Mochy wants on its service and hands back a stream the player opens; Mochy does all the
-// playing, so the equalizer, Audio FX, Crossmix and the visuals work on any source.
-//
-// Modules are built into Mochy today. The contract is kept free of Android, Media3 and HTTP
-// libraries so that a module can also ship as its own APK, found and loaded at runtime (see
-// ModuleRegistry in the app). Change any shape here and bump MODULE_API_VERSION: a module built
-// against another version is refused rather than crashing.
+// what mochy and its modules agree on, kept free of android so a module app loads at runtime; change a shape and bump the version (docs/notes/modules.md)
 
 package com.mochyy.mochymusic.module
 
-const val MODULE_API_VERSION = 2
+const val MODULE_API_VERSION = 3
 
 data class ModuleInfo(
     /** stable, lowercase: "applemusic" */
@@ -21,7 +13,12 @@ data class ModuleInfo(
     val apiVersion: Int = MODULE_API_VERSION,
     /** where the module's own code lives, for the player's "star on github"; null when it isn't public */
     val sourceUrl: String? = null,
+    /** who made it, shown on its page */
+    val author: String? = null,
 )
+
+/** what a module brings to mochy, one module can bring several */
+enum class ModuleFeature { AudioSource, Lyrics, Look }
 
 /** What Mochy gives a module. */
 interface ModuleHost {
@@ -63,7 +60,7 @@ data class TrackQuery(
 
 /**
  * How a module's account is signed into: Mochy opens [startUrl] in its sign-in browser and
- * passes every request header the service's own web page sends to [SourceModule.onSignInHeader].
+ * passes every request header the service's own web page sends to [MochyModule.onSignInHeader].
  */
 data class SignInSpec(
     val startUrl: String,
@@ -146,29 +143,82 @@ sealed interface ResolveResult {
 /** One line of a module's self-test. [ok] null while the step runs. */
 data class DiagnosticStep(val name: String, val ok: Boolean?, val detail: String)
 
-interface SourceModule {
+/** every module: its name, what it adds, and its account when it needs one */
+interface MochyModule {
     val info: ModuleInfo
+
+    /** mochy only asks a module for the things listed here */
+    val adds: Set<ModuleFeature>
 
     /** called once, before anything else */
     fun attach(host: ModuleHost)
 
-    val signIn: SignInSpec?
+    /** null for a module that needs no account */
+    val signIn: SignInSpec? get() = null
 
-    fun accountState(): AccountState
+    fun accountState(): AccountState = AccountState.SignedIn(NO_ACCOUNT_LABEL)
 
     /** a header the sign-in page sent; true once there's everything needed to sign in */
-    fun onSignInHeader(name: String, value: String, url: String): Boolean
+    fun onSignInHeader(name: String, value: String, url: String): Boolean = false
 
     /** asks the service whether the saved account still works */
-    suspend fun verifyAccount(): AccountState
+    suspend fun verifyAccount(): AccountState = accountState()
 
-    fun signOut()
+    fun signOut() {}
 
-    val choices: List<ModuleChoice>
+    val choices: List<ModuleChoice> get() = emptyList()
+}
+
+/** what a module that needs no account says about it */
+const val NO_ACCOUNT_LABEL = "No account needed"
+
+/** a place songs play from */
+interface SourceModule : MochyModule {
+    override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.AudioSource)
 
     /** [picks]: choice id to option id, for the choices the user changed */
     suspend fun resolve(track: TrackQuery, picks: Map<String, String>): ResolveResult
 
     /** the module's own checks, step by step, for the test button; the host adds the CDM part */
     suspend fun diagnose(track: TrackQuery, picks: Map<String, String>, report: (DiagnosticStep) -> Unit): ResolveResult
+}
+
+/** a lyrics source, it joins the ones mochy already asks while the module is on */
+interface LyricsModule : MochyModule {
+    override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.Lyrics)
+
+    /** the song's lyrics as lrc ("[01:02.34] a line"), or plain lines when they aren't timed; null when it has none */
+    suspend fun lyrics(track: TrackQuery): String?
+}
+
+/** a look: values for mochy's look settings, put in place while the module is on and given back when it goes off */
+interface LookModule : MochyModule {
+    override val adds: Set<ModuleFeature> get() = setOf(ModuleFeature.Look)
+
+    /** a [LookSetting] name to its value, anything else is ignored */
+    val look: Map<String, String>
+}
+
+/** the only settings a look may change, so a module can restyle mochy but never touch accounts, network or playback */
+object LookSetting {
+    /** a player style's name: FLAGSHIP, CLASSIC, TURNTABLE, VIDEO, IPOD, POSTER, TIMELINE, LYRICS */
+    const val PLAYER_STYLE = "playerStyle"
+    /** MOCHYY, LISTEN_NOW or HOP_IN */
+    const val HOME_STYLE = "homeStyle"
+    /** FLOW, CLASSIC or MINIMAL */
+    const val PLAYLIST_STYLE = "playlistStyle"
+    /** how round covers are, 0 to 45 */
+    const val COVER_ROUNDING = "thumbnailCornerRadius"
+    /** MOTION, LEGACY, BORING or PLAIN */
+    const val LYRICS_MOTION = "lyricsMotionStyle"
+    /** LOW or HIGH */
+    const val BLUR_QUALITY = "blurQuality"
+    /** glass blur radius in px, 10 to 50 */
+    const val BLUR_STRENGTH = "blurStrengthPx"
+    /** true or false */
+    const val PROGRESSIVE_BLUR = "enableProgressiveBlur"
+    /** true or false */
+    const val ELEMENT_BLUR = "elementBlur"
+    /** true or false */
+    const val PURE_BLACK = "pureBlack"
 }

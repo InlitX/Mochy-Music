@@ -64,6 +64,7 @@ import com.mochyy.mochymusic.constants.UsbPassthroughKey
 import com.mochyy.mochymusic.constants.VideoQuality
 import com.mochyy.mochymusic.constants.VideoQualityKey
 import com.mochyy.mochymusic.constants.YouTubeCaptionTranslationKey
+import com.mochyy.mochymusic.constants.YtReportPlaysKey
 import com.mochyy.mochymusic.constants.YtVideoBackgroundLyricsSyncKey
 import com.mochyy.mochymusic.core.updater.saveUpdateNotificationsSetting
 import com.mochyy.mochymusic.i18n.AppLanguage
@@ -247,6 +248,7 @@ private fun playerBehaviourItems(): List<SettingsItem> {
     val (dontSkipOnFailure, onDontSkipOnFailureChange) = rememberPreference(DontSkipOnFailureKey, defaultValue = false)
     val (failureTimeout, onFailureTimeoutChange) = rememberPreference(StreamFailureTimeoutKey, defaultValue = 6)
     val (skipSilence, onSkipSilenceChange) = rememberPreference(SkipSilenceKey, defaultValue = false)
+    val (reportPlays, onReportPlaysChange) = rememberPreference(YtReportPlaysKey, defaultValue = true)
     return listOf(
         switchItem(
             key = "Disable auto-playing YouTube video",
@@ -308,6 +310,16 @@ private fun playerBehaviourItems(): List<SettingsItem> {
             icon = painterResource(R.drawable.skip_next),
             checked = skipSilence,
             onCheckedChange = onSkipSilenceChange,
+        ),
+        // the same switch as sync's youtube history one, signed out it still counts the play
+        switchItem(
+            key = "Count plays on YouTube views",
+            title = stringResource(R.string.settings_youtube_plays),
+            description = stringResource(R.string.settings_youtube_plays_desc),
+            detail = stringResource(R.string.settings_youtube_plays_detail),
+            icon = painterResource(R.drawable.trending_up),
+            checked = reportPlays,
+            onCheckedChange = onReportPlaysChange,
         ),
     )
 }

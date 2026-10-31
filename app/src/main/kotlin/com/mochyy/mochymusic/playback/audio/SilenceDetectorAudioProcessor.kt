@@ -22,6 +22,8 @@ class SilenceDetectorAudioProcessor(
     private var encoding = C.ENCODING_INVALID
 
     private var outputBuffer: ByteBuffer = EMPTY_BUFFER
+    // kept and reused: getOutput hands outputBuffer back as empty, so sizing against it made a new direct buffer every time
+    private var buffer: ByteBuffer = EMPTY_BUFFER
     private var inputEnded = false
 
     @Volatile
@@ -139,12 +141,13 @@ class SilenceDetectorAudioProcessor(
     }
 
     private fun replaceOutputBuffer(size: Int): ByteBuffer {
-        if (outputBuffer.capacity() < size) {
-            outputBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
+        if (buffer.capacity() < size) {
+            buffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
         } else {
-            outputBuffer.clear()
+            buffer.clear()
         }
-        return outputBuffer
+        outputBuffer = buffer
+        return buffer
     }
 
     companion object {

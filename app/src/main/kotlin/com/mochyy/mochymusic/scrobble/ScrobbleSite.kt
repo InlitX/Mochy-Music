@@ -23,6 +23,8 @@ enum class ScrobbleSite(
     /** Scrobbling on or paused, with the account kept either way. */
     val enabledKey: Preferences.Key<Boolean>,
     private val profilePage: String,
+    /** where someone without an account makes one */
+    val signUpUrl: String,
     val api: Audioscrobbler,
 ) {
     LASTFM(
@@ -31,9 +33,9 @@ enum class ScrobbleSite(
         usernameKey = LastFMUsernameKey,
         enabledKey = EnableLastFMScrobblingKey,
         profilePage = "https://www.last.fm/user/",
+        signUpUrl = "https://www.last.fm/join",
         api = Audioscrobbler(
             apiRoot = "https://ws.audioscrobbler.com/2.0/",
-            authPage = "https://www.last.fm/api/auth/",
             apiKey = BuildConfig.LASTFM_API_KEY,
             secret = BuildConfig.LASTFM_SECRET,
         ),
@@ -44,11 +46,12 @@ enum class ScrobbleSite(
         usernameKey = LibreFmUsernameKey,
         enabledKey = EnableLibreFmScrobblingKey,
         profilePage = "https://libre.fm/user/",
+        signUpUrl = "https://libre.fm/register.php",
         api = Audioscrobbler(
             apiRoot = "https://libre.fm/2.0/",
-            authPage = "https://www.libre.fm/api/auth/",
             apiKey = BuildConfig.LIBREFM_API_KEY,
             secret = BuildConfig.LIBREFM_SECRET,
+            signsInWithToken = true,
         ),
     );
 

@@ -13,6 +13,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.LastFMUseNowPlaying
 import com.mochyy.mochymusic.constants.LastFMUseSendLikes
 import com.mochyy.mochymusic.utils.OfflineMode
@@ -156,17 +157,9 @@ class Scrobbler @Inject constructor(
 
     // ---- signing in and out ----
 
-    /** The first step of signing in; the token goes into [ScrobbleSite.api]'s sign-in page. */
-    suspend fun requestToken(site: ScrobbleSite): String = site.api.getToken()
-
-    /** The account's name once the user has allowed Mochy on the sign-in page; null until then. */
-    suspend fun finishSignIn(site: ScrobbleSite, token: String): String? {
-        val session = try {
-            site.api.getSession(token)
-        } catch (e: AudioscrobblerException) {
-            if (e.isWaitingForUser) return null
-            throw e
-        }
+    /** signs in from mochy's own form and keeps only the session key, the password is never stored; gives back the account's name */
+    suspend fun signIn(site: ScrobbleSite, username: String, password: String): String {
+        val session = site.api.getMobileSession(username.trim(), password)
         context.dataStore.edit {
             it[site.sessionKey] = session.key
             it[site.usernameKey] = session.name
@@ -187,7 +180,7 @@ class Scrobbler @Inject constructor(
     /** The service took back Mochy's access, so the account is forgotten here too. */
     private suspend fun signedOut(site: ScrobbleSite) {
         signOut(site)
-        val message = "${site.label} signed Mochy out. Sign in again in Settings → Integrations to keep scrobbling."
+        val message = context.getString(R.string.scrobble_signed_out, site.label)
         Handler(Looper.getMainLooper()).post { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
     }
 

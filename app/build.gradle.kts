@@ -28,7 +28,7 @@ extensions.configure<ApplicationExtension> {
         minSdk = 24
         targetSdk = 36
         versionCode = 73
-        versionName = "8.2.3 build#1204"
+        versionName = "8.2.3 build#1206"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -445,6 +445,7 @@ dependencies {
     implementation(project(":modules:api"))
     implementation(project(":modules:applemusic"))
     implementation(project(":modules:monochrome"))
+    implementation(project(":modules:jiosaavn"))
 
 
     implementation(libs.ktor.client.core)

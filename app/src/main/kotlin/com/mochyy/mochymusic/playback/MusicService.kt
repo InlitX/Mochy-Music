@@ -123,6 +123,7 @@ import com.mochyy.mochymusic.constants.MediaSessionConstants.CommandToggleLike
 import com.mochyy.mochymusic.constants.MediaSessionConstants.CommandToggleRepeatMode
 import com.mochyy.mochymusic.constants.MediaSessionConstants.CommandToggleShuffle
 import com.mochyy.mochymusic.constants.MediaSessionConstants.CommandToggleStartRadio
+import com.mochyy.mochymusic.constants.OfflineModeKey
 import com.mochyy.mochymusic.constants.PauseListenHistoryKey
 import com.mochyy.mochymusic.constants.PauseOnMute
 import com.mochyy.mochymusic.constants.PersistentQueueKey
@@ -206,6 +207,7 @@ import com.mochyy.mochymusic.playback.queues.Queue
 import com.mochyy.mochymusic.playback.queues.YouTubeQueue
 import com.mochyy.mochymusic.playback.queues.filterExplicit
 import com.mochyy.mochymusic.playback.queues.filterVideoSongs
+import com.mochyy.mochymusic.utils.NotRecommended
 import com.mochyy.mochymusic.utils.CoilBitmapLoader
 import com.mochyy.mochymusic.utils.NetworkConnectivityObserver
 import com.mochyy.mochymusic.scrobble.ScrobbleTimer
@@ -213,6 +215,7 @@ import com.mochyy.mochymusic.scrobble.Scrobbler
 import com.mochyy.mochymusic.utils.SyncUtils
 import com.mochyy.mochymusic.utils.YTPlayerUtils
 import com.mochyy.mochymusic.constants.ShowStreamSourceToastKey
+import com.mochyy.mochymusic.constants.YtReportPlaysKey
 import com.mochyy.mochymusic.constants.ForcePlaybackKey
 import com.mochyy.mochymusic.utils.dataStore
 import com.mochyy.mochymusic.utils.get
@@ -641,7 +644,10 @@ class MusicService :
     private lateinit var hapticAudioProcessor: HapticAudioProcessor
 
     /** When a play counts for Last.fm and Libre.fm; the scrobbler skips services that aren't signed in. */
-    private val scrobbleTimer by lazy { ScrobbleTimer(scope, scrobbler) }
+    private val scrobbleTimer by lazy { ScrobbleTimer({ scope }, scrobbler) }
+
+    // counts each youtube song people really listen to as a play on youtube, unless app behaviour turns it off
+    private val playReporter by lazy { YouTubePlayReporter({ scope }, { player.currentPosition }) }
 
     val automixItems = MutableStateFlow<List<MediaItem>>(emptyList())
 
@@ -1065,6 +1071,18 @@ class MusicService :
                 scrobbleTimer.maxWaitSeconds = maxWaitSeconds
             }
 
+        dataStore.data
+            .map { prefs ->
+                // offline mode keeps every play on the phone too
+                val enabled = (prefs[YtReportPlaysKey] ?: true) && prefs[OfflineModeKey] != true
+                enabled to ((prefs[HistoryDuration] ?: 30f) * 1000).toLong()
+            }
+            .distinctUntilChanged()
+            .collect(scope) { (enabled, countAfterMs) ->
+                playReporter.isEnabled = enabled
+                playReporter.countAfterMs = countAfterMs
+            }
+
         dataStore.data.map { prefs ->
             val legacyEnabled = prefs[CrossfadeEnabledKey] ?: false
             val mode = (
@@ -1279,6 +1297,8 @@ class MusicService :
             .setSeekBackIncrementMs(5000)
             .setSeekForwardIncrementMs(5000)
             .setDeviceVolumeControlEnabled(true)
+            // wake the playback loop when the audio buffer needs more, not every 10 ms: it was a third of a core in the background
+            .experimentalSetDynamicSchedulingEnabled(true)
             .build()
 
         player.addListener(object : Player.Listener {
@@ -2093,7 +2113,9 @@ class MusicService :
         // seed, which is all a signed-out radio sometimes returns) has to fall through to the next source.
         val queued = HashSet<String>()
         for (i in 0 until player.mediaItemCount) queued += player.getMediaItemAt(i).mediaId
-        fun List<MediaItem>.fresh() = filter { it.mediaId !in queued }
+        // the songs you said not to recommend again never get lined up
+        val hidden = NotRecommended.songs
+        fun List<MediaItem>.fresh() = filter { it.mediaId !in queued && it.mediaId !in hidden }
 
         infiniteSource?.takeIf { it.hasNextPage() }?.let { source ->
             runCatching { withContext(Dispatchers.IO) { source.nextPage() } }
@@ -2109,7 +2131,7 @@ class MusicService :
         val seedItem = (player.mediaItemCount - 1 downTo 0)
             .asSequence()
             .map { player.getMediaItemAt(it) }
-            .firstOrNull { !it.mediaId.startsWith("LOCAL_") && it.mediaId !in usedInfiniteSeeds }
+            .firstOrNull { !it.mediaId.startsWith("LOCAL_") && it.mediaId !in usedInfiniteSeeds && it.mediaId !in hidden }
             ?: return emptyList()
         val seed = seedItem.mediaId
         usedInfiniteSeeds += seed
@@ -2220,7 +2242,7 @@ class MusicService :
             }
 
             val radioItems = initialStatus.items.filter { item ->
-                item.mediaId != currentMediaId
+                item.mediaId != currentMediaId && item.mediaId !in NotRecommended
             }
 
             if (radioItems.isNotEmpty()) {
@@ -2251,7 +2273,7 @@ class MusicService :
                     if (generation != queueGeneration) return
                     relatedPage?.songs?.let { songs ->
                         val radioItems = songs
-                            .filter { it.id != currentMediaId }
+                            .filter { it.id != currentMediaId && it.id !in NotRecommended }
                             .map { it.toMediaItem() }
                             .filterExplicit(dataStore.get(HideExplicitKey, false))
                             .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
@@ -2717,8 +2739,10 @@ class MusicService :
         setupLoudnessEnhancer()
 
         scrobbleTimer.onSongStop()
+        playReporter.onSongStop()
         if (player.playWhenReady && player.playbackState == Player.STATE_READY) {
             scrobbleTimer.onSongStart(player.currentMetadata, player.duration)
+            playReporter.onSongStart(player.currentMetadata, player.duration)
         }
 
         if (castConnectionHandler?.isCasting?.value == true &&
@@ -2781,6 +2805,7 @@ class MusicService :
 
         if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
             scrobbleTimer.onSongStop()
+            playReporter.onSongStop()
         }
     }
 
@@ -2852,6 +2877,7 @@ class MusicService :
 
         if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED)) {
             scrobbleTimer.onPlayingChanged(player.isPlaying, player.currentMetadata, player.duration)
+            playReporter.onPlayingChanged(player.isPlaying, player.currentMetadata, player.duration)
             // a pause is often the last thing before the app is closed, and the timed saves only
             // run every 30 seconds while paused: save the exact place now so it comes back there
             if (!player.isPlaying && player.playbackState == Player.STATE_READY && dataStore.get(PersistentQueueKey, true)) {
@@ -3724,6 +3750,7 @@ class MusicService :
                         )
                     )
                 }
+                playReporter.offerTracking(mediaId, nonNullPlayback.playbackTracking)
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId, nonNullPlayback) }
 
                 if (bypassCacheForQualityChange.remove(mediaId)) {
@@ -3935,23 +3962,6 @@ class MusicService :
                 }
             }
         }
-
-        if (playbackStats.totalPlayTimeMs >= historyDurationMs &&
-            dataStore.get(com.mochyy.mochymusic.constants.YtReportPlaysKey, true) &&
-            !com.mochyy.mochymusic.utils.OfflineMode.isOn
-        ) {
-            CoroutineScope(Dispatchers.IO).launch {
-                val playbackUrl = database.format(mediaItem.mediaId).first()?.playbackUrl
-                    ?: YTPlayerUtils.playerResponseForMetadata(mediaItem.mediaId, null)
-                        .getOrNull()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
-                playbackUrl?.let {
-                    YouTube.registerPlayback(null, playbackUrl)
-                        .onFailure {
-                            reportException(it)
-                        }
-                }
-            }
-        }
     }
 
     private fun saveQueueToDisk() {
@@ -4044,6 +4054,8 @@ class MusicService :
             saveQueueToDisk()
         }
         discordPresence.update(null)
+        // sends the last stretch of the song that was playing while the player can still say where it stopped
+        playReporter.onSongStop()
         connectivityObserver.unregister()
         abandonAudioFocus()
         releaseLoudnessEnhancer()
@@ -4193,6 +4205,10 @@ class MusicService :
             crossmixDirector.onUserSeek()
             scheduleCrossfade()
         }
+        // this comes before the song change itself, the last moment the old song's real end spot is known
+        val sameSong = reason != Player.DISCONTINUITY_REASON_AUTO_TRANSITION &&
+            oldPosition.mediaItemIndex == newPosition.mediaItemIndex
+        playReporter.onJump(oldPosition.positionMs, newPosition.positionMs, sameSong)
     }
 
     private fun scheduleCrossfade() {

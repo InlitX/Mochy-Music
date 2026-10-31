@@ -130,11 +130,14 @@ fun YouTubeVideoSurface(
     glassActive: () -> Boolean = { true },
     keepScreenOn: Boolean = false,
     onAmbient: ((VideoAmbient) -> Unit)? = null,
+    // the flagship's moving backdrop, fed four tones from the same frames the bars are read from
+    onFrameColors: ((List<Color>) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     val playing by rememberUpdatedState(isPlaying)
     val currentOnAmbient by rememberUpdatedState(onAmbient)
+    val currentOnFrameColors by rememberUpdatedState(onFrameColors)
 
     // the view is stretched over the frame and then scaled as a whole, so the texture itself stays the untouched frame the sampling reads
     val textureView = remember(session) {
@@ -181,6 +184,9 @@ fun YouTubeVideoSurface(
             if (vertical.offer(reading.vertical, now)) launch { barInsetY.animateTo(vertical.inset, zoomSpec) }
             if (horizontal.offer(reading.horizontal, now)) launch { barInsetX.animateTo(horizontal.inset, zoomSpec) }
             currentOnAmbient?.invoke(edgeColors(pixels, SampleSize, horizontal.inset, vertical.inset))
+            currentOnFrameColors?.invoke(
+                com.mochyy.mochymusic.ui.player.flagship.ambientTones(pixels, SampleSize, SampleSize, horizontal.inset, vertical.inset)
+            )
         }
     }
 

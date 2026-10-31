@@ -52,7 +52,23 @@ fun PlayerBackgroundContent(
             thumbnailUrl = thumbnailUrl,
             modifier = modifier,
         )
+        PlayerBackgroundStyle.AMBIENT -> StandaloneAmbientBackground(
+            thumbnailUrl = thumbnailUrl,
+            modifier = modifier,
+        )
     }
+}
+
+// the ambient backdrop on its own, from the picture's colours and with its own clock, for previews and the other styles' pages
+@Composable
+private fun StandaloneAmbientBackground(thumbnailUrl: String?, modifier: Modifier = Modifier) {
+    val colors = com.mochyy.mochymusic.ui.player.flagship.rememberAmbientColors()
+    com.mochyy.mochymusic.ui.player.flagship.FollowPicture(colors, thumbnailUrl)
+    com.mochyy.mochymusic.ui.player.flagship.AmbientBackdrop(
+        colors = colors,
+        time = com.mochyy.mochymusic.ui.player.flagship.rememberAmbientClock(running = true),
+        modifier = modifier,
+    )
 }
 
 @Composable

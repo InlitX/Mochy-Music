@@ -29,6 +29,7 @@ import com.mochyy.mochymusic.extensions.withAutoplay
 import com.mochyy.mochymusic.extensions.metadata
 import com.mochyy.mochymusic.playback.MusicService.MusicBinder
 import com.mochyy.mochymusic.playback.queues.Queue
+import com.mochyy.mochymusic.utils.NotRecommended
 import com.mochyy.mochymusic.utils.reportException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -249,9 +250,13 @@ class PlayerConnection(
         )
     }
 
+    // mainactivity turns this off while the app is hidden, the poll below rests then instead of recomposing the player for nobody
+    val isUiVisible = MutableStateFlow(true)
+
     val progressState: kotlinx.coroutines.flow.StateFlow<com.mochyy.mochymusic.ui.player.models.ProgressState> =
         kotlinx.coroutines.flow.callbackFlow {
             while (true) {
+                isUiVisible.first { it }
                 try {
                     val p = attachedPlayer
                     if (p != null) {
@@ -520,6 +525,20 @@ class PlayerConnection(
                 // ascending, so each lands at its old index once the ones before it are back
                 removed.forEach { (index, item) -> player.addMediaItem(index.coerceAtMost(player.mediaItemCount), item) }
             },
+        )
+    }
+
+    // the song playing now stops coming back in autoplay, radios and home, and we skip past it right away
+    fun stopRecommendingCurrent() {
+        val metadata = player.currentMetadata ?: return
+        NotRecommended.add(metadata.id)
+        seekToNext()
+        TopToaster.show(
+            text = context.getString(R.string.not_recommended_done),
+            thumbnail = metadata.thumbnailUrl,
+            iconRes = R.drawable.thumb_down,
+            actionLabel = context.getString(R.string.undo),
+            onAction = { NotRecommended.remove(metadata.id) },
         )
     }
 

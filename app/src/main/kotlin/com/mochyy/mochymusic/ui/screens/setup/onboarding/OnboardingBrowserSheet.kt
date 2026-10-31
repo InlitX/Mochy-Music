@@ -116,42 +116,59 @@ internal fun OnboardingBrowserSheet(
             Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.width(120.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.9f)))
             }
-            Row(
-                modifier = Modifier.padding(start = 22.dp, end = 14.dp, top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ProviderSquircle(service, size = 38.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Sign in to ${service.label}",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        url.removePrefix("https://").removePrefix("www.").substringBefore('?').ifEmpty { "https://" },
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.28f))
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(painterResource(R.drawable.close), contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-            }
+            BrowserSheetBar(
+                icon = { ProviderSquircle(service, size = 38.dp) },
+                title = "Sign in to ${service.label}",
+                url = url,
+                onClose = onClose,
+            )
+        }
+    }
+}
+
+/** the browser's bar: whose sign-in it is, the address it's on, and a close button; the module sign-in sheet shows the same one */
+@Composable
+internal fun BrowserSheetBar(
+    icon: @Composable () -> Unit,
+    title: String,
+    url: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.padding(start = 22.dp, end = 14.dp, top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon()
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                url.removePrefix("https://").removePrefix("www.").substringBefore('?').ifEmpty { "https://" },
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(R.drawable.close), contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
         }
     }
 }

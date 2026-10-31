@@ -1,6 +1,7 @@
 package com.mochyy.mochymusic.ui.player.studio
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,6 +40,17 @@ import com.mochyy.mochymusic.constants.PlayerBottomBarStyle
 import com.mochyy.mochymusic.constants.PlayerBottomBarStyleKey
 import com.mochyy.mochymusic.constants.PlayerCoverStyle
 import com.mochyy.mochymusic.constants.PlayerCoverStyleKey
+import com.mochyy.mochymusic.constants.FlagshipBackgroundStyleKey
+import com.mochyy.mochymusic.constants.FlagshipBottomBarStyleKey
+import com.mochyy.mochymusic.constants.FlagshipTransportLayout
+import com.mochyy.mochymusic.constants.FlagshipTransportLayoutKey
+import com.mochyy.mochymusic.ui.player.flagship.AmbientBackdrop
+import com.mochyy.mochymusic.ui.player.flagship.FlagshipBottomBar
+import com.mochyy.mochymusic.ui.player.flagship.FlagshipTransportRow
+import com.mochyy.mochymusic.ui.player.flagship.FollowPicture
+import com.mochyy.mochymusic.ui.player.flagship.rememberAmbientColors
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import com.mochyy.mochymusic.ui.player.PlayerProgressSlider
 import com.mochyy.mochymusic.ui.player.PlayerTransportRow
 import com.mochyy.mochymusic.ui.player.PlayerVolumeBar
@@ -104,6 +116,8 @@ internal fun FlagshipPreview(
     modifier: Modifier = Modifier,
     /** the Turntable: the flagship around a record player, its arm for the seek bar */
     turntable: Boolean = false,
+    // the new flagship: its own background and bar, its buttons, the cover melting into its colours
+    flagship: Boolean = false,
 ) {
     val connection = LocalPlayerConnection.current ?: return
     val track by connection.uiState.trackInfo.collectAsState()
@@ -111,20 +125,34 @@ internal fun FlagshipPreview(
     val queue by connection.uiState.queueState.collectAsState()
     val flagshipCover by rememberEnumPreference(PlayerCoverStyleKey, DefaultPlayerCoverStyle)
     val coverStyle = if (turntable) PlayerCoverStyle.TURNTABLE else flagshipCover
-    val backgroundStyle by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.COVER_GRADIENT)
-    val barStyle by rememberEnumPreference(PlayerBottomBarStyleKey, PlayerBottomBarStyle.STACK)
+    val backgroundStyle by rememberEnumPreference(
+        if (flagship) FlagshipBackgroundStyleKey else PlayerBackgroundStyleKey,
+        if (flagship) PlayerBackgroundStyle.AMBIENT else PlayerBackgroundStyle.COVER_GRADIENT,
+    )
+    val barStyle by rememberEnumPreference(
+        if (flagship) FlagshipBottomBarStyleKey else PlayerBottomBarStyleKey,
+        PlayerBottomBarStyle.STACK,
+    )
+    val transportLayout by rememberEnumPreference(FlagshipTransportLayoutKey, FlagshipTransportLayout.THREE)
+    val ambient = rememberAmbientColors()
+    if (flagship) FollowPicture(ambient, track.thumbnailUrl)
     val statusTop = WindowInsets.stableStatusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     BoxWithConstraints(modifier = modifier.fillMaxSize().inert()) {
-        PlayerBackgroundPreview(
-            style = backgroundStyle,
-            thumbnailUrl = track.thumbnailUrl,
-            width = maxWidth,
-            height = maxHeight,
-            animate = false,
-            warp = false,
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (flagship && backgroundStyle == PlayerBackgroundStyle.AMBIENT) {
+            // held still on the card, the live player's own clock isn't running here
+            AmbientBackdrop(colors = ambient, time = { 0f }, modifier = Modifier.fillMaxSize())
+        } else {
+            PlayerBackgroundPreview(
+                style = backgroundStyle,
+                thumbnailUrl = track.thumbnailUrl,
+                width = maxWidth,
+                height = maxHeight,
+                animate = false,
+                warp = false,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         val box = coverArtBox(coverStyle, maxWidth, maxHeight, statusTop)
         Box(
             modifier = Modifier
@@ -132,6 +160,23 @@ internal fun FlagshipPreview(
                 .size(box.width, box.height),
         ) {
             CoverArt(coverStyle, track, transport.isPlaying, queue.currentIndex)
+        }
+        if (flagship && coverStyle == PlayerCoverStyle.EDGE_TO_EDGE) {
+            // a card can't blur the live player under it, so it gets only the design's dark shade under the controls, no colour
+            Spacer(
+                modifier = Modifier
+                    .offset(y = maxHeight * 0.538f)
+                    .fillMaxWidth()
+                    .height(maxHeight * 0.462f)
+                    .drawWithCache {
+                        val shade = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.46f to Color.Black.copy(alpha = 0.24f),
+                            1f to Color.Black.copy(alpha = 0.24f),
+                        )
+                        onDrawBehind { drawRect(shade) }
+                    },
+            )
         }
         Column(
             modifier = Modifier
@@ -144,9 +189,18 @@ internal fun FlagshipPreview(
             // the Turntable's arm is its seek bar: the bar's room is kept, empty
             if (turntable) Box(Modifier.graphicsLayer { alpha = 0f }) { PlayerProgressSlider(active = false) } else PlayerProgressSlider()
             Spacer(Modifier.height(22.dp))
-            PlayerTransportRow()
+            if (flagship) FlagshipTransportRow(layout = transportLayout) else PlayerTransportRow()
         }
-        if (barStyle == PlayerBottomBarStyle.VOLUME) {
+        if (flagship && barStyle == PlayerBottomBarStyle.VOLUME) {
+            FlagshipBottomBar(
+                isActive = { false },
+                onAction = {},
+                preview = true,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 26.dp, end = 26.dp, bottom = navBottom + 14.dp),
+            )
+        } else if (barStyle == PlayerBottomBarStyle.VOLUME) {
             PlayerVolumeBar(
                 isActive = { false },
                 onAction = {},
@@ -154,6 +208,18 @@ internal fun FlagshipPreview(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(start = 26.dp, end = 26.dp, bottom = navBottom + 14.dp),
+            )
+        } else if (flagship) {
+            // the new flagship's card: faint, outlined, running off the bottom
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 38.dp, end = 38.dp)
+                    .fillMaxWidth()
+                    .height(navBottom + 60.dp)
+                    .clip(RoundedCornerShape(topStart = 25.dp, topEnd = 25.dp))
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.35.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(topStart = 25.dp, topEnd = 25.dp)),
             )
         } else {
             // the bottom card, as its glass plate
