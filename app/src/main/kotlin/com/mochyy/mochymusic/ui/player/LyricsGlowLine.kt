@@ -275,10 +275,12 @@ fun LyricsGlowLine(
     val subLineColor = remember(lineColor) { ColorProducer { lineColor.value.copy(alpha = 0.6f) } }
     val translationColor = remember(lineColor) { ColorProducer { lineColor.value.copy(alpha = 0.5f) } }
 
+    // the side on screen, not the text's own start: Start on an arabic line is its right edge
+    val onLeft = (alignment == LyricsAlignment.START) !=
+        (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl)
     val textAlign = when (alignment) {
-        LyricsAlignment.START -> TextAlign.Start
         LyricsAlignment.CENTER -> TextAlign.Center
-        LyricsAlignment.END -> TextAlign.End
+        else -> if (onLeft) TextAlign.Left else TextAlign.Right
     }
     val columnAlign = when (alignment) {
         LyricsAlignment.START -> androidx.compose.ui.Alignment.Start
@@ -328,10 +330,10 @@ fun LyricsGlowLine(
                 // to origin 0 would make it swing left as it scaled up, away from the side it is
                 // aligned to.
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
-                    pivotFractionX = when (alignment) {
-                        LyricsAlignment.START -> 0f
-                        LyricsAlignment.CENTER -> 0.5f
-                        LyricsAlignment.END -> 1f
+                    pivotFractionX = when {
+                        alignment == LyricsAlignment.CENTER -> 0.5f
+                        onLeft -> 0f
+                        else -> 1f
                     },
                     pivotFractionY = 0.5f,
                 )
@@ -822,11 +824,12 @@ uniform float2 layerSize;
 uniform float headX;
 uniform float lineTop;
 uniform float lineBottom;
-uniform float lineLeft;
+uniform float lineStart;
 uniform float prevTop;
 uniform float prevBottom;
-uniform float prevRight;
+uniform float prevEnd;
 uniform float hasPrev;
+uniform float flowDir;
 uniform float bloom;
 uniform float bloomR;
 uniform float bloomLag;
@@ -849,8 +852,9 @@ half4 main(float2 coord) {
     if (onLine <= 0.0) return c;
 
     // Distance from the head along the reading flow, wrapping onto the previous visual line.
-    float dxCur  = coord.x - headX;
-    float dxPrev = -((prevRight - coord.x) + (headX - lineLeft));
+    // flowDir is -1 on a right-to-left line, where the flow runs the other way across the screen.
+    float dxCur  = (coord.x - headX) * flowDir;
+    float dxPrev = -((prevEnd - coord.x) + (headX - lineStart)) * flowDir;
     float dx = onPrev > 0.5 ? dxPrev : dxCur;
 
     float bdx = dx + bloomLag;
@@ -897,10 +901,12 @@ uniform float highQuality;
 // mid-stride instead of easing out. See flowDx below.
 uniform float prevTop;
 uniform float prevBottom;
-uniform float prevRight;
+uniform float prevEnd;
 uniform float prevBaseY;
 uniform float hasPrev;
-uniform float lineLeft;
+uniform float lineStart;
+// -1 on a right-to-left line: the flow runs leftward, lines start at the right and end at the left
+uniform float flowDir;
 
 // Bounds-safe sampling (the only change from the original): outside the content, eval() returned
 // the edge pixels stretched out, which drew a hard line off the side of the active lyric.
@@ -918,11 +924,11 @@ half4 main(float2 coord) {
 
     // Distance from the head measured along the READING FLOW, not along screen x. On the head's
     // own line that is just the horizontal gap. On the previous line it continues around the
-    // wrap: how far the pixel sits from that line's right edge, plus how far the head has already
-    // travelled from this line's left edge. That makes the glow spill across the line break the
+    // wrap: how far the pixel sits from where that line ends, plus how far the head has already
+    // travelled from where this line starts. That makes the glow spill across the line break the
     // way it would if the text were one continuous strip.
-    float dxCur  = coord.x - headX;
-    float dxPrev = -((prevRight - coord.x) + (headX - lineLeft));
+    float dxCur  = (coord.x - headX) * flowDir;
+    float dxPrev = -((prevEnd - coord.x) + (headX - lineStart)) * flowDir;
     float dx = onPrev > 0.5 ? dxPrev : dxCur;
 
     float bY = onPrev > 0.5 ? prevBaseY : baseY;
@@ -1119,20 +1125,13 @@ internal fun KaraokeSweepText(
                             layout.getLineBottom(line) + if (line == lastLine) reach else 0f
 
                         val headOffset = h.toInt().coerceIn(0, len)
+                        val headLine = layout.shownLineFor(headOffset.coerceAtMost(len - 1))
+                        val rtl = layout.isRtlLine(headLine)
+                        // the way the sweep travels on screen: right to left for arabic, hebrew...
+                        val flow = if (rtl) -1f else 1f
 
-                        val headX = if (headOffset >= len) {
-                            layout.getLineRight(layout.getLineForOffset(len - 1))
-                        } else {
-                            val x0 = layout.getHorizontalPosition(headOffset, true)
-                            val x1 = layout.getHorizontalPosition(
-                                (headOffset + 1).coerceAtMost(len),
-                                true,
-                            )
-
-                            if (x1 >= x0) x0 + (x1 - x0) * (h - headOffset) else x0
-                        }
+                        val headX = layout.sweepHeadX(h, headOffset, headLine, len, rtl)
                         probe?.headX = headX
-                        val headLine = layout.getLineForOffset(headOffset.coerceAtMost(len - 1))
                         val lineTop = topOf(headLine)
                         val lineBottom = bottomOf(headLine)
 
@@ -1140,17 +1139,16 @@ internal fun KaraokeSweepText(
                             (headOffset - EdgeSoftChars).coerceAtLeast(layout.getLineStart(headLine)),
                             true,
                         )
-                        val fromX = if (softFrom < headX) softFrom else headX - EdgeSoftPx
-                        val toX = headX + EdgeLeadPx
+                        val fromX = if ((headX - softFrom) * flow > 0f) softFrom else headX - EdgeSoftPx * flow
+                        val toX = headX + EdgeLeadPx * flow
 
                         sung.rewind()
                         for (line in 0..headLine) {
-                            val left = layout.getLineLeft(line) - reach
-                            val lineRight = layout.getLineRight(line) + reach
-                            val right = if (line < headLine || headOffset >= len) {
-                                lineRight
-                            } else {
-                                minOf(toX, lineRight)
+                            var left = layout.getLineLeft(line) - reach
+                            var right = layout.getLineRight(line) + reach
+                            // the head's own line is lit from where it starts up to the head
+                            if (line == headLine && headOffset < len) {
+                                if (rtl) left = maxOf(toX, left) else right = minOf(toX, right)
                             }
                             if (right > left) {
                                 sung.addRect(Rect(left, topOf(line), right, bottomOf(line)))
@@ -1167,8 +1165,8 @@ internal fun KaraokeSweepText(
                                     startX = fromX,
                                     endX = toX,
                                 ),
-                                topLeft = Offset(fromX, lineTop),
-                                size = Size(toX - fromX, lineBottom - lineTop),
+                                topLeft = Offset(minOf(fromX, toX), lineTop),
+                                size = Size(kotlin.math.abs(toX - fromX), lineBottom - lineTop),
                                 blendMode = BlendMode.DstIn,
                             )
                         }
@@ -1187,6 +1185,26 @@ internal fun KaraokeSweepText(
         }
     }
 }
+
+// the line an offset is on, kept to the lines the layout shows: when text is too wide for a maxLines = 1
+// layout (the bottom card's) it still wraps onto a hidden line 1, and asking that line anything crashed
+internal fun TextLayoutResult.shownLineFor(offset: Int): Int = getLineForOffset(offset).coerceAtMost(lineCount - 1)
+
+internal fun TextLayoutResult.isRtlLine(line: Int): Boolean =
+    getParagraphDirection(getLineStart(line)) == androidx.compose.ui.text.style.ResolvedTextDirection.Rtl
+
+// the head's x on screen. an rtl line starts at its right edge, so a finished one ends at its left
+internal fun TextLayoutResult.sweepHeadX(h: Float, headOffset: Int, headLine: Int, len: Int, rtl: Boolean): Float {
+    if (headOffset >= len) return if (rtl) getLineLeft(headLine) else getLineRight(headLine)
+    val x0 = getHorizontalPosition(headOffset, true)
+    val x1 = getHorizontalPosition((headOffset + 1).coerceAtMost(len), true)
+    val forward = if (rtl) x1 <= x0 else x1 >= x0
+    return if (forward) x0 + (x1 - x0) * (h - headOffset) else x0
+}
+
+// where reading starts and stops on a line, on screen
+internal fun TextLayoutResult.lineStartX(line: Int, rtl: Boolean): Float = if (rtl) getLineRight(line) else getLineLeft(line)
+internal fun TextLayoutResult.lineEndX(line: Int, rtl: Boolean): Float = if (rtl) getLineLeft(line) else getLineRight(line)
 
 private val DefaultRubyColor = ColorProducer { Color.White.copy(alpha = 0.4f) }
 private val LitRubyColor = ColorProducer { Color.White }
@@ -1463,14 +1481,9 @@ private fun rememberBloomModifier(
 
         val h = head.offset.floatValue
         val headOffset = h.toInt().coerceIn(0, textLength)
-        val headLine = layout.getLineForOffset(headOffset.coerceAtMost(textLength - 1))
-        val headX = if (headOffset >= textLength) {
-            layout.getLineRight(headLine)
-        } else {
-            val x0 = layout.getHorizontalPosition(headOffset, true)
-            val x1 = layout.getHorizontalPosition((headOffset + 1).coerceAtMost(textLength), true)
-            if (x1 >= x0) x0 + (x1 - x0) * (h - headOffset) else x0
-        }
+        val headLine = layout.shownLineFor(headOffset.coerceAtMost(textLength - 1))
+        val rtl = layout.isRtlLine(headLine)
+        val headX = layout.sweepHeadX(h, headOffset, headLine, textLength, rtl)
         val lineStart = layout.getLineStart(headLine)
         val lineEnd = layout.getLineEnd(headLine, visibleEnd = true)
         val charWidth = if (lineEnd > lineStart) {
@@ -1485,7 +1498,8 @@ private fun rememberBloomModifier(
         shader.setAgslUniform("headX", headX + o)
         shader.setAgslUniform("lineTop", layout.getLineTop(headLine) + o)
         shader.setAgslUniform("lineBottom", layout.getLineBottom(headLine) + o)
-        shader.setAgslUniform("lineLeft", layout.getLineLeft(headLine) + o)
+        shader.setAgslUniform("lineStart", layout.lineStartX(headLine, rtl) + o)
+        shader.setAgslUniform("flowDir", if (rtl) -1f else 1f)
         shader.setAgslUniform("bloom", bloom)
         shader.setAgslUniform("bloomR", BloomRadiusPx)
         shader.setAgslUniform("bloomLag", charWidth * BloomLagChars)
@@ -1495,12 +1509,12 @@ private fun rememberBloomModifier(
             shader.setAgslUniform("hasPrev", 1f)
             shader.setAgslUniform("prevTop", layout.getLineTop(headLine - 1) + o)
             shader.setAgslUniform("prevBottom", layout.getLineBottom(headLine - 1) + o)
-            shader.setAgslUniform("prevRight", layout.getLineRight(headLine - 1) + o)
+            shader.setAgslUniform("prevEnd", layout.lineEndX(headLine - 1, rtl) + o)
         } else {
             shader.setAgslUniform("hasPrev", 0f)
             shader.setAgslUniform("prevTop", 0f)
             shader.setAgslUniform("prevBottom", 0f)
-            shader.setAgslUniform("prevRight", 0f)
+            shader.setAgslUniform("prevEnd", 0f)
         }
 
         renderEffect = cache.effectFor(shader, headX, amp, glow, headLine, size.width, size.height)
@@ -1543,14 +1557,9 @@ private fun rememberLegacyWaveModifier(
         }
 
         val headOffset = h.toInt().coerceIn(0, textLength)
-        val headLine = layout.getLineForOffset(headOffset.coerceAtMost(textLength - 1))
-        val headX = if (headOffset >= textLength) {
-            layout.getLineRight(headLine)
-        } else {
-            val x0 = layout.getHorizontalPosition(headOffset, true)
-            val x1 = layout.getHorizontalPosition((headOffset + 1).coerceAtMost(textLength), true)
-            if (x1 >= x0) x0 + (x1 - x0) * (h - headOffset) else x0
-        }
+        val headLine = layout.shownLineFor(headOffset.coerceAtMost(textLength - 1))
+        val rtl = layout.isRtlLine(headLine)
+        val headX = layout.sweepHeadX(h, headOffset, headLine, textLength, rtl)
 
         val lineStart = layout.getLineStart(headLine)
         val lineEnd = layout.getLineEnd(headLine, visibleEnd = true)
@@ -1577,7 +1586,8 @@ private fun rememberLegacyWaveModifier(
         shader.setAgslUniform("bloomLag", charWidth * BloomLagChars)
         shader.setAgslUniform("bloomSpan", charWidth * BloomSpanChars)
         shader.setAgslUniform("highQuality", if (highBloom) 1f else 0f)
-        shader.setAgslUniform("lineLeft", layout.getLineLeft(headLine) + o)
+        shader.setAgslUniform("lineStart", layout.lineStartX(headLine, rtl) + o)
+        shader.setAgslUniform("flowDir", if (rtl) -1f else 1f)
 
         // Let the trailing glow continue onto the line the sweep just wrapped off, instead of
         // being clipped at the line break.
@@ -1585,13 +1595,13 @@ private fun rememberLegacyWaveModifier(
             shader.setAgslUniform("hasPrev", 1f)
             shader.setAgslUniform("prevTop", layout.getLineTop(headLine - 1) + o)
             shader.setAgslUniform("prevBottom", layout.getLineBottom(headLine - 1) + o)
-            shader.setAgslUniform("prevRight", layout.getLineRight(headLine - 1) + o)
+            shader.setAgslUniform("prevEnd", layout.lineEndX(headLine - 1, rtl) + o)
             shader.setAgslUniform("prevBaseY", layout.getLineBaseline(headLine - 1) + o)
         } else {
             shader.setAgslUniform("hasPrev", 0f)
             shader.setAgslUniform("prevTop", 0f)
             shader.setAgslUniform("prevBottom", 0f)
-            shader.setAgslUniform("prevRight", 0f)
+            shader.setAgslUniform("prevEnd", 0f)
             shader.setAgslUniform("prevBaseY", 0f)
         }
 
@@ -2101,7 +2111,7 @@ private fun buildMotionLayout(
             val start = head.cells.starts[c].coerceIn(0, text.length)
             val end = head.cells.ends[c].coerceIn(start, text.length)
             if (end <= start) continue
-            for (line in layout.getLineForOffset(start)..layout.getLineForOffset(end - 1)) {
+            for (line in layout.shownLineFor(start)..layout.shownLineFor(end - 1)) {
                 val segStart = maxOf(start, layout.getLineStart(line))
                 val segEnd = minOf(end, layout.getLineEnd(line))
                 if (segEnd <= segStart) continue
