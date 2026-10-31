@@ -36,7 +36,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,16 +45,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.constants.AboutSongSourceKey
 import com.mochyy.mochymusic.models.MediaMetadata
@@ -80,13 +78,10 @@ enum class AboutSource(val id: String, val label: String) {
 @Composable
 fun AboutSongSheet(
     song: MediaMetadata,
+    about: SongAbout,
     onDismiss: () -> Unit,
     onOpenArtist: (String) -> Unit,
 ) {
-    val database = LocalDatabase.current
-    val context = LocalContext.current
-    val about by remember(song.id) { SongAboutLoader.load(song, database, context.applicationContext) }
-        .collectAsState(initial = SongAbout(artist = song.artists.joinToString(", ") { it.name }))
     val (sourceId, setSourceId) = rememberPreference(AboutSongSourceKey, AboutSource.Musixmatch.id)
     val source = AboutSource.entries.firstOrNull { it.id == sourceId } ?: AboutSource.Musixmatch
     var showSources by remember { mutableStateOf(false) }
@@ -224,7 +219,7 @@ private fun AboutCard(about: SongAbout, source: AboutSource, onSwitch: (AboutSou
                         )
                         else -> {
                             Text(
-                                text = "${shownSource.label} doesn't have anything about this song yet.",
+                                text = stringResource(R.string.about_song_nothing_yet, shownSource.label),
                                 color = InfoMuted,
                                 fontSize = 14.sp,
                                 lineHeight = 20.sp,
@@ -243,7 +238,7 @@ private fun AboutCard(about: SongAbout, source: AboutSource, onSwitch: (AboutSou
                 Spacer(Modifier.height(18.dp))
                 val pageUrl = pageFor(about, source)
                 Text(
-                    text = "provided by ${source.label.lowercase()}",
+                    text = stringResource(R.string.about_song_provided_by, source.label.lowercase()),
                     color = InfoMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -269,7 +264,7 @@ internal fun textFor(about: SongAbout, source: AboutSource): String? = when (sou
 }
 
 internal fun doneFor(about: SongAbout, source: AboutSource): Boolean = when (source) {
-    AboutSource.Musixmatch -> about.musixmatchDone
+    AboutSource.Musixmatch -> about.musixmatchPageDone
     AboutSource.Genius -> about.geniusDone
     AboutSource.Wikipedia -> about.wikiDone
     AboutSource.YouTube -> about.youtubeDone

@@ -877,4 +877,6 @@
     </plurals>
     <string name="module_youtube_name">YouTube Music</string>
     <string name="module_youtube_desc">Sinkronkan suka, pustaka, playlist, dan riwayat</string>
+    <string name="about_song_provided_by">dari %1$s</string>
+    <string name="about_song_nothing_yet">%1$s belum punya cerita tentang lagu ini.</string>
 </resources>

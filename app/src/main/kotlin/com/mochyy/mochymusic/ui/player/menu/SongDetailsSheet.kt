@@ -3,6 +3,8 @@
 package com.mochyy.mochymusic.ui.player.menu
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +50,9 @@ import com.mochyy.mochymusic.LocalDatabase
 import com.mochyy.mochymusic.LocalPlayerConnection
 import com.mochyy.mochymusic.R
 import com.mochyy.mochymusic.models.MediaMetadata
+import com.mochyy.mochymusic.ui.player.info.AboutPreviewCard
+import com.mochyy.mochymusic.ui.player.info.SongAbout
+import com.mochyy.mochymusic.ui.player.info.SongAboutLoader
 import com.mochyy.mochymusic.ui.utils.resize
 import com.music.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
@@ -56,11 +62,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * What tapping the title and artist on the player opens: the song at the top, a row for each of
- * its artists (with the artist's own photo), one for its album, then "About song" and "Stream
- * info", each opening its own sheet stacked on this one. Small: it is as tall as what's in it.
- */
+/** tapping the player's title opens this: the song, a few lines about it, its artists and album, then about song and stream info */
 @Composable
 fun SongDetailsSheet(
     onDismiss: () -> Unit,
@@ -74,6 +76,11 @@ fun SongDetailsSheet(
     val streaming by remember(song.id) {
         playerConnection.service.playingFrom.map { it.containsKey(song.id) }.distinctUntilChanged()
     }.collectAsState(initial = false)
+    val database = LocalDatabase.current
+    val context = LocalContext.current
+    // loaded here, so the card under the song and the about sheet share one lookup and the sheet opens already filled
+    val about by remember(song.id) { SongAboutLoader.load(song, database, context.applicationContext) }
+        .collectAsState(initial = SongAbout(artist = song.artists.joinToString(", ") { it.name }))
 
     var showAbout by remember { mutableStateOf(false) }
     var showStream by remember { mutableStateOf(false) }
@@ -87,6 +94,8 @@ fun SongDetailsSheet(
             SheetColumn {
                 SongHeader(song)
                 Spacer(modifier = Modifier.height(18.dp))
+                AboutPreviewCard(about, onOpen = { showAbout = true })
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Every artist credited, each its own row: a duet or a feature lists two or
@@ -140,6 +149,7 @@ fun SongDetailsSheet(
         if (showAbout) {
             com.mochyy.mochymusic.ui.player.info.AboutSongSheet(
                 song = song,
+                about = about,
                 onDismiss = { showAbout = false },
                 onOpenArtist = onOpenArtist,
             )
@@ -155,6 +165,8 @@ private fun ColumnScope.SheetColumn(content: @Composable ColumnScope.() -> Unit)
     Column(
         modifier = Modifier
             .weight(1f, fill = false)
+            // the full video mode's card is only as tall as the phone is wide, so the rows scroll there
+            .verticalScroll(rememberScrollState())
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 20.dp)

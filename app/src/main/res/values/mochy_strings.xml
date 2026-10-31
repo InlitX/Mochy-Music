@@ -990,4 +990,6 @@
     </plurals>
     <string name="module_youtube_name">YouTube Music</string>
     <string name="module_youtube_desc">Sync likes, library, playlists and history</string>
+    <string name="about_song_provided_by">provided by %1$s</string>
+    <string name="about_song_nothing_yet">%1$s doesn't have anything about this song yet.</string>
 </resources>
