@@ -75,6 +75,7 @@ import com.mochyy.mochymusic.ui.player.share.ShareSong
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -486,6 +487,7 @@ fun LyricsScreen(
     // the case where left/right matters most. Background vocals are excluded because they are
     // centred regardless and would otherwise fake a second voice on a solo track.
     val useAgentAlignment = remember(lines) { usesAgentAlignment(lines) }
+    val mirrored = rememberLyricsMirrored(lines)
 
     // the boring and plain styles are styles 1 and 2 with the shader left out
     val lyricsWaveAnimation = motionStyle.shaded
@@ -639,7 +641,7 @@ fun LyricsScreen(
                                 // The gap belongs to whoever sings next, so it waits on that
                                 // singer's side rather than always sitting down the middle.
                                 alignment = lines.getOrNull(row.afterIndex + 1)
-                                    ?.let { alignmentFor(it, useAgentAlignment) }
+                                    ?.let { alignmentFor(it, useAgentAlignment, mirrored) }
                                     ?: LyricsAlignment.CENTER,
                             )
 
@@ -660,7 +662,7 @@ fun LyricsScreen(
                                 val ruby by entry.rubyFlow.collectAsState()
                                 val translated by entry.translatedTextFlow.collectAsState()
                                 val rowIndex = rowOfLine[index]
-                                val lineAlignment = alignmentFor(entry, useAgentAlignment)
+                                val lineAlignment = alignmentFor(entry, useAgentAlignment, mirrored)
                                 // Only a start-aligned line has its text where the card's starts.
                                 val growsFromCard by remember(index, lines, lineAlignment, morph) {
                                     derivedStateOf {
@@ -887,13 +889,46 @@ internal fun buildLyricRows(lines: List<LyricsEntry>): List<LyricRow> {
 /**
  * Maps a line's `{agent:…}` tag onto a side of the screen. `v1` leads on the left, `v2` answers on
  * the right, `v1000` is a group/chorus line and sits centred; background vocals centre as well.
+ * [mirrored] swaps the sides, for lyrics written the other way round from the app (see [rememberLyricsMirrored]).
  */
-internal fun alignmentFor(entry: LyricsEntry, useAgentAlignment: Boolean): LyricsAlignment = when {
-    !useAgentAlignment -> LyricsAlignment.START
-    entry.isBackground -> LyricsAlignment.CENTER
-    entry.agent == "v2" -> LyricsAlignment.END
-    entry.agent == "v1000" -> LyricsAlignment.CENTER
-    else -> LyricsAlignment.START
+internal fun alignmentFor(entry: LyricsEntry, useAgentAlignment: Boolean, mirrored: Boolean = false): LyricsAlignment {
+    val side = when {
+        !useAgentAlignment -> LyricsAlignment.START
+        entry.isBackground -> LyricsAlignment.CENTER
+        entry.agent == "v2" -> LyricsAlignment.END
+        entry.agent == "v1000" -> LyricsAlignment.CENTER
+        else -> LyricsAlignment.START
+    }
+    if (!mirrored) return side
+    return when (side) {
+        LyricsAlignment.START -> LyricsAlignment.END
+        LyricsAlignment.END -> LyricsAlignment.START
+        LyricsAlignment.CENTER -> LyricsAlignment.CENTER
+    }
+}
+
+// arabic, hebrew, persian... lyrics read from the right edge, like every other player shows them (#141)
+@Composable
+internal fun rememberLyricsMirrored(lines: List<LyricsEntry>): Boolean {
+    val appRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val lyricsRtl = remember(lines) { lyricsReadRtl(lines) }
+    return lyricsRtl != appRtl
+}
+
+// the whole song goes one way, so a latin line in an arabic song doesn't jump to the other side
+internal fun lyricsReadRtl(lines: List<LyricsEntry>): Boolean {
+    var rtl = 0
+    var ltr = 0
+    for (line in lines) {
+        for (ch in line.text) {
+            when (Character.getDirectionality(ch)) {
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC -> { rtl++; break }
+                Character.DIRECTIONALITY_LEFT_TO_RIGHT -> { ltr++; break }
+            }
+        }
+    }
+    return rtl > ltr
 }
 
 @Composable
