@@ -1054,7 +1054,7 @@
     <string name="song_share_caption">%1$s · %2$s</string>
     <!-- a meta app id from developers.facebook.com; while it's empty instagram and facebook get the finished video instead of a story with a sticker -->
     <string name="meta_app_id" translatable="false"></string>
-    <string name="yt_sync_exclude_title">Don't send imported music to YouTube</string>
+    <string name="yt_sync_exclude_title">Don\'t send imported music to YouTube</string>
     <string name="yt_sync_exclude_desc">Songs and playlists from Spotify and other apps stay on this phone</string>
     <string name="yt_sync_undo_title">Undo last sync</string>
     <string name="yt_sync_undo_desc">Puts back likes, library and playlists from before the last sync</string>
@@ -1063,15 +1063,15 @@
     <string name="yt_sync_undo_phone">This phone</string>
     <string name="yt_sync_undo_both">This phone and YouTube</string>
     <string name="yt_sync_undo_both_hint">Also removes the likes the sync sent to YouTube</string>
-    <string name="yt_sync_undo_done_phone">Undone on this phone. YouTube won't be pulled again until you sync now.</string>
-    <string name="yt_sync_undo_done_both">Undone on this phone and on YouTube. YouTube won't be pulled again until you sync now.</string>
+    <string name="yt_sync_undo_done_phone">Undone on this phone. YouTube won\'t be pulled again until you sync now.</string>
+    <string name="yt_sync_undo_done_both">Undone on this phone and on YouTube. YouTube won\'t be pulled again until you sync now.</string>
     <string name="yt_sync_undo_nothing">Nothing to undo yet. Run a sync first.</string>
     <plurals name="yt_sync_undo_failed">
-        <item quantity="one">Undone, but 1 like couldn't come off YouTube. Try again later.</item>
-        <item quantity="other">Undone, but %1$d likes couldn't come off YouTube. Try again later.</item>
+        <item quantity="one">Undone, but 1 like couldn\'t come off YouTube. Try again later.</item>
+        <item quantity="other">Undone, but %1$d likes couldn\'t come off YouTube. Try again later.</item>
     </plurals>
     <string name="module_youtube_name">YouTube Music</string>
     <string name="module_youtube_desc">Sync likes, library, playlists and history</string>
     <string name="about_song_provided_by">provided by %1$s</string>
-    <string name="about_song_nothing_yet">%1$s doesn't have anything about this song yet.</string>
+    <string name="about_song_nothing_yet">%1$s doesn\'t have anything about this song yet.</string>
 </resources>
